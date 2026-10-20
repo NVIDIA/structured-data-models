@@ -5,6 +5,7 @@
 
 from sdm.processing.missing.random import MaskRandom
 from sdm.processing.missing.near_empty import MaskNearEmpty
+from sdm.processing.missing.latent import MaskLatent
 from sdm.processing.missing.structured import (
     MaskRows,
     MaskBlock,
@@ -16,6 +17,7 @@ from sdm.processing.missing.structured import (
 __all__ = [
     "MaskRandom",
     "MaskNearEmpty",
+    "MaskLatent",
     "MaskRows",
     "MaskBlock",
     "MaskByTarget",

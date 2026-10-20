@@ -140,6 +140,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.AddCategoryCounts()),
     ProcessorCase(sp.MaskRandom(rate=(0.5, 0.5))),
     ProcessorCase(sp.MaskNearEmpty(min_observed=1)),
+    ProcessorCase(sp.MaskLatent()),
     ProcessorCase(sp.MaskRows()),
     ProcessorCase(sp.MaskBlock()),
     ProcessorCase(sp.MaskByTarget(target="cat_0")),

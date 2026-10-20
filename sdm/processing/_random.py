@@ -47,6 +47,19 @@ def uniform(
     )
 
 
+def randint(
+    low: Tensor | int,
+    high: Tensor | int,
+    size: Sequence[int],
+    *,
+    device: torch.device,
+    generator: torch.Generator | None,
+) -> Tensor:
+    r"""Draw integers in ``[low, high]`` with broadcast bounds."""
+    u = torch.rand(size, device=device, generator=generator)
+    return (low + u * (high - low + 1)).floor().long()
+
+
 def count(
     total: Tensor,
     low: float,
