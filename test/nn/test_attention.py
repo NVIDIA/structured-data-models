@@ -11,6 +11,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from sdm.cache import KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -866,3 +867,353 @@ def test_transformer_preserves_custom_tensor_operations() -> None:
         output = module(query=query, key_value=key_value)
     assert isinstance(output, QueryTensor)
     torch.testing.assert_close(output.as_subclass(Tensor), key_value)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("channels", "head_dim"),
+    [(96, 32), (256, 64), (384, 128), (768, 64), (1024, 64)],
+)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("strided", [False, True])
+def test_projected_query_normalization(
+    channels: int,
+    head_dim: int,
+    dtype: torch.dtype,
+    cached: bool,
+    strided: bool,
+) -> None:
+    module = Attention(
+        channels=channels,
+        num_query_heads=channels // head_dim,
+        query_transform=RMSNorm(
+            head_dim, eps=1e-6, elementwise_affine=False, device="cuda"
+        ),
+        device="cuda",
+        dtype=dtype,
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.normal_(std=0.05)
+    reference = copy.deepcopy(module)
+    assert reference.query_transform is not None
+    reference.query_transform = torch.nn.Sequential(
+        torch.nn.Sequential(reference.query_transform)
+    )
+    query = torch.randn(3, 66, channels, device="cuda", dtype=torch.float16)
+    if strided:
+        query = query[:, ::2]
+    key_value = torch.randn(
+        3, 17, channels, device="cuda", dtype=torch.float16
+    )
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        if cached:
+            _, key_value = reference(
+                query=query, key_value=key_value, return_key_value=True
+            )
+        expected = reference(query=query, key_value=key_value)
+        actual = module(query=query, key_value=key_value)
+    assert torch.equal(actual, expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("requires_grad", [False, True])
+@pytest.mark.parametrize("target", ["norm", "sequence"])
+@pytest.mark.parametrize("hook_kind", ["pre", "post"])
+def test_projected_query_normalization_preserves_hooks(
+    requires_grad: bool,
+    target: str,
+    hook_kind: str,
+) -> None:
+    norm = RMSNorm(64, eps=1e-6, elementwise_affine=False, device="cuda")
+    module = Attention(
+        channels=256,
+        num_query_heads=4,
+        query_transform=torch.nn.Sequential(norm),
+        device="cuda",
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.normal_(std=0.05)
+    reference = copy.deepcopy(module)
+    original = reference.query_transform
+    assert isinstance(original, torch.nn.Sequential)
+    reference.query_transform = torch.nn.Sequential(
+        torch.nn.Sequential(original)
+    )
+    handles = []
+    for transform in (module.query_transform, original):
+        assert isinstance(transform, torch.nn.Sequential)
+        hooked = transform[0] if target == "norm" else transform
+        if hook_kind == "pre":
+            handles.append(
+                hooked.register_forward_pre_hook(
+                    lambda mod, args: (args[0] + 0.25,)
+                )
+            )
+        else:
+            handles.append(
+                hooked.register_forward_hook(lambda mod, args, out: out + 0.25)
+            )
+    try:
+        query = torch.randn(
+            3,
+            33,
+            256,
+            device="cuda",
+            dtype=torch.float16,
+            requires_grad=requires_grad,
+        )
+        key_value = torch.randn(3, 17, 256, device="cuda", dtype=torch.float16)
+        with (
+            torch.set_grad_enabled(requires_grad),
+            torch.autocast("cuda", dtype=torch.float16),
+        ):
+            expected = reference(query=query, key_value=key_value)
+            actual = module(query=query, key_value=key_value)
+            assert torch.equal(actual, expected)
+            if requires_grad:
+                actual_grad = torch.autograd.grad(actual.sum(), query)[0]
+                expected_grad = torch.autograd.grad(expected.sum(), query)[0]
+                torch.testing.assert_close(actual_grad, expected_grad)
+    finally:
+        for handle in handles:
+            handle.remove()
+
+
+@onlyCUDA
+@pytest.mark.parametrize("backend", ["cublas", "cublaslt"])
+@pytest.mark.parametrize(
+    "layout", ["ordinary", "query_offset", "weight_offset", "broadcast_bias"]
+)
+def test_projected_query_preserves_linear_settings(
+    backend: str, layout: str
+) -> None:
+    module = Attention(
+        channels=128,
+        num_query_heads=2,
+        query_transform=RMSNorm(
+            64, eps=1e-6, elementwise_affine=False, device="cuda"
+        ),
+        device="cuda",
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.normal_(std=0.05)
+    if layout == "weight_offset":
+        weight = module.qkv_lin.weight
+        storage = torch.empty(weight.numel() + 1, device="cuda")
+        with torch.no_grad():
+            storage[1:].copy_(weight.flatten())
+        module.qkv_lin.weight = torch.nn.Parameter(storage[1:].view_as(weight))
+    if layout == "broadcast_bias":
+        module.qkv_lin.bias = torch.nn.Parameter(
+            torch.tensor([0.25], device="cuda")
+        )
+    reference = copy.deepcopy(module)
+    # Preserve native matrix alignment as well as values in the reference.
+    reference.qkv_lin.weight = module.qkv_lin.weight
+    reference.qkv_lin.bias = module.qkv_lin.bias
+    assert reference.query_transform is not None
+    reference.query_transform = torch.nn.Sequential(
+        torch.nn.Sequential(reference.query_transform)
+    )
+    offset = int(layout == "query_offset")
+    storage = torch.randn(
+        3 * 33 * 128 + offset, device="cuda", dtype=torch.float16
+    )
+    query = storage[offset:].view(3, 33, 128)
+    key_value = KVCacheEntry(
+        torch.randn(3, 17, 2, 64, device="cuda", dtype=torch.float16),
+        torch.randn(3, 17, 2, 64, device="cuda", dtype=torch.float16),
+    )
+    previous = torch.backends.cuda.preferred_blas_library()
+    try:
+        torch.backends.cuda.preferred_blas_library(backend)
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
+            expected = reference(query=query, key_value=key_value)
+            actual = module(query=query, key_value=key_value)
+        assert torch.equal(actual, expected)
+    finally:
+        torch.backends.cuda.preferred_blas_library(previous)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("channels", "head_dim"),
+    [(96, 32), (256, 64), (384, 128), (768, 64), (1024, 64)],
+)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("strided", [False, True])
+def test_projected_key_value_normalization(
+    channels: int,
+    head_dim: int,
+    dtype: torch.dtype,
+    cached: bool,
+    strided: bool,
+) -> None:
+    module = Attention(
+        channels=channels,
+        num_query_heads=channels // head_dim,
+        key_transform=RMSNorm(
+            head_dim, eps=1e-6, elementwise_affine=False, device="cuda"
+        ),
+        device="cuda",
+        dtype=dtype,
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.normal_(std=0.05)
+    reference = copy.deepcopy(module)
+    assert reference.key_transform is not None
+    reference.key_transform = torch.nn.Sequential(
+        torch.nn.Sequential(reference.key_transform)
+    )
+    query = torch.randn(3, 66, channels, device="cuda", dtype=torch.float16)
+    key_value = torch.randn(
+        3, 34, channels, device="cuda", dtype=torch.float16
+    )
+    if strided:
+        key_value = key_value[:, ::2]
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        reference_key_value = key_value
+        if cached:
+            _, reference_key_value = reference(
+                query=query, key_value=key_value, return_key_value=True
+            )
+            _, key_value = module(
+                query=query, key_value=key_value, return_key_value=True
+            )
+            assert torch.equal(key_value.key, reference_key_value.key)
+            assert torch.equal(key_value.value, reference_key_value.value)
+        expected = reference(query=query, key_value=reference_key_value)
+        actual = module(query=query, key_value=key_value)
+    assert torch.equal(actual, expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("requires_grad", [False, True])
+@pytest.mark.parametrize(
+    ("target", "hook_kind"),
+    [
+        ("norm", "none"),
+        ("norm", "pre"),
+        ("norm", "post"),
+        ("sequence", "pre"),
+        ("sequence", "post"),
+    ],
+)
+def test_projected_key_value_normalization_preserves_hooks(
+    requires_grad: bool,
+    target: str,
+    hook_kind: str,
+) -> None:
+    norm = RMSNorm(64, eps=1e-6, elementwise_affine=False, device="cuda")
+    module = Attention(
+        channels=256,
+        num_query_heads=4,
+        key_transform=torch.nn.Sequential(norm),
+        device="cuda",
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.normal_(std=0.05)
+    reference = copy.deepcopy(module)
+    original = reference.key_transform
+    assert isinstance(original, torch.nn.Sequential)
+    reference.key_transform = torch.nn.Sequential(
+        torch.nn.Sequential(original)
+    )
+    handles = []
+    for transform in (module.key_transform, original):
+        if hook_kind == "none":
+            continue
+        assert isinstance(transform, torch.nn.Sequential)
+        hooked = transform[0] if target == "norm" else transform
+        if hook_kind == "pre":
+            handles.append(
+                hooked.register_forward_pre_hook(
+                    lambda mod, args: (args[0] + 0.25,)
+                )
+            )
+        else:
+            handles.append(
+                hooked.register_forward_hook(lambda mod, args, out: out + 0.25)
+            )
+    try:
+        query = torch.randn(
+            3,
+            33,
+            256,
+            device="cuda",
+            dtype=torch.float16,
+            requires_grad=requires_grad,
+        )
+        key_value = torch.randn(
+            3,
+            17,
+            256,
+            device="cuda",
+            dtype=torch.float16,
+            requires_grad=requires_grad,
+        )
+        with (
+            torch.set_grad_enabled(requires_grad),
+            torch.autocast("cuda", dtype=torch.float16),
+        ):
+            expected = reference(query=query, key_value=key_value)
+            actual = module(query=query, key_value=key_value)
+            assert torch.equal(actual, expected)
+            if requires_grad:
+                actual_grad = torch.autograd.grad(
+                    actual.sum(), (query, key_value)
+                )
+                expected_grad = torch.autograd.grad(
+                    expected.sum(), (query, key_value)
+                )
+                torch.testing.assert_close(actual_grad, expected_grad)
+    finally:
+        for handle in handles:
+            handle.remove()
+
+
+@onlyCUDA
+@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
+def test_projected_normalization_grouped_key_value(
+    num_key_value_heads: int,
+) -> None:
+    module = Attention(
+        channels=128,
+        num_query_heads=4,
+        num_key_value_heads=num_key_value_heads,
+        query_transform=RMSNorm(
+            32, eps=1e-6, elementwise_affine=False, device="cuda"
+        ),
+        key_transform=RMSNorm(
+            32, eps=1e-6, elementwise_affine=False, device="cuda"
+        ),
+        device="cuda",
+    ).eval()
+    with torch.no_grad():
+        module.out_lin.weight.normal_(std=0.05)
+    reference = copy.deepcopy(module)
+    assert reference.query_transform is not None
+    assert reference.key_transform is not None
+    reference.query_transform = torch.nn.Sequential(
+        torch.nn.Sequential(reference.query_transform)
+    )
+    reference.key_transform = torch.nn.Sequential(
+        torch.nn.Sequential(reference.key_transform)
+    )
+    query = torch.randn(3, 33, 128, device="cuda", dtype=torch.float16)
+    key_value = torch.randn(3, 17, 128, device="cuda", dtype=torch.float16)
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        expected, expected_cache = reference(
+            query=query, key_value=key_value, return_key_value=True
+        )
+        actual, actual_cache = module(
+            query=query, key_value=key_value, return_key_value=True
+        )
+        assert torch.equal(actual, expected)
+        assert torch.equal(actual_cache.key, expected_cache.key)
+        assert torch.equal(actual_cache.value, expected_cache.value)
+        expected = reference(query=query, key_value=expected_cache)
+        actual = module(query=query, key_value=actual_cache)
+        assert torch.equal(actual, expected)

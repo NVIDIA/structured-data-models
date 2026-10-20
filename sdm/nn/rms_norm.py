@@ -6,6 +6,7 @@ from torch import Tensor
 from torch.nn.modules import module as module_hooks
 
 from sdm._kernels import rmsnorm_cast
+from sdm._kernels.linear_rmsnorm import _linear_rmsnorm
 from sdm._kernels.rmsnorm_cast import _rmsnorm_pair
 from sdm.nn.rope import RotaryEmbedding
 
@@ -59,6 +60,75 @@ class RMSNorm(torch.nn.RMSNorm):
             )
             return rmsnorm_cast(x, self.weight, eps, rope=cos_sin)
         return super().forward(x if rope is None else rope(x))
+
+
+class _RoPERMSNorm(torch.nn.Sequential):
+    def forward(self, input: Tensor) -> Tensor:  # noqa: A002
+        rope, norm = self
+        return norm(input, rope=rope)
+
+
+def _linear_normalization(
+    x: Tensor,
+    weight: Tensor,
+    bias: Tensor | None,
+    head_dim: int,
+    transform: torch.nn.Module | None,
+    *,
+    packed_key_value: bool = False,
+) -> Tensor | None:
+    if (
+        torch.compiler.is_compiling()
+        or torch.jit.is_tracing()
+        or torch.is_grad_enabled()
+        or module_hooks._global_forward_hooks
+        or module_hooks._global_forward_pre_hooks
+        or module_hooks._global_backward_hooks
+        or module_hooks._global_backward_pre_hooks
+    ):
+        return None
+    norm = transform
+    rope = None
+    if type(transform) is torch.nn.Sequential and len(transform) == 1:
+        norm = transform[0]
+    elif type(transform) is _RoPERMSNorm and len(transform) == 2:
+        rope, norm = transform
+        if (
+            type(rope) is not RotaryEmbedding
+            or rope.layout != "split_half"
+            or rope.rotary_channels != rope.channels
+            or rope.channels != head_dim
+        ):
+            return None
+    if (
+        type(norm) is not RMSNorm
+        or norm.weight is not None
+        or norm.normalized_shape != (head_dim,)
+    ):
+        return None
+    for module in (transform, norm, rope):
+        if module is None:
+            continue
+        if (
+            module._forward_hooks
+            or module._forward_pre_hooks
+            or module._backward_hooks
+            or module._backward_pre_hooks
+            or module._compiled_call_impl is not None
+            or "forward" in module.__dict__
+        ):
+            return None
+    return _linear_rmsnorm(
+        x=x,
+        weight=weight,
+        bias=bias,
+        head_dim=head_dim,
+        eps=norm.eps
+        if norm.eps is not None
+        else torch.finfo(torch.float32).eps,
+        rope_inv_freq=rope.inv_freq if rope is not None else None,
+        packed_key_value=packed_key_value,
+    )
 
 
 def _shared_normalization(

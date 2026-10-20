@@ -57,3 +57,11 @@ Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch c
 ## Contributor Covenant
 
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) is adapted from [Contributor Covenant version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct/), distributed under the MIT License. The complete copyright notice and license terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).
+
+## CUTLASS
+
+- Source: https://github.com/NVIDIA/cutlass
+- License: BSD 3-Clause
+- License terms: [`third_party/cutlass/LICENSE`](third_party/cutlass/LICENSE)
+
+The optional CUDA projection extension in [`sdm/_kernels/cuda/`](sdm/_kernels/cuda/) compiles against CUTLASS headers. Native extension binaries contain CUTLASS code; the headers are supplied separately at build time.

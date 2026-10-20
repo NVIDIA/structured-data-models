@@ -14,7 +14,7 @@ from torch.nn import Linear
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
-from sdm.nn.rms_norm import _shared_normalization
+from sdm.nn.rms_norm import _linear_normalization, _shared_normalization
 
 
 class SDPA(torch.nn.Module):
@@ -336,13 +336,30 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
+        normalized_query = None
+        normalized_key_value = None
         if isinstance(key_value, KVCacheEntry):
-            query = F.linear(
-                query,
-                weight=self.qkv_lin.weight[: self.q_dim],
-                bias=self.qkv_lin.bias[: self.q_dim]
+            query_weight = self.qkv_lin.weight[: self.q_dim]
+            query_bias = (
+                self.qkv_lin.bias[: self.q_dim]
                 if self.qkv_lin.bias is not None
-                else None,
+                else None
+            )
+            normalized_query = _linear_normalization(
+                x=query,
+                weight=query_weight,
+                bias=query_bias,
+                head_dim=self.head_dim,
+                transform=self.query_transform,
+            )
+            query = (
+                normalized_query
+                if normalized_query is not None
+                else F.linear(
+                    query,
+                    weight=query_weight,
+                    bias=query_bias,
+                )
             )
             if (
                 key_value.key.dtype != query.dtype
@@ -365,8 +382,31 @@ class Attention(torch.nn.Module):
             q_bias = kv_bias = None
             if self.qkv_lin.bias is not None:
                 q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
-            query = F.linear(query, q_weight, q_bias)
-            key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
+            normalized_query = _linear_normalization(
+                x=query,
+                weight=q_weight,
+                bias=q_bias,
+                head_dim=self.head_dim,
+                transform=self.query_transform,
+            )
+            query = (
+                normalized_query
+                if normalized_query is not None
+                else F.linear(query, q_weight, q_bias)
+            )
+            normalized_key_value = _linear_normalization(
+                x=key_value,
+                weight=kv_weight,
+                bias=kv_bias,
+                head_dim=self.head_dim,
+                transform=self.key_transform,
+                packed_key_value=True,
+            )
+            key, value = (
+                normalized_key_value
+                if normalized_key_value is not None
+                else F.linear(key_value, kv_weight, kv_bias)
+            ).chunk(2, -1)
 
         # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
         query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
@@ -376,11 +416,12 @@ class Attention(torch.nn.Module):
                 -1, [self.num_key_value_heads, self.head_dim]
             )
 
-        if self.query_transform is not None:
+        if self.query_transform is not None and normalized_query is None:
             query = self.query_transform(query)
         if (
             not isinstance(key_value, KVCacheEntry)
             and self.key_transform is not None
+            and normalized_key_value is None
         ):
             key = self.key_transform(key)
 

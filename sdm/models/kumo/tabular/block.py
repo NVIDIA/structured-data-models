@@ -6,16 +6,10 @@
 from typing import Any, cast
 
 import torch
-from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 from sdm.nn import QueryScaling, RMSNorm, RotaryEmbedding, TransformerBlock
-
-
-class _RoPERMSNorm(Sequential):
-    def forward(self, input: Tensor) -> Tensor:  # noqa: A002
-        rope, norm = self
-        return norm(input, rope=rope)
+from sdm.nn.rms_norm import _RoPERMSNorm
 
 
 class KumoTabularTransformerBlock(TransformerBlock):
