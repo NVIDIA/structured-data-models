@@ -21,7 +21,7 @@ from sdm import (
 from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
-from sdm.cache import Cache, _CachePrefetcher
+from sdm.cache import Cache
 from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
     MemberContext,
@@ -87,9 +87,6 @@ class ICLModel(Model):
                 f"{self.__class__.__name__!r} received unsupported tasks "
                 f"{invalid}"
             )
-
-        self._cache: Cache | None = None
-        self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     def forward(
         self,
@@ -410,19 +407,13 @@ class ICLModel(Model):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
-        num_batches = cast(int, self._cache["num_batches"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
-        transfer_stream: torch.cuda.Stream | None = None
-        if x.is_cuda:
-            if x.device not in self._transfer_streams:
-                self._transfer_streams[x.device] = torch.cuda.Stream(x.device)
-            transfer_stream = self._transfer_streams[x.device]
-
-        with _CachePrefetcher(
-            caches=caches,
+        with self._prefetch(
+            items=[
+                cast(Cache, self._cache[i])
+                for i in range(cast(int, self._cache["num_batches"]))
+            ],
             device=x.device,
-            transfer_stream=transfer_stream,
-        ) as prefetched_caches:
+        ) as caches:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
@@ -431,7 +422,7 @@ class ICLModel(Model):
 
             outs: list[TableTensor] = []
             start = 0
-            for cache in prefetched_caches:
+            for cache in caches:
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
                 batch_queries = [
                     self._prepare_query(
