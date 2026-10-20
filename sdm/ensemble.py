@@ -12,6 +12,7 @@ from torch import Tensor
 
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
+from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T")
@@ -145,7 +146,27 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
+        vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
+            if torch.compiler.is_compiling():
+                # Compilation: id() can fail or give one tensor different IDs.
+                categories = tuple(_iter_categories(table.categorical))
+                for vocabulary_id, other in enumerate(vocabularies):
+                    if len(categories) == len(other) and all(
+                        category is other_category
+                        for category, other_category in zip(categories, other)
+                    ):
+                        vocabulary_key = (vocabulary_id,)
+                        break
+                else:
+                    # No tuple matched; the next list index is its new ID.
+                    vocabulary_key = (len(vocabularies),)
+                    vocabularies.append(categories)
+            else:
+                # Eager execution: use id() directly to avoid the search.
+                vocabulary_key = tuple(
+                    id(category) for category in table.categorical.categories
+                )
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
@@ -164,9 +185,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     for stype, block in TableTensor.items(table)
                 ),
                 table.device,
-                tuple(
-                    id(category) for category in table.categorical.categories
-                ),
+                vocabulary_key,
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
 
