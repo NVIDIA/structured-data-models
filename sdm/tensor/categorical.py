@@ -29,7 +29,11 @@ aten = torch.ops.aten
 
 
 def _iter_categories(tensor: CategoricalTensor) -> Iterator[Tensor]:
-    """Iterate registered category leaves as ordinary traceable Python."""
+    """Yield category tensors through attributes tracked by torch.compile.
+
+    Reading the .categories tuple fails when a tensor is created inside
+    compiled code.
+    """
     for index in range(tensor.size(-1)):
         yield getattr(tensor, f"_category_{index}")
 
