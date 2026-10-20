@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from contextlib import nullcontext
 from functools import partial
 
 import pytest
@@ -46,7 +47,13 @@ def test_forward(
         columns=["y1", "y2", "y3"],
     )
 
-    out = model(x_context, y_context, x_query)
+    warning = "Historical covariates have no effect"
+    with (
+        nullcontext()
+        if cross_channel
+        else pytest.warns(RuntimeWarning, match=warning)
+    ):
+        out = model(x_context, y_context, x_query)
     assert out.size() == (3, 3)
     assert out.device == device
     assert out.numerical.isfinite().all()
@@ -54,9 +61,14 @@ def test_forward(
     assert "y2" in out.columns["numerical"]
     assert "y3" in out.columns["numerical"]
 
-    model.fit(
-        x=x_context,
-        y=y_context,
-        context_only_columns=["x1", "x2"],
-    )
+    with (
+        nullcontext()
+        if cross_channel
+        else pytest.warns(RuntimeWarning, match=warning)
+    ):
+        model.fit(
+            x=x_context,
+            y=y_context,
+            context_only_columns=["x1", "x2"],
+        )
     torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)

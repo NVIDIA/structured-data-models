@@ -30,6 +30,11 @@ def test_transformer_block(device: torch.device) -> None:
 
 
 @withCUDA
+# Mixed dtypes may trigger PyTorch's unfused RMSNorm fallback.
+@pytest.mark.filterwarnings(
+    "ignore:Mismatch dtype between input and weight.*"
+    "Cannot dispatch to fused implementation:UserWarning"
+)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("channels", [128, 256])
 def test_transformer_block_rope(

@@ -11,6 +11,11 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
+# Mixed dtypes may trigger PyTorch's unfused RMSNorm fallback.
+@pytest.mark.filterwarnings(
+    "ignore:Mismatch dtype between input and weight.*"
+    "Cannot dispatch to fused implementation:UserWarning"
+)
 @pytest.mark.parametrize(("affine", "eps"), [(False, 1e-6), (True, None)])
 @pytest.mark.parametrize(
     ("normalized_shape", "dtype", "autocast"),
