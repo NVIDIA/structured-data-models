@@ -13,6 +13,7 @@ from sdm.processing.categorical._categorical import (
     _check_categorical_codes,
     _check_categories,
 )
+from sdm.tensor.categorical import _iter_categories
 
 
 class AddCategoryCounts(Processor):
@@ -67,15 +68,15 @@ class AddCategoryCounts(Processor):
         categorical = table.categorical
         self._columns = tuple(
             column
-            for index, column in enumerate(table.columns[Stype.categorical])
-            if getattr(categorical, f"_category_{index}").numel()
-            > self.min_cardinality
+            for column, categories in zip(
+                table.columns[Stype.categorical], _iter_categories(categorical)
+            )
+            if categories.numel() > self.min_cardinality
         )
         categorical = table.select_columns(self._columns).categorical
         codes = categorical.code  # [*batch, num_rows, num_columns]
         sizes = [
-            getattr(categorical, f"_category_{index}").numel()
-            for index in range(codes.size(-1))
+            categories.numel() for categories in _iter_categories(categorical)
         ]
         num_categories = codes.new_tensor(sizes, dtype=torch.long)
         # Negative codes accumulate in the slot behind their column's
@@ -100,10 +101,7 @@ class AddCategoryCounts(Processor):
             value=counts.to(count_dtype).log1p().to(dtype),
         )
         self._set_buffer("_num_categories", num_categories)
-        self._categories = BufferList(
-            getattr(table.categorical, f"_category_{index}")
-            for index in range(table.categorical.code.size(-1))
-        )
+        self._categories = BufferList(_iter_categories(table.categorical))
 
     def _transform(self, table: TableTensor) -> TableTensor:
         _check_categories(table, self._categories)

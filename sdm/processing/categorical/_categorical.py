@@ -7,6 +7,7 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.nn._buffer import BufferList
+from sdm.tensor.categorical import _iter_categories
 
 
 def _check_categorical_codes(table: TableTensor) -> None:
@@ -21,8 +22,7 @@ def _check_categorical_codes(table: TableTensor) -> None:
         return
     columns = table.columns[Stype.categorical]
     categorical = table.categorical
-    for index in range(categorical.code.size(-1)):
-        category = getattr(categorical, f"_category_{index}")
+    for index, category in enumerate(_iter_categories(categorical)):
         codes = categorical.code[..., index]
         if (codes >= category.numel()).any():
             raise ValueError(
@@ -50,8 +50,9 @@ def _check_categories(
             f"Expected {len(categories)} fitted categorical "
             f"columns (got {len(columns)})."
         )
-    for index, expected in enumerate(categories):
-        actual = getattr(categorical, f"_category_{index}")
+    for index, (actual, expected) in enumerate(
+        zip(_iter_categories(categorical), categories)
+    ):
         expected = expected.to(device=actual.device)
         if not actual.equal(expected):
             raise ValueError(
