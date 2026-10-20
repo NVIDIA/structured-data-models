@@ -145,10 +145,26 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
     def _pack_tables(
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
-        compiling = torch.compiler.is_compiling()
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
-        table_groups: list[tuple[tuple[Tensor, ...], list[int]]] = []
+        vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
+            if torch.compiler.is_compiling():
+                # Give shared vocabularies the same ID without tracing id().
+                categories = tuple(_iter_categories(table.categorical))
+                for vocabulary_id, other in enumerate(vocabularies):
+                    if len(categories) == len(other) and all(
+                        category is other_category
+                        for category, other_category in zip(categories, other)
+                    ):
+                        vocabulary_key = (vocabulary_id,)
+                        break
+                else:
+                    vocabulary_key = (len(vocabularies),)
+                    vocabularies.append(categories)
+            else:
+                vocabulary_key = tuple(
+                    id(category) for category in table.categorical.categories
+                )
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
@@ -167,32 +183,13 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     for stype, block in TableTensor.items(table)
                 ),
                 table.device,
-                ()
-                if compiling
-                else tuple(
-                    id(category) for category in table.categorical.categories
-                ),
+                vocabulary_key,
             )
-            categories = (
-                tuple(_iter_categories(table.categorical)) if compiling else ()
-            )
-            group_ids = compatible_groups.setdefault(compatibility_key, [])
-            for group_id in group_ids:
-                other, indices = table_groups[group_id]
-                # Tracing id() can give the same tensor different IDs.
-                if not compiling or all(
-                    category is other_category
-                    for category, other_category in zip(categories, other)
-                ):
-                    indices.append(index)
-                    break
-            else:
-                group_ids.append(len(table_groups))
-                table_groups.append((categories, [index]))
+            compatible_groups.setdefault(compatibility_key, []).append(index)
 
         groups: list[TableTensor] = []
         locations = [(-1, -1)] * len(tables)
-        for _, indices in table_groups:
+        for indices in compatible_groups.values():
             group_index = len(groups)
             groups.append(
                 cast(TableTensor, tables[indices[0]].unsqueeze(0))
