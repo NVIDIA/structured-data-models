@@ -24,6 +24,8 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     :class:`~sdm.processing.ensemble.EnsembleProcessor`. It copies and fits the
     processor separately for each group of compatible tables in an
     :class:`~sdm.EnsembleTable`.
+    Stateful processors require the same logical member count for fitting,
+    transformation, and inverse transformation.
 
     The wrapped processor must preserve row and leading dimensions as required
     by the :class:`~sdm.processing.base.Processor` contract. A processor that
@@ -142,6 +144,11 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> tuple[Processor, ...]:
+        if len(ensemble_table) != len(self._fitted_locations):
+            raise RuntimeError(
+                f"Expected {len(self._fitted_locations)} fitted ensemble "
+                f"members (got {len(ensemble_table)})"
+            )
         if ensemble_table._locations == self._fitted_locations:
             return tuple(self._processors)
 

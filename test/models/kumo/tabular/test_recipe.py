@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.processing.execution import RecipeExecution
 from sdm.testing import withCUDA
 
 
@@ -130,23 +130,25 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
         )
 
 
-def test_default_recipe_reduces_outputs_per_task() -> None:
-    recipe = KumoTabular.default_recipe()
-    dispatch = next(
-        module
-        for module in recipe.output.modules()
-        if isinstance(module, sp.TaskDispatch)
+@pytest.mark.parametrize("classification", [False, True])
+def test_default_recipe_reduces_outputs_per_task(classification: bool) -> None:
+    execution = RecipeExecution(KumoTabular.default_recipe())
+    target = torch.arange(5).unsqueeze(-1)
+    if not classification:
+        target = target.float()
+    execution.fit_transform(
+        x=torch.randn(5, 2),
+        y=target,
+        related_tables=None,
+        num_members=8,
     )
-
-    dispatch._task = "regression"
-    output = recipe.output.transform(
-        TableTensor.from_tensor(torch.randn(8, 5, 9))
+    num_outputs = 5 if classification else 9
+    output = execution.transform_output(
+        [
+            TableTensor.from_tensor(torch.randn(5, num_outputs))
+            for _ in range(8)
+        ]
     )
-    assert output.size() == (5, 9)
-
-    dispatch._task = "classification"
-    output = recipe.output.transform(
-        TableTensor.from_tensor(torch.randn(8, 5, 3))
-    )
-    assert output.size() == (5, 3)
-    torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))
+    assert output.size() == (5, num_outputs)
+    if classification:
+        torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))
