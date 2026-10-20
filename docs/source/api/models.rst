@@ -55,9 +55,19 @@ Model API
 
 .. autosummary::
    :toctree: generated
+   :nosignatures:
+
+   ~sdm.models.ICLModel
+   ~sdm.models.Callback
+
+Models
+------
+
+.. autosummary::
+   :toctree: generated
    :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") if name != "ECOC" %}
+{% for name in api_names("sdm.models") if name not in api_names("sdm.models.base") %}
    ~sdm.models.{{ name }}
 {% endfor %}

@@ -10,8 +10,7 @@ from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
 from sdm.explain.base import ICLExplainer
-from sdm.models import ICLModel
-from sdm.models.base import Callback
+from sdm.models import Callback, ICLModel
 
 
 class GradientExplainer(
