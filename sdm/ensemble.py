@@ -149,8 +149,9 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
             if torch.compiler.is_compiling():
-                # torch.compile cannot reliably trace id() for these tensors.
-                # Compare vocabulary objects with `is` to assign local IDs.
+                # Compiled path: tracing id() can fail or give different IDs to
+                # references to the same tensor. Use `is` to assign the same
+                # local ID to tables that share all vocabulary tensors.
                 categories = tuple(_iter_categories(table.categorical))
                 for vocabulary_id, other in enumerate(vocabularies):
                     if len(categories) == len(other) and all(
@@ -164,7 +165,8 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     vocabulary_key = (len(vocabularies),)
                     vocabularies.append(categories)
             else:
-                # Eager id() keeps the same grouping without a list search.
+                # Eager path: id() runs without tracing and gives shared
+                # tensors the same ID, avoiding the local-ID search above.
                 vocabulary_key = tuple(
                     id(category) for category in table.categorical.categories
                 )
