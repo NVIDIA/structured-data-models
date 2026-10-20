@@ -149,7 +149,8 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
             if torch.compiler.is_compiling():
-                # Give shared vocabularies the same ID without tracing id().
+                # Tracing id() can give the same tensor different IDs.
+                # Reuse local IDs for matching vocabulary objects.
                 categories = tuple(_iter_categories(table.categorical))
                 for vocabulary_id, other in enumerate(vocabularies):
                     if len(categories) == len(other) and all(
@@ -159,9 +160,11 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                         vocabulary_key = (vocabulary_id,)
                         break
                 else:
+                    # No match: assign a new local ID.
                     vocabulary_key = (len(vocabularies),)
                     vocabularies.append(categories)
             else:
+                # Eager id() avoids the vocabulary search.
                 vocabulary_key = tuple(
                     id(category) for category in table.categorical.categories
                 )
