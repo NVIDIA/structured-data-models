@@ -51,11 +51,14 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 - **[`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
-**Times Series Foundation Models:**
+**Times Series Forecasting Foundation Models:**
 
 - **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Chen *et al.*: [New NVIDIA NV-Tesseract Time Series Models Advance Dataset Processing and Anomaly Detection](https://developer.nvidia.com/blog/new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-anomaly-detection) ('25)
-- **[`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly)** related to Gautam *et al.*: [NV-Tesseract-AD: Curriculum-Enhanced Conditional Diffusion for Multivariate Time-Series Anomaly Detection](https://arxiv.org/abs/2610.12754) (CoRR '26). Placeholder; inference and checkpoint loading are not yet implemented. The released checkpoint architecture differs from the paper.
 - **[`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3)** from Jain *et al.*: [TimesFM-3: A Zero-Shot Foundation Model for Multivariate Forecasting](https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting) ('26)
+
+**Times Series Anomaly Detection Foundation Models:**
+
+- **[`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly)** from Gautam *et al.*: [NV-Tesseract-AD: Curriculum-Enhanced Conditional Diffusion for Multivariate Time-Series Anomaly Detection](https://arxiv.org/abs/2610.12754) (CoRR '26)
 
 ## Quick Tour
 
