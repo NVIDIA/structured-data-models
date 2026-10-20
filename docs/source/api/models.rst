@@ -43,18 +43,18 @@ Overview
      - 313.06M–317.26M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
-   * - | :class:`~sdm.models.TimesFM3`
-       | (`Blog <https://arxiv.org/abs/2609.37959>`__)
-     - 2026-08-31
-     - 330.71M
-     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
-     - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
    * - | :class:`~sdm.models.KumoAnomaly`
        | (`Paper <https://arxiv.org/abs/2610.12754>`__)
      - 2025-05-06
      - 2.44M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
+   * - | :class:`~sdm.models.TimesFM3`
+       | (`Blog <https://arxiv.org/abs/2609.37959>`__)
+     - 2026-08-31
+     - 330.71M
+     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
+     - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
 
 Model API
 ---------
