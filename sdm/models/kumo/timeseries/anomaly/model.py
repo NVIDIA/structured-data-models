@@ -3,7 +3,6 @@
 
 # ruff: noqa: D205
 
-
 from typing import ClassVar
 
 from sdm import Recipe, Stype
