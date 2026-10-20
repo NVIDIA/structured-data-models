@@ -16,8 +16,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import ICLModel
-from sdm.models.base import Callback
+from sdm.models import Callback, ICLModel
 from sdm.processing import InvertibleMixin, Processor
 
 
