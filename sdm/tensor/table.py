@@ -834,6 +834,31 @@ class TableTensor(Tensor):
     # Properties ##############################################################
 
     @property
+    def numerical_columns(self) -> tuple[str, ...]:
+        r"""Return numerical column names."""
+        return self._columns[Stype.numerical]
+
+    @property
+    def categorical_columns(self) -> tuple[str, ...]:
+        r"""Return categorical column names."""
+        return self._columns[Stype.categorical]
+
+    @property
+    def datetime_columns(self) -> tuple[str, ...]:
+        r"""Return datetime column names."""
+        return self._columns[Stype.datetime]
+
+    @property
+    def text_columns(self) -> tuple[str, ...]:
+        r"""Return text column names."""
+        return self._columns[Stype.text]
+
+    @property
+    def id_columns(self) -> tuple[str, ...]:
+        r"""Return id column names."""
+        return self._columns[Stype.id]
+
+    @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
         return self._columns.copy()
