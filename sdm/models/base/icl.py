@@ -110,10 +110,12 @@ class ICLModel(Model):
                 ``[..., R_query, D]`` and the same columns as ``x_context``.
             context_lengths: Integer tensor with shape ``[...]`` giving the
                 number of valid in-context examples per table. Valid rows
-                form a prefix. If ``None``, all rows are valid.
+                come first, followed by padding. If ``None``, all rows are
+                valid.
             column_mask: Boolean mask with shape ``[..., D]``; ``True`` marks
-                valid feature columns of both context and query. Valid columns
-                need not form a prefix. If ``None``, all columns are valid.
+                valid feature columns of both context and query. Each table
+                needs at least one valid column. If ``None``, all columns are
+                valid.
 
         Returns:
             Model outputs with shape ``[..., R_query, *]``, *e.g.*, class
