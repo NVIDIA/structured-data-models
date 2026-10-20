@@ -88,6 +88,38 @@ class ICLModel(Model):
                 f"{invalid}"
             )
 
+    def train_forward(
+        self,
+        x_context: Tensor | TableTensor,  # [..., R_context, D]
+        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor,  # [..., R_query, D]
+        *,
+        context_lengths: Tensor | None = None,  # [...]
+        column_lengths: Tensor | None = None,  # [...]
+    ) -> Tensor:  # [..., R_query, *]
+        """Predict query rows from preprocessed, densely batched training data.
+
+        Args:
+            x_context: Preprocessed context features with shape
+                ``[..., R_context, D]``. Floating-point tensors contain
+                numerical features; integer tensors contain categorical codes.
+                A :class:`~sdm.TableTensor` specifies types through its schema.
+            y_context: Context targets with shape ``[..., R_context, 1]``.
+            x_query: Query features with shape ``[..., R_query, D]`` and the
+                same feature layout as ``x_context``.
+            context_lengths: Integer tensor with shape ``[...]`` giving the
+                number of valid context rows in each table. Valid rows form
+                a prefix. If omitted, all context rows are valid.
+            column_lengths: Integer tensor with shape ``[...]`` giving the
+                number of valid feature columns in each table, shared by
+                context and query. Valid columns form a nonempty prefix.
+                If omitted, all feature columns are valid.
+
+        Returns:
+            Raw query predictions with shape ``[..., R_query, *]``.
+        """
+        raise NotImplementedError
+
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
