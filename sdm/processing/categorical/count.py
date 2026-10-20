@@ -110,7 +110,7 @@ class AddCategoryCounts(Processor):
 
         out_table = TableTensor(
             columns={
-                Stype.numerical: tuple(
+                Stype.numerical.value: tuple(
                     f"{column}__count" for column in self._columns
                 ),
             },

@@ -17,7 +17,7 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.models.callback import Callback
+from sdm.models.base import Callback
 from sdm.processing import InvertibleMixin, Processor
 
 

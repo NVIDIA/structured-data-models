@@ -56,7 +56,7 @@ class SelectColumns(EnsembleProcessor):
                 }
                 blocks = {
                     stype: block[..., : self.max_columns]
-                    for stype, block in group.items()
+                    for stype, block in TableTensor.items(group)
                 }
                 groups.append(group.__class__(columns=columns, **blocks))
             return ensemble_table.replace_groups(groups)
@@ -67,7 +67,7 @@ class SelectColumns(EnsembleProcessor):
             table = ensemble_table[member_id]
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
-            for stype, block in table.items():
+            for stype, block in TableTensor.items(table):
                 column_names = table.columns[stype]
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.

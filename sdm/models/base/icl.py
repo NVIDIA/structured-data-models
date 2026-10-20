@@ -22,7 +22,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
 from sdm.cache import Cache, _CachePrefetcher
-from sdm.models.callback import Callback
+from sdm.models.base import Callback
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -837,7 +837,7 @@ def _stack(tables: Sequence[TableTensor]) -> TableTensor:
     renamed: list[Tensor] = [
         ref,
         *(
-            table.__class__(columns=columns, **dict(table.items()))
+            table.__class__(columns=columns, **dict(TableTensor.items(table)))
             for table in tables[1:]
         ),
     ]
@@ -904,7 +904,7 @@ def _batch_slices(
                 (
                     tuple(
                         (stype, block.size(), block.dtype)
-                        for stype, block in table.items()
+                        for stype, block in TableTensor.items(table)
                     ),
                     tuple(c.numel() for c in table.categorical.categories),
                 )
@@ -932,7 +932,7 @@ def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
         [
             [
                 member.input_stypes.get(column) == Stype.categorical
-                for column in member.x.columns[Stype.numerical]
+                for column in member.x._columns[Stype.numerical]
             ]
             for member in members
         ],
