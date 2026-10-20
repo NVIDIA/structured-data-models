@@ -682,8 +682,8 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.valid is not None:
-            out += f", null_count={int((~self.valid).sum())}"
+        if self.is_nullable:
+            out += ", nullable=True"
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
