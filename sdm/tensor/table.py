@@ -1024,7 +1024,7 @@ class TableTensor(Tensor):
 
         blocks: dict[Stype, Tensor] = {}
         for stype, tensor in self.items():
-            indices = index_dict[stype]
+            indices = index_dict.get(stype, ())
             if len(indices) == 0:
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
