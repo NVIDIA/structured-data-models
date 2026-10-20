@@ -1024,7 +1024,7 @@ class TableTensor(Tensor):
 
         blocks: dict[Stype, Tensor] = {}
         for stype, tensor in self.items():
-            indices = index_dict[stype]
+            indices = index_dict.get(stype, ())
             if len(indices) == 0:
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
@@ -1087,6 +1087,8 @@ class TableTensor(Tensor):
         attrs = ["numerical", "categorical", "datetime", "text"]
         if self.id.size(-1) > 0:
             attrs.append("id")
+        # Let torch.compile track backing fields and their public properties.
+        attrs = [f"_{name}" for name in attrs] + attrs
         columns = tuple(
             (str(stype), names) for stype, names in self._columns.items()
         )
