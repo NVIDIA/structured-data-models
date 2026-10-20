@@ -12,6 +12,7 @@ from torch import Tensor
 
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
+from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T")
@@ -173,12 +174,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                 ),
             )
             categories = (
-                tuple(
-                    getattr(table.categorical, f"_category_{column}")
-                    for column in range(table.categorical.size(-1))
-                )
-                if compiling
-                else ()
+                tuple(_iter_categories(table.categorical)) if compiling else ()
             )
             group_ids = compatible_groups.setdefault(compatibility_key, [])
             for group_id in group_ids:
