@@ -462,6 +462,17 @@ class CategoricalTensor(Tensor):
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
 
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
+        out += f", num_categories={tuple(c.numel() for c in self.categories)}"
+        if self.dtype != torch.int64:
+            out += f", dtype={self.dtype}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
+
 
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(inp: CategoricalTensor) -> Tensor:
