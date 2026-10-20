@@ -16,7 +16,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import ICLModel
+from sdm.models import CompletionModel, ICLModel
 from sdm.models.callback import Callback
 from sdm.processing import InvertibleMixin, Processor
 
@@ -820,3 +820,39 @@ def test_estimator_batching_groups_by_layout_not_names(
         estimator_batch_size=None,
     )
     torch.testing.assert_close(model.predict(x).numerical, expected.numerical)
+
+
+class _ZeroModel(CompletionModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.zeros(1))
+
+    def _forward(self, x: TableTensor, **kwargs: Any) -> TableTensor:
+        return x.replace_blocks(numerical=torch.zeros_like(x.numerical))
+
+
+def test_completion_model() -> None:
+    model = _ZeroModel().eval()
+    assert repr(model) == "_ZeroModel()"
+
+    nan = float("nan")
+    x = torch.tensor([[1.0, nan], [3.0, 4.0], [nan, 8.0]])
+
+    out = model(x)
+    assert isinstance(out, TableTensor)
+    assert torch.is_inference(out)
+    # Zero standardized predictions map back to the observed column means.
+    assert out.numerical.equal(
+        torch.tensor([[1.0, 6.0], [3.0, 4.0], [2.0, 8.0]])
+    )
+
+    table = TableTensor(
+        numerical=x,
+        categorical=CategoricalTensor.from_tensor(
+            torch.tensor([[0], [1], [0]])
+        ),
+    )
+    out = model(table)
+    assert out.columns == table.columns
+    assert out.categorical.code.equal(table.categorical.code)
+    assert out.numerical[2, 0] == 2.0

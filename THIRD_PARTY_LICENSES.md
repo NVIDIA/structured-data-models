@@ -44,6 +44,16 @@ Its weights are not bundled with this project and may be downloaded only after t
 
 The [`sdm/models/timestral/`](sdm/models/timestral/) implementation contain code derived from [`Timestral`](https://github.com/mistralai/timestral).
 
+## MatrixFormer
+
+- Source: https://github.com/jacobf18/MatrixFormer
+- Code license: Apache License 2.0
+- License terms: [`sdm/models/matrixformer/LICENSE`](sdm/models/matrixformer/LICENSE)
+- Optional pretrained weights: https://huggingface.co/Tabimpute/TabImpute
+- Weights license: [Apache License 2.0](https://huggingface.co/Tabimpute/TabImpute)
+
+The [`sdm/models/matrixformer/`](sdm/models/matrixformer/) implementation contains code derived from [`MatrixFormer`](https://github.com/jacobf18/MatrixFormer).
+
 ## DPM-Solver
 
 - Source: https://github.com/LuChengTHU/dpm-solver

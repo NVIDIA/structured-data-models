@@ -49,6 +49,12 @@ Overview
      - 330.71M
      - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
      - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
+   * - | :class:`~sdm.models.MatrixFormer`
+       | (`Paper <https://arxiv.org/abs/2610.06751>`__)
+     - 2026-10-05
+     - 78.00M–156.00M
+     - `Apache-2.0 <https://github.com/jacobf18/MatrixFormer>`__
+     - `Apache-2.0 <https://huggingface.co/Tabimpute/TabImpute>`__
 
 Model API
 ---------

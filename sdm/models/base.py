@@ -23,6 +23,7 @@ from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models.callback import Callback
+from sdm.processing import InvertibleMixin, Processor, Standardize
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -859,6 +860,96 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+
+class CompletionModel(torch.nn.Module, abc.ABC):
+    r"""Base model for matrix completion foundation models.
+
+    A :class:`CompletionModel` receives a single table whose missing numerical
+    entries are ``NaN`` and predicts every missing entry from the observed ones
+    in one call.
+    Observed entries are returned unchanged.
+    Numerical columns are standardized by a fitted processor before the model
+    runs, and predictions are mapped back to the original units.
+    """
+
+    def forward(
+        self,
+        x: Tensor | TableTensor,  # [..., R, C]
+        *,
+        processor: Processor | None = None,
+        **kwargs: Any,
+    ) -> TableTensor:  # [..., R, C]
+        r"""Complete the missing numerical entries of a table.
+
+        Args:
+            x: The table to complete with shape ``[..., R, C]`` with ``R`` rows
+                and ``C`` columns.
+                Missing numerical entries are ``NaN``.
+                Plain tensors are treated as numerical tables.
+                Non-numerical columns are returned unchanged.
+            processor: The invertible processor applied to the numerical
+                columns before completion and inverted afterwards.
+                It is fitted on ``x``.
+                If ``None``, :meth:`default_processor` is used.
+            kwargs: Additional keyword arguments passed to the model.
+
+        Returns:
+            The table with missing numerical entries filled in.
+        """
+        table = x if isinstance(x, TableTensor) else TableTensor(numerical=x)
+        processor = (
+            self.default_processor()
+            if processor is None
+            else copy.deepcopy(processor)
+        )
+        requires_grad = self.training
+
+        with (
+            torch.amp.autocast(table.device.type, enabled=False),
+            inference_mode("no_grad" if requires_grad else "inference"),
+        ):
+            numerical = TableTensor(numerical=table.numerical)
+            normalized = processor.fit_transform(numerical)
+
+        with inference_mode("grad" if requires_grad else "inference"):
+            out = self._forward(normalized, **kwargs)
+
+        with (
+            torch.amp.autocast(table.device.type, enabled=False),
+            inference_mode("grad" if requires_grad else "inference"),
+        ):
+            out = cast(InvertibleMixin, processor).inverse_transform(out)
+            observed = table.numerical.isfinite()
+            completed = table.numerical.where(observed, out.numerical)
+            return table.replace_blocks(numerical=completed)
+
+    def __repr__(self) -> str:
+        device = next(self.parameters()).device
+        device_repr = f"device={device}" if device.type != "cpu" else ""
+        return f"{self.__class__.__name__}({device_repr})"
+
+    @abc.abstractmethod
+    def _forward(
+        self,
+        x: TableTensor,  # [..., R, C]
+        **kwargs: Any,
+    ) -> TableTensor:  # [..., R, C]
+        r"""Predict every entry of a processed numerical table.
+
+        Args:
+            x: The processed table, whose missing entries are ``NaN``.
+            kwargs: Additional keyword arguments passed by the caller.
+
+        Returns:
+            Predictions for all entries with the same shape as ``x``.
+            Predictions at observed entries are discarded by :meth:`forward`.
+        """
+
+    @classmethod
+    def default_processor(cls) -> Processor:
+        r"""Return the default processor for this model."""
+        return Standardize()
 
 
 def _stack(tables: Sequence[TableTensor]) -> TableTensor:

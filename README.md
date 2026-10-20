@@ -51,6 +51,10 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 - **[`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
+**Matrix Completion Foundation Models:**
+
+- **[`MatrixFormer`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.MatrixFormer)** from Saha *et al.*: [MatrixFormer: A Foundation Model for Matrix Completion](https://arxiv.org/abs/2610.06751) (CoRR '26)
+
 **Times Series Foundation Models:**
 
 - **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Chen *et al.*: [New NVIDIA NV-Tesseract Time Series Models Advance Dataset Processing and Anomaly Detection](https://developer.nvidia.com/blog/new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-anomaly-detection) ('25)
@@ -114,6 +118,7 @@ Third-party software and separately distributed model assets are documented in [
 - [**`sdm/models/tabfm/`**](sdm/models/tabfm/) contains code derived from [`TabFM`](https://github.com/google-research/tabfm) under the Apache License 2.0; its terms are distributed in [`sdm/models/tabfm/LICENSE`](sdm/models/tabfm/LICENSE).
 - [**`sdm/models/timesfm3/`**](sdm/models/timesfm3/) contains code derived from [`TimesFM`](https://github.com/google-research/timesfm) under the Apache License 2.0; its terms are distributed in [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE).
 - [**`sdm/models/timestral/`**](sdm/models/timestral/) contains code derived from [`Timestral`](https://github.com/mistralai/timestral) under the Apache License 2.0; its terms are distributed in [`sdm/models/timestral/LICENSE`](sdm/models/timestral/LICENSE).
+- [**`sdm/models/matrixformer/`**](sdm/models/matrixformer/) contains code derived from [`MatrixFormer`](https://github.com/jacobf18/MatrixFormer) under the Apache License 2.0; its terms are distributed in [`sdm/models/matrixformer/LICENSE`](sdm/models/matrixformer/LICENSE).
 - [**`sdm/models/kumo/relational/NOTICE`**](sdm/models/kumo/relational/NOTICE) documents [`KumoRelational`](sdm/models/kumo/relational/)'s reuse of [`TabICLv2`](sdm/models/tabiclv2/)-derived components.
 - [**`sdm/models/kumo/timeseries/anomaly/NOTICE`**](sdm/models/kumo/timeseries/anomaly/NOTICE) documents [`KumoAnomaly`](sdm/models/kumo/timeseries/anomaly)'s attribution to [DPM-Solver](https://github.com/LuChengTHU/dpm-solver).
 - [**`third_party/pytorch/`**](third_party/pytorch/) contains the BSD 3-Clause License for material adapted from [PyTorch](https://github.com/pytorch/pytorch) in [`CONTRIBUTING.md`](CONTRIBUTING.md); its terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
