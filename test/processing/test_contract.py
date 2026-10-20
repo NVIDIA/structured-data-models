@@ -138,6 +138,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCategoryCounts()),
+    ProcessorCase(sp.MaskRandom(rate=(0.5, 0.5))),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
@@ -186,6 +187,11 @@ INVERTIBLE_PROCESSOR_CASES = tuple(
 )
 
 
+def _assert_equal(actual: TableTensor, expected: TableTensor) -> None:
+    # Processors can emit NaN for missing values.
+    assert actual.allclose(expected, rtol=0.0, atol=0.0, equal_nan=True)
+
+
 def test_all_public_processors_have_contract_cases() -> None:
     public_processors = set()
     for name in sp.__all__:
@@ -230,7 +236,7 @@ def test_fit_transform_matches_fit_then_transform(
     )
     assert len(actual) == len(expected)
     for member_id in range(len(actual)):
-        assert actual[member_id].equal(expected[member_id])
+        _assert_equal(actual[member_id], expected[member_id])
 
 
 @pytest.mark.parametrize(
@@ -249,7 +255,7 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     actual = processor_b.transform_ensemble(table)
     assert len(actual) == len(expected)
     for member_id in range(len(actual)):
-        assert actual[member_id].equal(expected[member_id])
+        _assert_equal(actual[member_id], expected[member_id])
 
 
 @pytest.mark.parametrize(
