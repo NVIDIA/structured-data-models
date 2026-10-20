@@ -167,16 +167,27 @@ class SDPA(torch.nn.Module):
         if query.size(-2) != key.size(-2):
             enable_gqa = True
 
-        out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, Hq, Q, C],
-            key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
-            value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask,  # [B, Hq, Q, KV]
-            dropout_p=self.dropout if self.training else 0.0,
-            enable_gqa=enable_gqa,
-            is_causal=is_causal,
-            scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, C]
+        query = query.transpose(-3, -2)  # [B, Hq, Q, C]
+        key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
+        value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
+
+        # CUDA attention kernels accept at most 65,535 batch entries per call:
+        outs = [
+            F.scaled_dot_product_attention(
+                query=query[i : i + 65_535],
+                key=key[i : i + 65_535],
+                value=value[i : i + 65_535],
+                attn_mask=None
+                if attn_mask is None
+                else attn_mask[i : i + 65_535],  # [B, Hq, Q, KV]
+                dropout_p=self.dropout if self.training else 0.0,
+                enable_gqa=enable_gqa,
+                is_causal=is_causal,
+                scale=self.scale,
+            ).transpose(-3, -2)  # [B, Q, Hq, C]
+            for i in range(0, query.size(0), 65_535)
+        ]
+        out = outs[0] if len(outs) == 1 else torch.cat(outs)
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 

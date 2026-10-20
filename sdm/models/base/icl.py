@@ -22,7 +22,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.models.callback import Callback
+from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -32,21 +32,16 @@ from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
 
-class ICLModel(torch.nn.Module, abc.ABC):
+class ICLModel(Model):
     r"""Base model for in-context foundation models on structured data.
 
     :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
-    It enriches models by unified pre-processing and post-processing routines,
-    key/value caching, and ensembling.
 
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
     """
-
-    #: Semantic types supported for input columns in this model.
-    supported_feature_stypes: ClassVar[frozenset[Stype]]
 
     #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
@@ -92,9 +87,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 f"{self.__class__.__name__!r} received unsupported tasks "
                 f"{invalid}"
             )
-
-        self._cache: Cache | None = None
-        self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     def forward(
         self,
@@ -415,40 +407,22 @@ class ICLModel(torch.nn.Module, abc.ABC):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
-        num_batches = cast(int, self._cache["num_batches"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
-        next_cache = caches[0]
-
-        compute_stream: torch.cuda.Stream | None = None
-        transfer_stream: torch.cuda.Stream | None = None
-        try:
-            if x.is_cuda:
-                compute_stream = torch.cuda.current_stream(x.device)
-                if x.device not in self._transfer_streams:
-                    transfer_stream = torch.cuda.Stream(x.device)
-                    self._transfer_streams[x.device] = transfer_stream
-                else:
-                    transfer_stream = self._transfer_streams[x.device]
-                with torch.cuda.stream(transfer_stream):
-                    next_cache = next_cache.to(x.device, non_blocking=True)
-
+        with self._prefetch(
+            items=[
+                cast(Cache, self._cache[i])
+                for i in range(cast(int, self._cache["num_batches"]))
+            ],
+            device=x.device,
+        ) as caches:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
-            if x.is_cuda:
-                assert compute_stream is not None
-                assert transfer_stream is not None
-                compute_stream.wait_stream(transfer_stream)
-
             outs: list[TableTensor] = []
             start = 0
-            for i in range(len(caches)):
-                cache, next_cache = next_cache, None
-                assert cache is not None
-
+            for cache in caches:
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
                 batch_queries = [
                     self._prepare_query(
@@ -468,13 +442,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ]
                 start += len(x_schemas)
 
-                if i + 1 < len(caches):
-                    next_cache = caches[i + 1]
-                if x.is_cuda and next_cache is not None:
-                    assert transfer_stream is not None
-                    with torch.cuda.stream(transfer_stream):
-                        next_cache = next_cache.to(x.device, non_blocking=True)
-
                 outs += self._forward_batch(
                     contexts=None,
                     queries=batch_queries,
@@ -490,21 +457,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
 
-                if x.is_cuda:
-                    assert compute_stream is not None
-                    for tensor in cache._tensors():
-                        tensor.record_stream(compute_stream)
-
-                if x.is_cuda and next_cache is not None:
-                    assert compute_stream is not None
-                    assert transfer_stream is not None
-                    compute_stream.wait_stream(transfer_stream)
-
-        except BaseException:
-            if transfer_stream is not None:
-                transfer_stream.synchronize()
-            raise
-
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
             with (
@@ -518,26 +470,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
-
-    def clear(self) -> None:
-        r"""Clear cached context state created by :meth:`fit`."""
-        self._cache = None
-
-    def __getstate__(self) -> dict[str, object]:
-        for stream in self._transfer_streams.values():
-            stream.synchronize()
-        state = super().__getstate__()
-        state.pop("_transfer_streams", None)
-        return state
-
-    def __setstate__(self, state: dict[str, object]) -> None:
-        super().__setstate__(state)
-        self._transfer_streams = {}
-
-    def __repr__(self) -> str:
-        device = next(self.parameters()).device
-        device_repr = f"device={device}" if device.type != "cpu" else ""
-        return f"{self.__class__.__name__}({device_repr})"
 
     # Abstract Methods ########################################################
 
@@ -592,11 +524,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             replay), each named by its class value; :class:`ICLModel` relabels
             them per estimator when stacked.
         """
-
-    @classmethod
-    @abc.abstractmethod
-    def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
 

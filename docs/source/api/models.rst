@@ -61,21 +61,20 @@ Model API
 
 .. autosummary::
    :toctree: generated
-   :template: model_class
    :nosignatures:
 
-{% for name in api_names("sdm.models") if name not in ("ECOC", "KumoAnomaly") %}
-   ~sdm.models.{{ name }}
-{% endfor %}
+   ~sdm.models.Model
+   ~sdm.models.ICLModel
+   ~sdm.models.Callback
 
-Anomaly Detection
------------------
-
-KumoAnomaly is currently a placeholder; inference and pretrained checkpoint
-loading are not yet implemented.
+Models
+------
 
 .. autosummary::
    :toctree: generated
+   :template: model_class
    :nosignatures:
 
-   ~sdm.models.KumoAnomaly
+{% for name in api_names("sdm.models") if name not in api_names("sdm.models.base") %}
+   ~sdm.models.{{ name }}
+{% endfor %}
