@@ -171,7 +171,7 @@ class SDPA(torch.nn.Module):
         key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
-        # CUDA attention kernels accept at most 65,535 batch entries per call.
+        # CUDA attention kernels accept at most 65,535 batch entries per call:
         outs = [
             F.scaled_dot_product_attention(
                 query=query[i : i + 65_535],
