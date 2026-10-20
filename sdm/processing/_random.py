@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import math
 from collections.abc import Sequence
 from typing import cast
 
@@ -64,6 +65,62 @@ def count(
     return (
         (lower + u * (upper - lower + 1)).floor().long().minimum(total.long())
     )
+
+
+def log_uniform(
+    low: float,
+    high: float,
+    size: Sequence[int],
+    *,
+    device: torch.device,
+    dtype: torch.dtype,
+    generator: torch.Generator | None,
+) -> Tensor:
+    r"""Draw values whose logarithms are uniformly distributed."""
+    return uniform(
+        math.log(low),
+        math.log(high),
+        size,
+        device=device,
+        dtype=dtype,
+        generator=generator,
+    ).exp()
+
+
+def regime(
+    size: Sequence[int],
+    *,
+    device: torch.device,
+    generator: torch.Generator | None,
+) -> Tensor:
+    r"""Draw values in ``[0, 1]`` that share a random regime.
+
+    The values along the last dimension follow one
+    :math:`\mathrm{Beta}(st, s(1 - t))` with :math:`t \sim U(0, 1)` and
+    :math:`s \sim \mathrm{LogUniform}(0.1, 10^4)`. A large :math:`s` puts the
+    values close together, and a small :math:`s` pushes them to 0 or 1.
+    """
+    size = tuple(size)
+    t = torch.rand(
+        size[:-1], device=device, dtype=torch.float64, generator=generator
+    ).clamp(1e-6, 1 - 1e-6)
+    s = log_uniform(
+        1e-1,
+        1e4,
+        size[:-1],
+        device=device,
+        dtype=torch.float64,
+        generator=generator,
+    )
+    # Float64 keeps small concentrations from underflowing to 0 / 0.
+    # PyTorch has no public generator-aware gamma sampling primitive.
+    a = torch._standard_gamma(
+        (s * t).unsqueeze(-1).expand(size), generator=generator
+    )
+    b = torch._standard_gamma(
+        (s * (1 - t)).unsqueeze(-1).expand(size), generator=generator
+    )
+    return (a / (a + b)).float()
 
 
 def rank(x: Tensor, dim: int) -> Tensor:

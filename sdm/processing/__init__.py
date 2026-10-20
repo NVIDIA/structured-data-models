@@ -51,6 +51,7 @@ from sdm.processing.categorical import (
 )
 from sdm.processing.missing import (
     MaskRandom,
+    MaskNearEmpty,
     MaskRows,
     MaskBlock,
     MaskByTarget,
@@ -103,6 +104,7 @@ __all__ = [
     "ImputeMode",
     "AddCategoryCounts",
     "MaskRandom",
+    "MaskNearEmpty",
     "MaskRows",
     "MaskBlock",
     "MaskByTarget",
