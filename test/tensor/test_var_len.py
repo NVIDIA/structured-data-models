@@ -8,9 +8,52 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm import VarLenTensor
+from sdm import StringTensor, VarLenTensor
 from sdm.tensor.var_len import _compact
 from sdm.testing import onlyCUDA, withCUDA
+
+
+@pytest.mark.parametrize("tensor_type", [VarLenTensor, StringTensor])
+def test_compiled_payload_slice(
+    compilation: None,
+    tensor_type: type[VarLenTensor],
+) -> None:
+    def reconstruct(inp: VarLenTensor) -> VarLenTensor:
+        data = inp._data[inp._offset[0] : inp._offset[-1]]
+        return type(inp)(
+            data=data,
+            offset=inp._offset,
+            valid=inp._valid,
+            size=inp.size(),
+            stride=inp.stride(),
+            storage_offset=int(inp.storage_offset()),
+        )
+
+    tensor = tensor_type(
+        data=torch.tensor([97, 98], dtype=torch.uint8),
+        offset=torch.tensor([0, 1, 2]),
+        valid=None,
+        size=(2,),
+    )
+    out = torch.compile(reconstruct, backend="eager")(tensor)
+    assert type(out) is tensor_type
+    assert out.tolist() == tensor.tolist()
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+
+
+def test_subclass_construction() -> None:
+    class CustomString(StringTensor):
+        pass
+
+    tensor = CustomString(
+        data=torch.tensor([97, 98], dtype=torch.uint8),
+        offset=torch.tensor([0, 1, 2]),
+        valid=None,
+        size=(2,),
+    )
+    assert type(tensor) is CustomString
+    assert tensor.tolist() == ["a", "b"]
 
 
 def test_dtype_conversion() -> None:

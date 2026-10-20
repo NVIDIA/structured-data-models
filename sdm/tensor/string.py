@@ -17,11 +17,31 @@ from typing_extensions import override
 from sdm._warnings import warn_once
 from sdm.tensor import VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, combine_arrow_chunks
+from sdm.tensor.var_len import _make_var_len_subclass
 
 if TYPE_CHECKING:
     import cudf
 
 aten = torch.ops.aten
+
+
+@torch.compiler.allow_in_graph
+def _make_string(
+    data: Tensor,
+    offset: Tensor,
+    valid: Tensor | None,
+    layout: tuple[tuple[int, ...], tuple[int, ...], int],
+) -> StringTensor:
+    return cast(
+        StringTensor,
+        _make_var_len_subclass(
+            cls=StringTensor,
+            data=data,
+            offset=offset,
+            valid=valid,
+            layout=layout,
+        ),
+    )
 
 
 class StringTensor(VarLenTensor):
@@ -39,6 +59,32 @@ class StringTensor(VarLenTensor):
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
     __hash__ = Tensor.__hash__
+
+    @override
+    @classmethod
+    def _make_wrapper(
+        cls,
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        layout: tuple[tuple[int, ...], tuple[int, ...], int],
+    ) -> Self:
+        if cls is StringTensor:
+            return cast(
+                Self,
+                _make_string(
+                    data=data,
+                    offset=offset,
+                    valid=valid,
+                    layout=layout,
+                ),
+            )
+        return super()._make_wrapper(
+            data=data,
+            offset=offset,
+            valid=valid,
+            layout=layout,
+        )
 
     @override
     @classmethod

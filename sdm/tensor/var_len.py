@@ -36,6 +36,48 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+def _make_var_len_subclass(
+    cls: type[VarLenTensor],
+    data: Tensor,
+    offset: Tensor,
+    valid: Tensor | None,
+    layout: tuple[tuple[int, ...], tuple[int, ...], int],
+) -> VarLenTensor:
+    # Initialize all leaves before Dynamo observes the wrapper.
+    size, stride, storage_offset = layout
+    out = Tensor._make_wrapper_subclass(
+        cls,
+        size=size,
+        strides=stride,
+        storage_offset=storage_offset,
+        dtype=data.dtype,
+        device=data.device,
+        requires_grad=False,  # Autograd lives on `_data` only.
+    )
+
+    out._data = data
+    out._offset = offset
+    out._valid = valid
+
+    return out
+
+
+@torch.compiler.allow_in_graph
+def _make_var_len(
+    data: Tensor,
+    offset: Tensor,
+    valid: Tensor | None,
+    layout: tuple[tuple[int, ...], tuple[int, ...], int],
+) -> VarLenTensor:
+    return _make_var_len_subclass(
+        cls=VarLenTensor,
+        data=data,
+        offset=offset,
+        valid=valid,
+        layout=layout,
+    )
+
+
 class VarLenTensor(Tensor):
     r"""A :class:`torch.Tensor` for rectangular variable-length values.
 
@@ -213,21 +255,41 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
-        out = Tensor._make_wrapper_subclass(
-            cls,
-            size=size,
-            strides=stride,
-            storage_offset=storage_offset,
-            dtype=data.dtype,
-            device=data.device,
-            requires_grad=False,  # Autograd lives on `_data` only.
+        return cls._make_wrapper(
+            data=data,
+            offset=offset,
+            valid=valid,
+            layout=(size, stride, storage_offset),
         )
 
-        out._data = data
-        out._offset = offset
-        out._valid = valid
-
-        return out
+    @classmethod
+    def _make_wrapper(
+        cls,
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        layout: tuple[tuple[int, ...], tuple[int, ...], int],
+    ) -> Self:
+        if cls is VarLenTensor:
+            return cast(
+                Self,
+                _make_var_len(
+                    data=data,
+                    offset=offset,
+                    valid=valid,
+                    layout=layout,
+                ),
+            )
+        return cast(
+            Self,
+            _make_var_len_subclass(
+                cls=cls,
+                data=data,
+                offset=offset,
+                valid=valid,
+                layout=layout,
+            ),
+        )
 
     @classmethod
     def from_tensor(
