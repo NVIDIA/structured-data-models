@@ -11,7 +11,7 @@ from torch import Tensor
 from sdm import RelatedTables, TableTensor
 from sdm.explain.base import ICLExplainer
 from sdm.models import ICLModel
-from sdm.models.base.callback import Callback
+from sdm.models.base import Callback
 
 
 class GradientExplainer(

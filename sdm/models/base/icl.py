@@ -22,7 +22,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.models.base.callback import Callback
+from sdm.models.base import Callback
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
