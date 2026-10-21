@@ -458,6 +458,10 @@ class TransformerBlock(torch.nn.Module):
             attention.
         post_attn_norm: Normalization applied to the attention output before
             its residual addition.
+        attn_residual_norm: Normalization applied after the attention residual
+            addition.
+        mlp_residual_norm: Normalization applied after the feedforward
+            residual addition. Requires ``mlp``.
         query_transform: Transformation applied to projected query heads before
             scaled dot-product attention.
         key_transform: Transformation applied to projected key heads before
@@ -468,7 +472,8 @@ class TransformerBlock(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
-        dropout: Attention dropout probability.
+        dropout: Dropout probability applied to attention weights and to the
+            attention output before its residual addition.
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
@@ -483,6 +488,8 @@ class TransformerBlock(torch.nn.Module):
         query_norm: torch.nn.Module | None = None,
         key_value_norm: torch.nn.Module | None = None,
         post_attn_norm: torch.nn.Module | None = None,
+        attn_residual_norm: torch.nn.Module | None = None,
+        mlp_residual_norm: torch.nn.Module | None = None,
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
@@ -494,12 +501,18 @@ class TransformerBlock(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        if mlp is None and mlp_residual_norm is not None:
+            raise ValueError("'mlp_residual_norm' requires 'mlp'")
+
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.mlp = mlp
         self.query_norm = query_norm
         self.key_value_norm = key_value_norm
         self.post_attn_norm = post_attn_norm
+        self.attn_residual_norm = attn_residual_norm
+        self.mlp_residual_norm = mlp_residual_norm
+        self.dropout = dropout
 
         self.attn = Attention(
             channels=channels,
@@ -811,6 +824,8 @@ class TransformerBlock(torch.nn.Module):
 
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
+        if self.training and self.dropout > 0.0:
+            attn_out = F.dropout(attn_out, p=self.dropout)
 
         if (
             out is not None
@@ -818,13 +833,24 @@ class TransformerBlock(torch.nn.Module):
             and not out.is_contiguous()
         ):
             tmp = (attn_out + query).to(out.dtype)
+            if self.attn_residual_norm is not None:
+                tmp = self.attn_residual_norm(tmp)
             if self.mlp is not None:
-                tmp += self.mlp(tmp)
+                tmp = (tmp + self.mlp(tmp)).to(out.dtype)
+                if self.mlp_residual_norm is not None:
+                    tmp = self.mlp_residual_norm(tmp)
             out.copy_(tmp)
         else:
             tmp = torch.add(attn_out, query, out=out)
+            if self.attn_residual_norm is not None:
+                tmp = self.attn_residual_norm(tmp)
             if self.mlp is not None:
                 tmp = torch.add(tmp, self.mlp(tmp), out=out)
+                if self.mlp_residual_norm is not None:
+                    tmp = self.mlp_residual_norm(tmp)
+            # Normalization allocates, so copy its result into `out`.
+            if out is not None and tmp is not out:
+                tmp = out.copy_(tmp)
             out = tmp
 
         return (out, kv) if return_key_value else out

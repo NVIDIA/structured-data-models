@@ -6,7 +6,53 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Conv1d, LayerNorm, Linear, TransformerEncoderLayer
+from torch.nn import GELU, Conv1d, Dropout, LayerNorm, Linear, Sequential
+
+from sdm.nn import TransformerBlock
+
+
+class KumoAnomalyTransformerBlock(TransformerBlock):
+    """Post-norm transformer block of Kumo-Anomaly.
+
+    Args:
+        channels: Input and output width.
+        num_heads: Attention heads.
+        hidden_channels: Feedforward width.
+        dropout: Attention and feedforward dropout probability.
+        device: The device.
+        dtype: The dtype.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int,
+        hidden_channels: int,
+        dropout: float,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        super().__init__(
+            channels=channels,
+            num_query_heads=num_heads,
+            mlp=Sequential(
+                Linear(channels, hidden_channels, **factory_kwargs),
+                GELU(),
+                Dropout(dropout),
+                Linear(hidden_channels, channels, **factory_kwargs),
+                Dropout(dropout),
+            ),
+            attn_residual_norm=LayerNorm(channels, **factory_kwargs),
+            mlp_residual_norm=LayerNorm(channels, **factory_kwargs),
+            dropout=dropout,
+            **factory_kwargs,
+        )
+        # Match the initialization of `torch.nn.MultiheadAttention`.
+        torch.nn.init.xavier_uniform_(self.attn.qkv_lin.weight)
+        torch.nn.init.zeros_(self.attn.qkv_lin.bias)
+        self.attn.out_lin.reset_parameters()
+        torch.nn.init.zeros_(self.attn.out_lin.bias)
 
 
 class ResidualBlock(torch.nn.Module):
@@ -84,25 +130,18 @@ class ResidualBlock(torch.nn.Module):
             with torch.no_grad():
                 projection.weight.mul_(0.5)
 
-        # Preserve post-residual normalization and attention dropout, which
-        # SDM's TransformerBlock does not currently provide together.
-        # TODO: Switch to SDM's TransformerBlock once it supports both.
-        self.time_layer = TransformerEncoderLayer(
-            d_model=channels,
-            nhead=num_heads,
-            dim_feedforward=hidden_channels,
+        self.time_layer = KumoAnomalyTransformerBlock(
+            channels=channels,
+            num_heads=num_heads,
+            hidden_channels=hidden_channels,
             dropout=dropout,
-            activation="gelu",
-            batch_first=True,
             **factory_kwargs,
         )
-        self.feature_layer = TransformerEncoderLayer(
-            d_model=channels,
-            nhead=num_heads,
-            dim_feedforward=hidden_channels,
+        self.feature_layer = KumoAnomalyTransformerBlock(
+            channels=channels,
+            num_heads=num_heads,
+            hidden_channels=hidden_channels,
             dropout=dropout,
-            activation="gelu",
-            batch_first=True,
             **factory_kwargs,
         )
         self.norm_after_time = LayerNorm(channels, **factory_kwargs)

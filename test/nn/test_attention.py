@@ -751,3 +751,61 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+@withCUDA
+def test_transformer_block_residual_norms(device: torch.device) -> None:
+    channels = 8
+    mlp = torch.nn.Linear(channels, channels, device=device)
+    attn_residual_norm = torch.nn.LayerNorm(channels, device=device)
+    mlp_residual_norm = torch.nn.LayerNorm(channels, device=device)
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=mlp,
+        attn_residual_norm=attn_residual_norm,
+        mlp_residual_norm=mlp_residual_norm,
+        device=device,
+    )
+    torch.nn.init.normal_(module.attn.out_lin.weight)
+    query = torch.randn(2, 4, 3, channels, device=device).transpose(1, 2)
+
+    expected = attn_residual_norm(query + module.attn(query))
+    expected = mlp_residual_norm(expected + mlp(expected))
+    torch.testing.assert_close(module(query), expected)
+
+    with torch.no_grad():
+        out = torch.empty(2, 3, 4, channels, device=device)
+        assert module(query, batch_size_limit=1, out=out) is out
+        torch.testing.assert_close(out, expected)
+
+        alias = query.clone()
+        assert module(alias, out=alias) is alias
+        torch.testing.assert_close(alias, expected)
+
+    with pytest.raises(ValueError, match="requires 'mlp'"):
+        TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=None,
+            mlp_residual_norm=mlp_residual_norm,
+        )
+
+
+@withCUDA
+def test_transformer_block_dropout(device: torch.device) -> None:
+    module = TransformerBlock(
+        channels=4,
+        num_query_heads=1,
+        mlp=None,
+        dropout=0.5,
+        device=device,
+    )
+    torch.nn.init.eye_(module.attn.out_lin.weight)
+    # A single key receives the full attention weight. Dropping weights and
+    # outputs each scales the unit values by 0 or 2.
+    query = torch.zeros(64, 1, 4, device=device)
+    with torch.no_grad():
+        module.attn.qkv_lin.bias[8:].fill_(1.0)
+        assert set(module(query).unique().tolist()) == {0.0, 4.0}
+        torch.testing.assert_close(module.eval()(query), query + 1)

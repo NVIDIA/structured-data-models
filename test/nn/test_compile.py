@@ -281,6 +281,32 @@ def test_transformer_block_compile(
 
 
 @withCUDA
+def test_transformer_block_residual_norms_compile(
+    device: torch.device,
+) -> None:
+    channels = 8
+    module = TransformerBlock(
+        channels=channels,
+        num_query_heads=2,
+        mlp=torch.nn.Linear(channels, channels, device=device),
+        attn_residual_norm=torch.nn.LayerNorm(channels, device=device),
+        mlp_residual_norm=torch.nn.LayerNorm(channels, device=device),
+        device=device,
+    )
+    query = torch.randn(2, 3, channels, device=device)
+    expected = torch.empty(2, 3, channels, device=device, dtype=torch.bfloat16)
+    out = expected.new_empty(3, 2, channels).transpose(0, 1)
+
+    # CUDA autocast runs `LayerNorm` in float32, so residual sums must be
+    # rounded to the dtype of `out` as in eager mode.
+    with torch.no_grad(), torch.autocast(device.type, dtype=torch.bfloat16):
+        module(query=query, out=expected)
+        actual = fullgraph(module)(query=query, out=out)
+    assert actual is out
+    assert torch.equal(out, expected)
+
+
+@withCUDA
 @pytest.mark.parametrize("self_attn", [False, True])
 def test_induced_transformer_block_compile(
     device: torch.device,
