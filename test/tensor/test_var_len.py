@@ -27,12 +27,7 @@ def test_compiled_payload_slice(
             size=inp.size(),
         )
 
-    tensor = tensor_type(
-        data=torch.tensor([97, 98], dtype=torch.uint8),
-        offset=torch.tensor([0, 1, 2]),
-        valid=None,
-        size=(2,),
-    )
+    tensor = tensor_type.from_tensor(torch.tensor([97, 98], dtype=torch.uint8))
     out = torch.compile(reconstruct, backend="eager")(tensor)
     assert type(out) is tensor_type
     assert out.tolist() == tensor.tolist()
