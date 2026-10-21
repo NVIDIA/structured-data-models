@@ -181,19 +181,16 @@ class Recipe:
         )
 
 
-def _iter_modules(module: Module) -> Iterator[Module]:
+def _iter_modules(
+    module: Module, seen: set[Module] | None = None
+) -> Iterator[Module]:
     # Bound module traversal fails for processors created inside torch.compile.
     # Call Module.named_children directly to visit their registered children.
-    seen: set[Module] = set()
-    pending: list[Module] = [module]
-    while pending:
-        current = pending.pop()
-        if current in seen:
-            continue
-        seen.add(current)
-        yield current
-        pending.extend(
-            reversed(
-                tuple(child for _, child in Module.named_children(current))
-            )
-        )
+    if seen is None:
+        seen = set()
+    if module in seen:
+        return
+    seen.add(module)
+    yield module
+    for _, child in Module.named_children(module):
+        yield from _iter_modules(child, seen)
