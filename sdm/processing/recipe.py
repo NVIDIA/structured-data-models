@@ -184,8 +184,8 @@ class Recipe:
 def _iter_modules(
     module: Module, seen: set[Module] | None = None
 ) -> Iterator[Module]:
-    # Bound module traversal fails for processors created inside torch.compile.
-    # Call Module.named_children directly to visit their registered children.
+    # torch.compile can reject modules()/named_modules() while tracing
+    # processor initialization. Read each processor's children directly.
     if seen is None:
         seen = set()
     if module in seen:
