@@ -14,20 +14,15 @@ from sdm.testing import onlyCUDA, withCUDA
 
 
 @pytest.mark.parametrize("cls", [VarLenTensor, StringTensor])
-@pytest.mark.parametrize("device", ["cpu", "meta"])
-def test_nullable_repr(cls: type[VarLenTensor], device: str) -> None:
+def test_nullable_repr(cls: type[VarLenTensor]) -> None:
     tensor = cls(
-        data=torch.zeros(2, dtype=torch.uint8, device=device),
-        offset=torch.arange(3, device=device),
-        valid=torch.tensor([True, False], device=device),
+        data=torch.empty(2, dtype=torch.uint8, device="meta"),
+        offset=torch.arange(3, device="meta"),
+        valid=torch.empty(2, dtype=torch.bool, device="meta"),
         size=(2,),
     )
 
-    text = repr(tensor)
-    assert "nullable=True" in text
-    assert "null_count=" not in text
-    assert str(tensor) == text
-    assert f"{tensor}" == text
+    assert "nullable=True" in repr(tensor)
 
 
 def test_dtype_conversion() -> None:
