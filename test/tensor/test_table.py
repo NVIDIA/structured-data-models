@@ -95,6 +95,20 @@ def test_empty() -> None:
     assert tensor._column_to_loc == {}
 
 
+def test_column_groups() -> None:
+    tensor = TableTensor(
+        columns={"text": (), "numerical": ("age",)},
+        numerical=torch.zeros(2, 1),
+    )
+    assert tensor.column_groups == (
+        (Stype.text, ()),
+        (Stype.numerical, ("age",)),
+        (Stype.categorical, ()),
+        (Stype.datetime, ()),
+        (Stype.id, ()),
+    )
+
+
 def test_column_names() -> None:
     with pytest.raises(ValueError, match="hold 2 columns"):
         _ = TableTensor(

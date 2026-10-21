@@ -52,7 +52,7 @@ class SelectColumns(EnsembleProcessor):
             for group in ensemble_table._iter_groups():
                 columns: Mapping[StypeLike, Sequence[str]] = {
                     stype: column_names[: self.max_columns]
-                    for stype, column_names in group._columns.items()
+                    for stype, column_names in group.column_groups
                 }
                 blocks = {
                     stype: block[..., : self.max_columns]
@@ -68,7 +68,7 @@ class SelectColumns(EnsembleProcessor):
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
             for stype, block in TableTensor.items(table):
-                column_names = table._columns[stype]
+                column_names = getattr(table, f"{stype.value}_columns")
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.
                 if num_columns == 0:

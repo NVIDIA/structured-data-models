@@ -117,6 +117,15 @@ In the example above, `table.numerical_columns` is `("age", "income")`, so `tabl
 Each property returns an immutable tuple of strings, or `()` when the block has no columns, without copying the full column mapping.
 The existing `.columns` property still returns a copy of the mapping for all semantic types.
 
+To iterate over every semantic type and its column labels, use `.column_groups`:
+
+```python
+for stype, labels in table.column_groups:
+    print(stype, labels)
+```
+
+This returns immutable pairs in the same order as `.columns.items()`, including types with no columns.
+
 Because columns are stored in semantic blocks, {py:class}`~sdm.tensor.TableTensor` does not treat the original dataframe column order as a stable invariant.
 Prefer column-name selection over positional assumptions.
 Otherwise, PyTorch syntactic sugar is fully preserved.

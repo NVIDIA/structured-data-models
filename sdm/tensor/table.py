@@ -859,6 +859,15 @@ class TableTensor(Tensor):
         return self._columns[Stype.id]
 
     @property
+    def column_groups(self) -> tuple[tuple[Stype, tuple[str, ...]], ...]:
+        r"""Return immutable pairs of semantic types and column names.
+
+        Pairs follow ``columns`` iteration order and include types with no
+        columns.
+        """
+        return tuple(self._columns.items())
+
+    @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
         return self._columns.copy()

@@ -84,7 +84,7 @@ class DropConstantColumns(EnsembleProcessor):
         )
         columns = [
             column
-            for stype, stype_columns in table._columns.items()
+            for stype, stype_columns in table.column_groups
             for column in (
                 kept_numerical_columns
                 if stype == Stype.numerical

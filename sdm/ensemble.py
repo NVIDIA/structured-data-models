@@ -170,10 +170,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
-                tuple(
-                    (stype, columns)
-                    for stype, columns in table._columns.items()
-                ),
+                table.column_groups,
                 tuple(
                     (
                         stype,
