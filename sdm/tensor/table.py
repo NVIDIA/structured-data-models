@@ -51,8 +51,8 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-# Keep inference and gradient contexts in separate functions so torch.compile
-# can resume correctly after a graph break.
+# torch.compile on PyTorch 2.7 can fail after a graph break with both
+# contexts in one function. Keep the gradient context in a helper.
 def _call_with_grad_enabled(
     fn: Callable, grad_enabled: bool, /, *args: Any, **kwargs: Any
 ) -> Any:
@@ -74,7 +74,6 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         inference_mode_enabled = torch.is_inference_mode_enabled()
         grad_enabled = torch.is_grad_enabled()
-        # Re-enter the caller's exact inference state, including when disabled.
         with torch.inference_mode(inference_mode_enabled):
             return _call_with_grad_enabled(fn, grad_enabled, *args, **kwargs)
 
