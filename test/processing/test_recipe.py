@@ -27,7 +27,7 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
     assert "target=Identity()" in repr(recipe)
 
 
-def test_recipe_initialization_compiles() -> None:
+def test_recipe_initialization_compiles(compilation: None) -> None:
     def initialize(value: torch.Tensor) -> torch.Tensor:
         recipe = sp.Recipe(features=[sp.Standardize()])
         return value + recipe.features.requires_fit
