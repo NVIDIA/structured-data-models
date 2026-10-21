@@ -52,7 +52,7 @@ def _make_categorical_subclass(
 ) -> CategoricalTensor:
     # Initialize all leaves before Dynamo observes the wrapper.
     out = Tensor._make_wrapper_subclass(
-        cls,
+        cls=cls,
         size=code.size(),
         strides=code.stride(),
         storage_offset=code.storage_offset(),
