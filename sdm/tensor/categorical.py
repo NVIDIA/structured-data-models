@@ -124,6 +124,7 @@ class CategoricalTensor(Tensor):
         return CategoricalTensor._make_categorical_tensor(
             code=code,
             categories=tuple(categories),
+            cls=None if cls is CategoricalTensor else cls,
         )
 
     # Avoid Dynamo reading _code before construction has finished.
@@ -132,9 +133,11 @@ class CategoricalTensor(Tensor):
     def _make_categorical_tensor(
         code: Tensor,
         categories: tuple[Tensor, ...],
+        cls: type[CategoricalTensor] | None = None,
     ) -> CategoricalTensor:
+        cls = CategoricalTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls=CategoricalTensor,
+            cls=cls,
             size=code.size(),
             strides=code.stride(),
             storage_offset=code.storage_offset(),
