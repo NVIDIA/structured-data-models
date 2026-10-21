@@ -136,16 +136,29 @@ class ColumnarTensor(Tensor):
             setattr(out, f"_column_{i}", column)
         return out
 
-    # Avoid Dynamo reading _columns before construction has finished.
-    @staticmethod
-    @torch.compiler.allow_in_graph
-    def _from_empty(empty: Tensor) -> ColumnarTensor:
+    @classmethod
+    def _from_empty(cls, empty: Tensor) -> Self:
         r"""Wrap the supplied zero-column tensor without copying it.
 
         Reusing the tensor lets ``torch.compile`` track it through operations.
         """
+        return cast(
+            Self,
+            ColumnarTensor._make_empty_columnar_tensor(
+                empty=empty,
+                cls=None if cls is ColumnarTensor else cls,
+            ),
+        )
+
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_empty_columnar_tensor(
+        empty: Tensor, cls: type[ColumnarTensor] | None = None
+    ) -> ColumnarTensor:
+        cls = ColumnarTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls=ColumnarTensor,
+            cls=cls,
             size=empty.size(),
             dtype=torch.uint8,
             device=empty.device,
