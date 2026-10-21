@@ -213,36 +213,15 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
-        return cls._make_wrapper(
+        # An inherited factory needs cls to preserve the subclass type.
+        return cls._make_var_len_tensor(
             data=data,
             offset=offset,
             valid=valid,
             size=size,
             stride=stride,
             storage_offset=storage_offset,
-        )
-
-    @classmethod
-    def _make_wrapper(
-        cls,
-        data: Tensor,
-        offset: Tensor,
-        valid: Tensor | None,
-        size: tuple[int, ...],
-        stride: tuple[int, ...],
-        storage_offset: int,
-    ) -> Self:
-        return cast(
-            Self,
-            VarLenTensor._make_var_len_tensor(
-                data=data,
-                offset=offset,
-                valid=valid,
-                size=size,
-                stride=stride,
-                storage_offset=storage_offset,
-                cls=None if cls is VarLenTensor else cls,
-            ),
+            cls=None if "_make_var_len_tensor" in cls.__dict__ else cls,
         )
 
     # Avoid Dynamo reading _valid before construction has finished.

@@ -40,53 +40,27 @@ class StringTensor(VarLenTensor):
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
     __hash__ = Tensor.__hash__
 
-    @override
-    @classmethod
-    def _make_wrapper(
-        cls,
-        data: Tensor,
-        offset: Tensor,
-        valid: Tensor | None,
-        size: tuple[int, ...],
-        stride: tuple[int, ...],
-        storage_offset: int,
-    ) -> Self:
-        return cast(
-            Self,
-            StringTensor._make_string_tensor(
-                data=data,
-                offset=offset,
-                valid=valid,
-                size=size,
-                stride=stride,
-                storage_offset=storage_offset,
-                cls=None if cls is StringTensor else cls,
-            ),
-        )
-
     # Keep StringTensor out of the compiler's graph arguments.
+    @override
     @staticmethod
     @torch.compiler.allow_in_graph
-    def _make_string_tensor(
+    def _make_var_len_tensor(
         data: Tensor,
         offset: Tensor,
         valid: Tensor | None,
         size: tuple[int, ...],
         stride: tuple[int, ...],
         storage_offset: int,
-        cls: type[StringTensor] | None = None,
-    ) -> StringTensor:
-        return cast(
-            StringTensor,
-            VarLenTensor._make_var_len_tensor(
-                data=data,
-                offset=offset,
-                valid=valid,
-                size=size,
-                stride=stride,
-                storage_offset=storage_offset,
-                cls=StringTensor if cls is None else cls,
-            ),
+        cls: type[VarLenTensor] | None = None,
+    ) -> VarLenTensor:
+        return VarLenTensor._make_var_len_tensor(
+            data=data,
+            offset=offset,
+            valid=valid,
+            size=size,
+            stride=stride,
+            storage_offset=storage_offset,
+            cls=StringTensor if cls is None else cls,
         )
 
     @override
