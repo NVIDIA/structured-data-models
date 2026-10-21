@@ -184,14 +184,12 @@ class ShuffleCategories(EnsembleProcessor):
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
-        for index, (category, permutation) in enumerate(
-            zip(
-                _iter_categories(table.categorical),
-                # BufferList iteration is not traceable on PyTorch 2.7.
-                (permutations[i] for i in range(len(permutations))),
-                strict=True,
-            )
+        for index, category in zip(
+            range(len(permutations)),
+            _iter_categories(table.categorical),
+            strict=True,
         ):
+            permutation = permutations[index]
             codes = code[..., index]
             valid = valid_mask[..., index]
             if permutation.numel() > 0:
