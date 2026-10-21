@@ -182,27 +182,13 @@ class Recipe:
 
 
 def _iter_modules(module: Module) -> Iterator[Module]:
-    # Module inspection methods reject pending mutations under torch.compile.
-    if (
-        type(module).modules is not Module.modules
-        or type(module).named_modules is not Module.named_modules
-    ):
-        yield from module.modules()
-        return
+    # Read registered processors directly while tracing construction.
     seen: set[Module] = set()
-    pending = [("", module)]
+    pending: list[Module | None] = [module]
     while pending:
-        prefix, current = pending.pop()
-        if type(current).named_modules is not Module.named_modules:
-            for _, child in current.named_modules(seen, prefix, True):
-                yield child
-            continue
-        if current in seen:
+        current = pending.pop()
+        if current is None or current in seen:
             continue
         seen.add(current)
         yield current
-        pending.extend(
-            (f"{prefix}.{name}" if prefix else name, child)
-            for name, child in reversed(tuple(current._modules.items()))
-            if child is not None
-        )
+        pending.extend(reversed(tuple(current._modules.values())))
