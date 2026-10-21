@@ -207,7 +207,7 @@ jobs:
         run: |
           python examples/relational/relbench/main.py --dataset rel-f1 --task driver-position
 
-      # Keep slow OpenML downloads outside the benchmark's five-minute limit.
+      # Keep slow OpenML downloads outside the benchmark's timeout limit.
       - name: Download TabArena dataset
         timeout-minutes: 2
         run: |
