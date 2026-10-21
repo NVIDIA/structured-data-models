@@ -13,6 +13,7 @@ from torch import Tensor
 import sdm.processing as sp
 from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.recipe import _iter_modules
 
 
 class MemberContext(NamedTuple):
@@ -70,7 +71,7 @@ class RecipeExecution:
         series_processors = tuple(
             module
             for processor in (self.recipe.features, self.recipe.target)
-            for module in processor.modules()
+            for module in _iter_modules(processor)
             if isinstance(module, sp.SeriesEnsembleProcessor)
         )
         for module in series_processors:
@@ -90,7 +91,7 @@ class RecipeExecution:
         task_dispatchers = tuple(
             module
             for processor in (self.recipe.features, self.recipe.output)
-            for module in processor.modules()
+            for module in _iter_modules(processor)
             if isinstance(module, sp.TaskDispatch)
         )
         if len(task_dispatchers) > 0:
@@ -124,7 +125,7 @@ class RecipeExecution:
             self._related_locations = {}
             for name, table in related_tables.tables.items():
                 processor = copy.deepcopy(self.recipe.features)
-                for module in processor.modules():
+                for module in _iter_modules(processor):
                     if isinstance(module, sp.TableDispatch):
                         module._route = "related"
                 self._related_processors[name] = processor
@@ -139,7 +140,7 @@ class RecipeExecution:
                         "Expected inputs to map to the same number of "
                         "ensemble members"
                     )
-                for module in processor.modules():
+                for module in _iter_modules(processor):
                     if isinstance(module, sp.SeriesEnsembleProcessor):
                         module._set_buffer(
                             name="_offset",
@@ -153,7 +154,7 @@ class RecipeExecution:
                             ),
                         )
 
-        for module in self.recipe.features.modules():
+        for module in _iter_modules(self.recipe.features):
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 

@@ -47,7 +47,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), processor)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._fitted = False
+        self._update_fitted(False)
         return self
 
     def prepend(self, processor: object) -> Self:
@@ -70,7 +70,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), child)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._fitted = False
+        self._update_fitted(False)
         return self
 
     def extend(self, processors: Iterable[object]) -> Self:
