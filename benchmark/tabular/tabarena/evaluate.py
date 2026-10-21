@@ -3,6 +3,7 @@
 
 r"""Evaluate SDM tabular model results on TabArena."""
 
+import argparse
 from pathlib import Path
 
 from tabarena.contexts import TabArenaContext
@@ -10,10 +11,21 @@ from tabarena.end_to_end import EndToEnd
 from tabarena.models import MethodMetadata
 
 from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.tabarena import load_context
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--local-task",
+    help="Evaluate a local task saved with TabArena's UserTask.save_task.",
+)
+args = parser.parse_args()
 
 benchmark_dir = Path(__file__).parent.parent
 result_root = benchmark_dir / "tabarena_out"
 output_root = benchmark_dir / "evals"
+if args.local_task is not None:
+    result_root = result_root / "local" / args.local_task
+    output_root = output_root / "local" / args.local_task
 
 runs = []
 for model_config in MODEL_CONFIGS.values():
@@ -24,7 +36,7 @@ for model_config in MODEL_CONFIGS.values():
 if not runs:
     raise FileNotFoundError(f"No TabArena results found under {result_root}")
 
-base_context = TabArenaContext()
+base_context = load_context(args.local_task)
 methods = []
 for model_config, result_dir in runs:
     output_dir = output_root / model_config.name
@@ -50,10 +62,14 @@ for model_config, result_dir in runs:
         processed.to_method_metadata_lst(new_result_prefix="[SDM] ")
     )
 
-context = TabArenaContext.from_new_methods(methods)
-leaderboard = context.compare(
-    output_dir=output_root,
-    only_valid_tasks=[method.method for method in methods],
-)
-website = context.leaderboard_to_website_format(leaderboard)
-print(website.to_string(index=False))
+if args.local_task is not None:
+    base_context.register(methods)
+    print(base_context.load_results().to_string(index=False))
+else:
+    context = TabArenaContext.from_new_methods(methods)
+    leaderboard = context.compare(
+        output_dir=output_root,
+        only_valid_tasks=[method.method for method in methods],
+    )
+    website = context.leaderboard_to_website_format(leaderboard)
+    print(website.to_string(index=False))

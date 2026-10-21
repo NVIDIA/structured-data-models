@@ -69,6 +69,15 @@ Evaluate all available model results with:
 python -m benchmark.tabular.tabarena.evaluate
 ```
 
+To use your own dataset without OpenML, save it with TabArena's `UserTask.save_task` in its default cache and pass its task name to both commands:
+
+```bash
+python -m benchmark.tabular.tabarena.main --model tabiclv2 --local-task my_dataset
+python -m benchmark.tabular.tabarena.evaluate --local-task my_dataset
+```
+
+Local runs save results under `tabarena_out/local/<task_name>/` and report per-split scores without comparing against the official suite's baselines.
+
 ______________________________________________________________________
 
 ## BeyondArena

@@ -206,7 +206,27 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python -m benchmark.tabular.tabarena.smoke_test
+          python - <<'PY'
+          from sklearn.datasets import load_iris
+          from sklearn.model_selection import StratifiedKFold
+          from tabarena.benchmark.task import UserTask
+
+          dataset = load_iris(as_frame=True).frame
+          train, test = next(
+              StratifiedKFold(n_splits=2).split(
+                  dataset.drop(columns="target"), dataset["target"],
+              )
+          )
+          task = UserTask(task_name="iris")
+          task.save_task(task.create_task(
+              dataset=dataset,
+              target_feature="target",
+              problem_type="classification",
+              splits={0: {0: (train.tolist(), test.tolist())}},
+          ))
+          PY
+          python -m benchmark.tabular.tabarena.main --model tabiclv2 --local-task iris
+          python -m benchmark.tabular.tabarena.evaluate --local-task iris
 
       - name: Test BeyondArena benchmark
         timeout-minutes: 5

@@ -10,7 +10,6 @@ from pathlib import Path
 
 import torch
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
-from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
 from benchmark.tabular.model import (
@@ -18,8 +17,13 @@ from benchmark.tabular.model import (
     add_finetune_args,
     finetune_config_overrides,
 )
+from benchmark.tabular.tabarena import load_context
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--local-task",
+    help="Run a local task saved with TabArena's UserTask.save_task.",
+)
 parser.add_argument(
     "--model",
     choices=tuple(MODEL_CONFIGS),
@@ -62,12 +66,10 @@ args = parser.parse_args()
 os.environ["SDM_ENABLE_CATEGORY_CHECKS"] = "0"
 
 model_config = MODEL_CONFIGS[args.model]
-result_dir = (
-    Path(__file__).parent.parent
-    / "tabarena_out"
-    / model_config.name
-    / "outer_model"
-)
+result_root = Path(__file__).parent.parent / "tabarena_out"
+if args.local_task is not None:
+    result_root = result_root / "local" / args.local_task
+result_dir = result_root / model_config.name / "outer_model"
 
 config = {
     "max_context_size": args.max_context_size,
@@ -103,7 +105,7 @@ experiments = TabArenaV0pt1ExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
-context = TabArenaContext()
+context = load_context(args.local_task)
 jobs = context.build_jobs(
     experiments=experiments,
     subset=args.subset,
