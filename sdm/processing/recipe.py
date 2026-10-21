@@ -185,8 +185,8 @@ def _iter_modules(
     module: Module, seen: set[Module] | None = None
 ) -> Iterator[Module]:
     # torch.compile can reject modules()/named_modules() while tracing
-    # processor initialization.
-    # Call Module.named_children directly to visit their registered children.
+    # processor initialization. Call Module.named_children directly to visit
+    # their registered children.
     if seen is None:
         seen = set()
     if module in seen:
