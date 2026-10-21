@@ -51,6 +51,14 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+# Keep the two context managers in separate frames for graph-break resumption.
+def _call_with_grad_enabled(
+    fn: Callable, grad_enabled: bool, /, *args: Any, **kwargs: Any
+) -> Any:
+    with torch.set_grad_enabled(grad_enabled):
+        return fn(*args, **kwargs)
+
+
 def preserve_autograd_state(fn: Callable) -> Callable:
     r"""Re-apply the caller's autograd/inference-mode state for non-view ops.
 
@@ -65,11 +73,8 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         inference_mode_enabled = torch.is_inference_mode_enabled()
         grad_enabled = torch.is_grad_enabled()
-        with (
-            torch.inference_mode(inference_mode_enabled),
-            torch.set_grad_enabled(grad_enabled),
-        ):
-            return fn(*args, **kwargs)
+        with torch.inference_mode(inference_mode_enabled):
+            return _call_with_grad_enabled(fn, grad_enabled, *args, **kwargs)
 
     return wrapper
 
