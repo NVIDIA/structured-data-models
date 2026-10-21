@@ -45,6 +45,14 @@ def native(
 def compiled(
     query: Tensor, key_len: int, head_scale: Tensor, gate: Tensor | None = None
 ) -> Tensor:
+    # Match the handwritten kernel's HEADS/CHANNELS specialization only.
+    # Request lengths and leading batch/sequence dimensions remain automatic.
+    torch._dynamo.mark_static(query, -2)
+    torch._dynamo.mark_static(query, -1)
+    torch._dynamo.mark_static(head_scale, 0)
+    if gate is not None:
+        torch._dynamo.mark_static(gate, -2)
+        torch._dynamo.mark_static(gate, -1)
     return native(query, key_len, head_scale, gate)
 
 
