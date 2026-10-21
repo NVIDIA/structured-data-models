@@ -18,7 +18,7 @@ from sdm.testing import onlyCUDA, onlyMPS
 
 
 @pytest.mark.parametrize("num_columns", [0, 1])
-def test_fake_tensor_round_trip(num_columns: int) -> None:
+def test_fake_tensor_conversion(num_columns: int) -> None:
     columns = (torch.arange(6).view(2, 3),) if num_columns else ()
     tensor = ColumnarTensor(columns, size=(2, 3))
     assert not is_fake(tensor)
@@ -28,6 +28,30 @@ def test_fake_tensor_round_trip(num_columns: int) -> None:
     assert is_fake(fake)
     assert fake.size() == tensor.size()
     assert fake.device == tensor.device
+
+
+@pytest.mark.parametrize("num_columns", [0, 1])
+def test_fake_zero_column_ops(num_columns: int) -> None:
+    columns = (torch.arange(6).view(2, 3),) if num_columns else ()
+    mode = FakeTensorMode()
+    fake = mode.from_tensor(ColumnarTensor(columns, size=(2, 3)))
+    empty = fake[..., :0]
+    index = mode.from_tensor(torch.tensor([1, 0]))
+
+    outputs = [
+        (empty, (2, 3, 0)),
+        (empty[:1], (1, 3, 0)),
+        (empty[index], (2, 3, 0)),
+        (torch.cat([empty, empty], dim=0), (4, 3, 0)),
+        (torch.stack([empty, empty], dim=0), (2, 2, 3, 0)),
+        *((part, (3, 0)) for part in empty.unbind(0)),
+        *((part, (1, 3, 0)) for part in empty.split([1, 1], dim=0)),
+    ]
+    for out, size in outputs:
+        assert type(out) is ColumnarTensor
+        assert is_fake(out)
+        assert out.size() == size
+        assert out.device == fake.device
 
 
 def test_init() -> None:
