@@ -54,7 +54,7 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-        # Initialize pipelines without property setters during tracing.
+        # torch.compile can defer property setters on newly created objects.
         self._set_features(features)
         self._set_target(target)
         self._set_output(output)
@@ -182,13 +182,18 @@ class Recipe:
 
 
 def _iter_modules(module: Module) -> Iterator[Module]:
-    # Read registered processors directly while tracing construction.
+    # Bound module traversal fails for processors created inside torch.compile.
+    # Call Module.named_children directly to visit their registered children.
     seen: set[Module] = set()
-    pending: list[Module | None] = [module]
+    pending: list[Module] = [module]
     while pending:
         current = pending.pop()
-        if current is None or current in seen:
+        if current in seen:
             continue
         seen.add(current)
         yield current
-        pending.extend(reversed(tuple(current._modules.values())))
+        pending.extend(
+            reversed(
+                tuple(child for _, child in Module.named_children(current))
+            )
+        )
