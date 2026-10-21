@@ -113,7 +113,7 @@ For fully deterministic category mappings, align categories at the processing le
 ### Column Semantics
 
 Use `numerical_columns`, `categorical_columns`, `datetime_columns`, `text_columns`, or `id_columns` to read the names in one semantic block.
-Names follow the same order as the corresponding data block.
+In the example above, `table.numerical_columns` is `("age", "income")`, so `table.numerical[:, 0]` contains ages and `table.numerical[:, 1]` contains incomes.
 Each property returns an immutable tuple of strings, or `()` when the block has no columns, without copying the full column mapping.
 The existing `.columns` property still returns a copy of the mapping for all semantic types.
 
