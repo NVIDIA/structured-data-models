@@ -172,7 +172,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             compatibility_key = (
                 tuple(
                     (stype, columns)
-                    for stype, columns in table.columns.items()
+                    for stype, columns in table._columns.items()
                 ),
                 tuple(
                     (

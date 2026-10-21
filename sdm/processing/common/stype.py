@@ -89,7 +89,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             stype
             for stype in self.processors
             if any(
-                len(group.columns[Stype(stype)]) > 0
+                len(group._columns[Stype(stype)]) > 0
                 for group in ensemble_table._iter_groups()
             )
         )

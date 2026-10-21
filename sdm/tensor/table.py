@@ -965,7 +965,7 @@ class TableTensor(Tensor):
             id: Replacement identifier block with shape ``[..., C_id]``.
         """
         return self.__class__(
-            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            columns=cast(Mapping[StypeLike, Sequence[str]], self._columns),
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
                 self.categorical if categorical is None else categorical
@@ -2001,7 +2001,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
                 )
 
     blocks: dict[Stype, Tensor] = {}
-    for stype, _ in ref.items():
+    for stype, _ in TableTensor.items(ref):
         block_list = [tensor.blocks[stype] for tensor in tensors]
         if is_column_dim:
             # Skip empty blocks so their dtypes cannot promote the others,
@@ -2021,7 +2021,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
-            for stype, _ in ref.items()
+            for stype, _ in TableTensor.items(ref)
         }
 
     return ref.__class__(
