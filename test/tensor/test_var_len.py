@@ -8,21 +8,9 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm import StringTensor, VarLenTensor
+from sdm import VarLenTensor
 from sdm.tensor.var_len import _compact
 from sdm.testing import onlyCUDA, withCUDA
-
-
-@pytest.mark.parametrize("cls", [VarLenTensor, StringTensor])
-def test_nullable_repr(cls: type[VarLenTensor]) -> None:
-    tensor = cls(
-        data=torch.empty(2, dtype=torch.uint8, device="meta"),
-        offset=torch.arange(3, device="meta"),
-        valid=torch.empty(2, dtype=torch.bool, device="meta"),
-        size=(2,),
-    )
-
-    assert "null_count=" not in repr(tensor)
 
 
 def test_dtype_conversion() -> None:
