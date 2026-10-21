@@ -27,6 +27,16 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
     assert "target=Identity()" in repr(recipe)
 
 
+def test_recipe_initialization_compiles() -> None:
+    def initialize(value: torch.Tensor) -> torch.Tensor:
+        recipe = sp.Recipe(features=[sp.Standardize()])
+        return value + recipe.features.requires_fit
+
+    compiled = torch.compile(initialize, backend="eager", fullgraph=True)
+    value = torch.ones(1)
+    torch.testing.assert_close(compiled(value), value + 1)
+
+
 def test_target_forward_then_inverse_round_trips() -> None:
     recipe = sp.Recipe(target=[sp.Standardize()])
     table = _table()

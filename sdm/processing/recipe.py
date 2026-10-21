@@ -54,9 +54,15 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-        self.features = features
-        self.target = target
-        self.output = output
+        if type(self) is Recipe:
+            # Dynamo 2.7 defers setters on new objects until graph replay.
+            self._set_features(features)
+            self._set_target(target)
+            self._set_output(output)
+        else:
+            self.features = features
+            self.target = target
+            self.output = output
 
     @property
     def features(self) -> EnsembleProcessor:
@@ -65,6 +71,12 @@ class Recipe:
 
     @features.setter
     def features(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        self._set_features(processor)
+
+    def _set_features(
         self,
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
@@ -79,6 +91,12 @@ class Recipe:
 
     @target.setter
     def target(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        self._set_target(processor)
+
+    def _set_target(
         self,
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
@@ -106,6 +124,12 @@ class Recipe:
 
     @output.setter
     def output(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        self._set_output(processor)
+
+    def _set_output(
         self,
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
