@@ -138,7 +138,10 @@ class ColumnarTensor(Tensor):
 
     @classmethod
     def _from_empty(cls, empty: Tensor) -> Self:
-        # Rebuild from the actual leaf, preserving its mode and view history.
+        r"""Wrap the supplied zero-column tensor without copying it.
+
+        Reusing the tensor lets ``torch.compile`` track it through operations.
+        """
         out = Tensor._make_wrapper_subclass(
             cls,
             size=empty.size(),
@@ -151,11 +154,15 @@ class ColumnarTensor(Tensor):
         return out
 
     def _with_columns(self, columns: Sequence[Tensor]) -> Self:
+        r"""Create a tensor from the selected columns.
+
+        Preserve row and batch dimensions. For an empty selection, allocate
+        from an input tensor so ``torch.compile`` can track the result.
+        """
         if columns:
             return self.__class__(
                 columns=columns, size=self.size()[:-1], device=self.device
             )
-        # Allocate from an input tensor to preserve its tracing mode.
         leaf = self._columns[0] if self._columns else self._empty
         while hasattr(leaf, "__tensor_flatten__"):
             flatten = cast(
