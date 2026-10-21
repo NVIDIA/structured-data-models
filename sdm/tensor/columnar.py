@@ -351,10 +351,15 @@ class ColumnarTensor(Tensor):
 
     @override
     def is_shared(self) -> bool:
+        if not self._columns:
+            return self._empty.is_shared()
         return all(column.is_shared() for column in self._columns)
 
     @override
     def share_memory_(self) -> Self:
+        if not self._columns:
+            self._empty.share_memory_()
+            return self
         for column in self._columns:
             column.share_memory_()
         return self
@@ -602,6 +607,8 @@ def _contiguous(
 
 @ColumnarTensor.implements(aten.is_pinned.default)
 def _is_pinned(inp: ColumnarTensor) -> bool:
+    if not inp._columns:
+        return inp._empty.is_pinned()
     return all(column.is_pinned() for column in inp._columns)
 
 

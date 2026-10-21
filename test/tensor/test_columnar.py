@@ -465,27 +465,34 @@ def test_tolist() -> None:
     ]
 
 
-def test_pin_memory() -> None:
+@pytest.mark.parametrize("num_columns", [0, 2])
+def test_pin_memory(num_columns: int) -> None:
     tensor = ColumnarTensor(
         (
             torch.randn(2, 3),
             torch.arange(6).view(2, 3),
-        )
+        )[:num_columns],
+        size=(2, 3),
     )
 
     assert not tensor.is_pinned()
 
 
 @onlyCUDA
-def test_pin_memory_cuda() -> None:
+@pytest.mark.parametrize("num_columns", [0, 2])
+def test_pin_memory_cuda(num_columns: int) -> None:
     tensor = ColumnarTensor(
         (
             torch.randn(2, 3),
             torch.arange(6).view(2, 3),
-        )
+        )[:num_columns],
+        size=(2, 3),
     )
 
-    assert tensor.pin_memory().is_pinned()
+    out = tensor.pin_memory()
+    expected = torch.empty(2, 3, num_columns).pin_memory()
+    assert out.is_pinned() == expected.is_pinned()
+    assert out.size() == tensor.size()
 
 
 def test_share_memory() -> None:
@@ -502,3 +509,13 @@ def test_share_memory() -> None:
         assert tensor.is_shared()
     except RuntimeError:
         pass
+
+
+def test_empty_share_memory() -> None:
+    tensor = ColumnarTensor((), size=(2, 3))
+    expected = torch.empty(2, 3, 0, dtype=torch.uint8)
+
+    assert tensor.is_shared() == expected.is_shared()
+    assert tensor.share_memory_() is tensor
+    expected.share_memory_()
+    assert tensor.is_shared() == expected.is_shared()
