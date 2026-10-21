@@ -211,13 +211,7 @@ jobs:
       - name: Download TabArena dataset
         timeout-minutes: 2
         run: |
-          python -u - <<'PY'
-          import faulthandler
-          import logging
-
-          logging.basicConfig(level=logging.INFO)
-          faulthandler.dump_traceback_later(60, repeat=True)
-
+          python - <<'PY'
           from tabarena.contexts import TabArenaContext
 
           context = TabArenaContext()
