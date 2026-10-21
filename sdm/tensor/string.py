@@ -12,6 +12,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from typing_extensions import override
 
 from sdm._warnings import warn_once
@@ -342,7 +343,10 @@ class StringTensor(VarLenTensor):
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
-        out += self._null_count_repr()
+        valid = self.valid
+        # During compilation, the mask may have a shape but no values to count.
+        if valid is not None and not (valid.is_meta or is_fake(valid)):
+            out += f", null_count={int((~valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"

@@ -683,7 +683,10 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        out += self._null_count_repr()
+        valid = self.valid
+        # During compilation, the mask may have a shape but no values to count.
+        if valid is not None and not (valid.is_meta or is_fake(valid)):
+            out += f", null_count={int((~valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
@@ -692,14 +695,6 @@ class VarLenTensor(Tensor):
             out += ", requires_grad=True"
         out += ")"
         return out
-
-    def _null_count_repr(self) -> str:
-        valid = self._valid
-        # Compiler stand-ins and meta tensors have no values to count.
-        if valid is None or valid.is_meta or is_fake(valid):
-            return ""
-        valid = cast(Tensor, self.valid)
-        return f", null_count={int((~valid).sum())}"
 
 
 @VarLenTensor.implements(aten.alias.default)
