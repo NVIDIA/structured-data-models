@@ -345,6 +345,7 @@ class TableTensor(Tensor):
             datetime=datetime,
             text=text,
             id=id,
+            cls=None if cls is TableTensor else cls,
         )
 
     # Avoid Dynamo reading _columns before construction has finished.
@@ -357,14 +358,16 @@ class TableTensor(Tensor):
         datetime: Tensor,
         text: StringTensor,
         id: ColumnarTensor,
+        cls: type[TableTensor] | None = None,
     ) -> TableTensor:
+        cls = TableTensor if cls is None else cls
         column_to_loc = {
             name: (stype, i)
             for stype, names in columns.items()
             for i, name in enumerate(names)
         }
         out = Tensor._make_wrapper_subclass(
-            cls=TableTensor,
+            cls=cls,
             size=(*numerical.size()[:-1], len(column_to_loc)),
             dtype=numerical.dtype,
             device=numerical.device,
