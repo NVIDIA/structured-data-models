@@ -12,22 +12,20 @@ from sdm.processing.numerical._stats import _isfinite
 class MinMaxScale(Processor, InvertibleMixin):
     """Scale each numerical column by its fitted minimum and range.
 
-    Fitted minima map to zero and maxima to one. Values outside the fitted
-    range are not clipped. Constant columns use a unit scale.
     NaN and infinite values are ignored when fitting statistics and preserved
-    during the transform. Columns without finite fitting values yield NaN.
+    during the transform.
     """
 
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
-    _minimum: Tensor
-    _scale: Tensor
+    minimum: Tensor
+    scale: Tensor
 
     def __init__(self) -> None:
         super().__init__()
-        self.register_buffer("_minimum", torch.empty(0))
-        self.register_buffer("_scale", torch.empty(0))
+        self.register_buffer("minimum", torch.empty(0))
+        self.register_buffer("scale", torch.empty(0))
 
     def _fit(
         self,
@@ -38,16 +36,17 @@ class MinMaxScale(Processor, InvertibleMixin):
         x = table.numerical
         missing = ~_isfinite(x)
         minimum = x.masked_fill(missing, torch.inf).amin(-2, keepdim=True)
+        minimum[minimum.isinf()] = torch.nan
         maximum = x.masked_fill(missing, -torch.inf).amax(-2, keepdim=True)
-        minimum.masked_fill_(minimum.isinf(), torch.nan)
         scale = maximum - minimum
-        self._set_buffer("_minimum", minimum)
-        self._set_buffer("_scale", scale.masked_fill_(scale == 0, 1))
+        scale[scale == 0] = 1
+        self._set_buffer("minimum", minimum)
+        self._set_buffer("scale", scale)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self._minimum).div_(self._scale)
+        numerical = (table.numerical - self.minimum).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical * self._scale).add_(self._minimum)
+        numerical = (table.numerical * self.scale).add_(self.minimum)
         return table.replace_blocks(numerical=numerical)
