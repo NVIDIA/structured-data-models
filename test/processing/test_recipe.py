@@ -6,7 +6,7 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.models import TabICLv2
+from sdm.models import KumoTabular, TabICLv2
 from sdm.testing import withCUDA
 
 
@@ -29,7 +29,7 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
 
 def test_recipe_initialization_compiles(compilation: None) -> None:
     def initialize(value: torch.Tensor) -> torch.Tensor:
-        recipe = sp.Recipe(features=[sp.Standardize()])
+        recipe = KumoTabular.default_recipe()
         return value + recipe.features.requires_fit
 
     compiled = torch.compile(initialize, backend="eager", fullgraph=True)
