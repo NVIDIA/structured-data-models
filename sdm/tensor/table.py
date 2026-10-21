@@ -339,9 +339,7 @@ class TableTensor(Tensor):
             raise ValueError("Expected column names to be unique")
 
         return TableTensor._make_table_tensor(
-            columns=tuple(
-                (str(stype), names) for stype, names in columns.items()
-            ),
+            columns=columns,
             numerical=numerical,
             categorical=categorical,
             datetime=datetime,
@@ -353,17 +351,16 @@ class TableTensor(Tensor):
     @staticmethod
     @torch.compiler.allow_in_graph
     def _make_table_tensor(
-        columns: tuple[tuple[str, tuple[str, ...]], ...],
+        columns: dict[Stype, tuple[str, ...]],
         numerical: Tensor,
         categorical: CategoricalTensor,
         datetime: Tensor,
         text: StringTensor,
         id: ColumnarTensor,
     ) -> TableTensor:
-        columns_by_stype = {Stype(stype): names for stype, names in columns}
         column_to_loc = {
             name: (stype, i)
-            for stype, names in columns_by_stype.items()
+            for stype, names in columns.items()
             for i, name in enumerate(names)
         }
         out = Tensor._make_wrapper_subclass(
@@ -378,7 +375,7 @@ class TableTensor(Tensor):
         out._datetime = datetime
         out._text = text
         out._id = id
-        out._columns = columns_by_stype
+        out._columns = columns
         out._column_to_loc = column_to_loc
         return out
 
