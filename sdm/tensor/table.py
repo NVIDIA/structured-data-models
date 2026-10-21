@@ -835,27 +835,27 @@ class TableTensor(Tensor):
 
     @property
     def numerical_columns(self) -> tuple[str, ...]:
-        r"""Return numerical column names."""
+        r"""Return numerical column names as an immutable tuple."""
         return self._columns[Stype.numerical]
 
     @property
     def categorical_columns(self) -> tuple[str, ...]:
-        r"""Return categorical column names."""
+        r"""Return categorical column names as an immutable tuple."""
         return self._columns[Stype.categorical]
 
     @property
     def datetime_columns(self) -> tuple[str, ...]:
-        r"""Return datetime column names."""
+        r"""Return datetime column names as an immutable tuple."""
         return self._columns[Stype.datetime]
 
     @property
     def text_columns(self) -> tuple[str, ...]:
-        r"""Return text column names."""
+        r"""Return text column names as an immutable tuple."""
         return self._columns[Stype.text]
 
     @property
     def id_columns(self) -> tuple[str, ...]:
-        r"""Return id column names."""
+        r"""Return identifier column names as an immutable tuple."""
         return self._columns[Stype.id]
 
     @property
