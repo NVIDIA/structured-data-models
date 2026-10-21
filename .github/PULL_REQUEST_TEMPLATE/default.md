@@ -4,14 +4,14 @@
 
 # Description of the change
 
-<!-- More description of the change. -->
+<!-- More description of the change for a human. -->
 
-# Testing
+# Validation
 
-<!-- Unit tests? Manual tests? Benchmark results? State only what CI does not already cover. -->
+<!-- Describe validation beyond CI, such as manual checks, benchmarks, or tests CI does not run. If there is none, write n/a. -->
 
-<details><summary>more details</summary>
+<details><summary>Additional details</summary>
 
-<!-- More details that agents want to include, if any. This section is not intended for humans to read. Delete this block when there is nothing to put in it. -->
+<!-- Additional details that the author wants to include, if any. This section is usually not intended for humans to read. Delete this block when there is nothing to put in it. -->
 
 </details>
