@@ -8,7 +8,8 @@ from __future__ import annotations
 import abc
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar
+from functools import partial
+from typing import ClassVar, Literal
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,15 @@ from scoringbench.univariate.wrappers import (
 )
 
 import sdm
+from benchmark.tabular.finetune import (
+    FINETUNE_CONTEXT_FRAC,
+    FINETUNE_EPOCHS,
+    FINETUNE_ITERS_PER_EPOCH,
+    FINETUNE_LR,
+    FINETUNE_TRAIN_SIZE,
+    FINETUNE_VAL_FRAC,
+    full_finetune,
+)
 
 
 @dataclass(frozen=True)
@@ -35,8 +45,11 @@ def _create_tabiclv2(device: torch.device) -> sdm.models.TabICLv2:
     return sdm.models.TabICLv2(task="regression", device=device)
 
 
-def _create_kumo_tabular(device: torch.device) -> sdm.models.KumoTabular:
-    return sdm.models.KumoTabular(task="regression", device=device)
+def _create_kumo_tabular(
+    device: torch.device,
+    size: Literal["small", "medium", "large"],
+) -> sdm.models.KumoTabular:
+    return sdm.models.KumoTabular(task="regression", size=size, device=device)
 
 
 MODEL_CONFIGS = {
@@ -47,12 +60,26 @@ MODEL_CONFIGS = {
         autocast_dtype=torch.float16,
         num_estimators=8,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        method="sdm_kumo_tabular",
-        factory=_create_kumo_tabular,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        method="sdm_kumo_tabular_small",
+        factory=partial(_create_kumo_tabular, size="small"),
         autocast_dtype=torch.float16,
         num_estimators=8,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        method="sdm_kumo_tabular_medium",
+        factory=partial(_create_kumo_tabular, size="medium"),
+        autocast_dtype=torch.float16,
+        num_estimators=8,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        method="sdm_kumo_tabular_large",
+        factory=partial(_create_kumo_tabular, size="large"),
+        autocast_dtype=torch.float16,
+        num_estimators=16,
     ),
 }
 
@@ -66,6 +93,13 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         device: torch.device | str | None = None,
         seed: int = 42,
         batch_size: int | None = None,
+        finetune: bool = False,
+        finetune_epochs: int = FINETUNE_EPOCHS,
+        finetune_iters_per_epoch: int = FINETUNE_ITERS_PER_EPOCH,
+        finetune_lr: float = FINETUNE_LR,
+        finetune_train_size: int = FINETUNE_TRAIN_SIZE,
+        finetune_context_frac: float = FINETUNE_CONTEXT_FRAC,
+        finetune_val_frac: float = FINETUNE_VAL_FRAC,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -73,6 +107,13 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         self.device = torch.device(device)
         self.seed = seed
         self.batch_size = batch_size
+        self.finetune = finetune
+        self.finetune_epochs = finetune_epochs
+        self.finetune_iters_per_epoch = finetune_iters_per_epoch
+        self.finetune_lr = finetune_lr
+        self.finetune_train_size = finetune_train_size
+        self.finetune_context_frac = finetune_context_frac
+        self.finetune_val_frac = finetune_val_frac
         self.model = self.config.factory(self.device)
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> SDMQuantileWrapper:
@@ -92,6 +133,23 @@ class SDMQuantileWrapper(ProbabilisticWrapper, abc.ABC):
         )
 
         generator = torch.Generator(device=self.device).manual_seed(self.seed)
+
+        if self.finetune:
+            full_finetune(
+                self.model,
+                x_context,
+                y_context,
+                task="regression",
+                max_epochs=self.finetune_epochs,
+                iters_per_epoch=self.finetune_iters_per_epoch,
+                train_size=self.finetune_train_size,
+                context_frac=self.finetune_context_frac,
+                val_frac=self.finetune_val_frac,
+                lr=self.finetune_lr,
+                num_estimators=self.config.num_estimators,
+                generator=generator,
+            )
+
         with torch.amp.autocast(
             self.device.type,
             self.config.autocast_dtype,
@@ -137,11 +195,21 @@ class SDMTabICLv2Wrapper(SDMQuantileWrapper):
     config = MODEL_CONFIGS["tabiclv2"]
 
 
-class SDMKumoTabularWrapper(SDMQuantileWrapper):
-    config = MODEL_CONFIGS["kumo-tabular"]
+class SDMKumoTabularSmallWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-tabular-small"]
+
+
+class SDMKumoTabularMediumWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-tabular-medium"]
+
+
+class SDMKumoTabularLargeWrapper(SDMQuantileWrapper):
+    config = MODEL_CONFIGS["kumo-tabular-large"]
 
 
 WRAPPERS: dict[str, type[SDMQuantileWrapper]] = {
     "tabiclv2": SDMTabICLv2Wrapper,
-    "kumo-tabular": SDMKumoTabularWrapper,
+    "kumo-tabular-small": SDMKumoTabularSmallWrapper,
+    "kumo-tabular-medium": SDMKumoTabularMediumWrapper,
+    "kumo-tabular-large": SDMKumoTabularLargeWrapper,
 }

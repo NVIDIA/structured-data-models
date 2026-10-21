@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D205
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -23,7 +24,6 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.relational.ckpt import remap_ckpt
 from sdm.models.kumo.relational.invariant_gnn import InvariantGNN
 from sdm.models.kumo.relational.recipe import default_recipe
 from sdm.models.kumo.relational.task import TaskGraph
@@ -37,11 +37,11 @@ class KumoRelational(ICLModel):
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
-    .. figure:: /images/rfm_light.svg
+    .. figure:: /images/kumo_relational_light.svg
         :figclass: light-only
         :width: 100%
 
-    .. figure:: /images/rfm_dark.svg
+    .. figure:: /images/kumo_relational_dark.svg
         :figclass: dark-only
         :width: 100%
 
@@ -150,6 +150,7 @@ class KumoRelational(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_multi_target: ClassVar[bool] = False
+    supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
@@ -190,10 +191,10 @@ class KumoRelational(ICLModel):
             path = download_checkpoint(
                 repo_id="nvidia/Kumo-Relational",
                 filename=filename,
-                revision="v2.1.2",
+                revision="v1.0.1",
+                config_filename="config.json",
             )
             ckpt = torch.load(path, map_location=device, weights_only=True)
-            ckpt = remap_ckpt(ckpt)
             model.load_state_dict(ckpt, assign=True)
 
         return self
@@ -203,6 +204,7 @@ class KumoRelational(ICLModel):
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
         x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
@@ -310,7 +312,7 @@ class _KumoRelational(torch.nn.Module):
     ) -> Tensor:  # [..., R_query, *]
 
         num_classes: int | None = None  # Extract `y` as tensor:
-        if y_context is not None and y_context.categorical.size(-1) > 0:
+        if y_context is not None and y_context.categorical.code.size(-1) > 0:
             y = y_context.categorical.code.squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
         elif y_context is not None and y_context.numerical.size(-1) > 0:
@@ -358,7 +360,7 @@ class _KumoRelational(torch.nn.Module):
                 num_hops = cast(int, cache["num_hops"])
             query = TaskGraph.from_input(
                 x=x_query,
-                related_tables=RelatedTables[TableTensor](
+                related_tables=RelatedTables(
                     tables=related_query_tables.tables,
                     relationships=relationships,
                     task_links=related_query_tables.task_links,

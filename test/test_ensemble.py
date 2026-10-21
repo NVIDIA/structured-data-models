@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, TableTensor
 
 
 def test_shared_member_table() -> None:
@@ -120,6 +120,38 @@ def test_replace_tables_packs_only_within_existing_groups() -> None:
         assert output[member_id].equal(table)
 
 
+@pytest.mark.parametrize("shared_categories", [False, True])
+def test_replace_tables_preserves_category_identity(
+    shared_categories: bool,
+) -> None:
+    categories = torch.tensor([10, 20])
+    second_categories = categories if shared_categories else categories.clone()
+    tables = tuple(
+        TableTensor(
+            categorical=CategoricalTensor(
+                code=code,
+                categories=(vocabulary,),
+            )
+        )
+        for code, vocabulary in (
+            (torch.tensor([[0], [-1]]), categories),
+            (torch.tensor([[1], [0]]), second_categories),
+        )
+    )
+    ensemble_table = EnsembleTable.from_table(tables[0], num_members=3)
+    output = ensemble_table.replace_tables(
+        tables=tables,
+        member_table_ids=(0, 1, 0),
+    )
+
+    assert output.num_groups == (1 if shared_categories else 2)
+    for member_id, table_id in enumerate((0, 1, 0)):
+        actual = output[member_id].categorical
+        expected = tables[table_id].categorical
+        assert actual.categories[0] is expected.categories[0]
+        torch.testing.assert_close(actual.code, expected.code)
+
+
 def test_gather_members_preserves_member_order_and_sharing() -> None:
     tables = tuple(
         TableTensor.from_tensor(torch.tensor([[value]], dtype=torch.float32))
@@ -180,6 +212,21 @@ def test_getitem_preserves_groups_and_order() -> None:
     assert next(output._iter_groups()).size(0) == 2
     assert output[0].equal(tables[0])
     assert output[1].equal(tables[2])
+
+
+@pytest.mark.parametrize("member_ids", [(0, 2, 4), (4, 2, 0), (0, 3, 4)])
+def test_getitem_strided_members(member_ids: tuple[int, ...]) -> None:
+    values = torch.arange(30).float().reshape(5, 3, 2)
+    table = EnsembleTable(
+        groups=(TableTensor.from_tensor(values),),
+        locations=tuple((0, index) for index in range(5)),
+    )
+
+    selected = table[member_ids]
+
+    assert len(selected) == len(member_ids)
+    for position, index in enumerate(member_ids):
+        torch.testing.assert_close(selected[position].numerical, values[index])
 
 
 def test_concatenate_columns_preserves_member_order() -> None:

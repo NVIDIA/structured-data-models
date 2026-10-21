@@ -115,21 +115,26 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ShuffleColumns()),
     ProcessorCase(sp.SelectColumns(2)),
     ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),
-    ProcessorCase(sp.Clip(-2.0, 6.0)),
+    ProcessorCase(sp.Cast(torch.float64)),
+    ProcessorCase(sp.Clip(-2.0, 20.0)),
     ProcessorCase(sp.ClipQuantiles()),
     ProcessorCase(sp.ClipSigma()),
-    ProcessorCase(sp.ClipSoft(3.0)),
+    ProcessorCase(sp.Clip(-3.0, 3.0, method="saturate")),
+    ProcessorCase(sp.ClipSigma(method="log")),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
     ),
     ProcessorCase(sp.Standardize()),
+    ProcessorCase(sp.RankGaussian()),
     ProcessorCase(sp.RobustScale()),
+    ProcessorCase(sp.MinMaxScale()),
     ProcessorCase(sp.FlipSign()),
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
     ProcessorCase(sp.RandomProjection(2)),
+    ProcessorCase(sp.WarpTails(probability=1.0)),
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
@@ -176,7 +181,9 @@ FITTED_PROCESSOR_CASES = tuple(
 INVERTIBLE_PROCESSOR_CASES = tuple(
     case
     for case in PROCESSOR_CASES
+    # Clip's inverse is a passthrough, so lossy transforms do not round-trip.
     if isinstance(case.processor, sp.InvertibleMixin)
+    and not isinstance(case.processor, sp.Clip)
 )
 
 
@@ -197,6 +204,8 @@ def test_all_public_processors_have_contract_cases() -> None:
         sp.TaskDispatch,
         sp.TableDispatch,
         sp.SentenceTransformer,
+        sp.Detrend,
+        sp.Interpolate,
     }
     assert public_processors == covered_processors | specialized_processors
 
@@ -282,7 +291,7 @@ def test_preserves_rows_and_unhandled_stypes(
         before = table[member_id]
         after = output[member_id]
         assert after.size()[:-1] == before.size()[:-1]
-        for stype in before.active_stypes - processor.handles_stypes:
+        for stype in before.active_stypes.difference(processor.handles_stypes):
             columns = before.columns[stype]
             assert all(column in after.column_names for column in columns)
             assert all(after.stype(column) == stype for column in columns)
@@ -334,6 +343,11 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     ids=lambda case: type(case.processor).__name__,
 )
 def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
+    if isinstance(case.processor, sp.TFIDF):
+        pytest.importorskip("cudf")
+        pytest.importorskip("cupy")
+        pytest.importorskip("pylibcudf")
+
     device = torch.device("cuda")
     source = case.make_table()
     target = source.replace_groups(

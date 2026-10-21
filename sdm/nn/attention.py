@@ -4,7 +4,6 @@
 """Attention modules for structured tensor models."""
 
 import math
-import os
 from typing import Any, Literal, overload
 
 import torch
@@ -12,6 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
 
@@ -35,6 +35,7 @@ class SDPA(torch.nn.Module):
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
+        dropout: Attention dropout probability.
     """
 
     def __init__(
@@ -43,6 +44,7 @@ class SDPA(torch.nn.Module):
         num_key_value_heads: int | None = None,
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -57,6 +59,7 @@ class SDPA(torch.nn.Module):
         self.num_key_value_heads = num_key_value_heads
         self.query_scaling = query_scaling
         self.scale = scale
+        self.dropout = dropout
 
     def forward(
         self,
@@ -64,7 +67,9 @@ class SDPA(torch.nn.Module):
         key: Tensor,  # [..., KV, Hkv, C]
         value: Tensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
+        *,
+        is_causal: bool = False,
     ) -> Tensor:  # [..., Q, Hq, C]
         r"""The forward pass.
 
@@ -79,8 +84,10 @@ class SDPA(torch.nn.Module):
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
+                For boolean masks, entries set to ``True`` participate in
+                attention. Floating-point masks act as additive bias.
+            is_causal: Apply an upper-left causal attention mask.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
@@ -98,21 +105,27 @@ class SDPA(torch.nn.Module):
             and seqused_key_value.dtype != torch.int32
         ):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
-        if attn_mask is not None and attn_mask.dtype != torch.bool:
-            raise ValueError("`attn_mask` must have dtype torch.bool")
 
         batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
         if seqused_key_value is not None:
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
-            batch_shapes.append(attn_mask.size()[:-2])
+            batch_shapes.append(attn_mask.size()[:-3])
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
         if self.query_scaling is not None:
+            if attn_mask is not None and attn_mask.dtype != torch.bool:
+                raise ValueError(
+                    "Query scaling requires boolean attention mask"
+                )
+            if attn_mask is not None and attn_mask.size(-3) != 1:
+                raise ValueError(
+                    "Per-head `attn_mask` is not supported with query scaling"
+                )
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
-                key_len = attn_mask.sum(dim=-1)
+                key_len = attn_mask.sum(dim=-1).squeeze(-2)
             else:
                 key_len = key.size(-3)
             query = self.query_scaling(query, key_len=key_len)
@@ -122,16 +135,25 @@ class SDPA(torch.nn.Module):
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
 
-        if key_size[0] == 0:  # No key/value pairs - abort early:
-            return query.new_zeros(batch_shape + query_size)
+        # FlashAttention rejects empty batches before PyTorch 2.10.
+        if key_size[0] == 0 or 0 in batch_shape:
+            out = query.new_zeros(
+                batch_shape + query_size[:-1] + value_size[-1:]
+            )
+            if torch.is_grad_enabled():
+                # Summing an empty slice gives zero and keeps backward working.
+                for tensor in (query, key, value, attn_mask):
+                    if tensor is not None and tensor.requires_grad:
+                        out = out + tensor[..., :0, :, :].sum()
+            return out
 
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
 
         if attn_mask is not None:
-            attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-2:])
-            attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-2:])
+            attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])
+            attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-3:])
 
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
@@ -139,21 +161,33 @@ class SDPA(torch.nn.Module):
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
+            attn_mask = attn_mask.unsqueeze(-3)
 
         enable_gqa = False
         if query.size(-2) != key.size(-2):
             enable_gqa = True
 
-        out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, Hq, Q, C],
-            key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
-            value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
-            enable_gqa=enable_gqa,
-            scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, C]
+        query = query.transpose(-3, -2)  # [B, Hq, Q, C]
+        key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
+        value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
+
+        # CUDA attention kernels accept at most 65,535 batch entries per call:
+        outs = [
+            F.scaled_dot_product_attention(
+                query=query[i : i + 65_535],
+                key=key[i : i + 65_535],
+                value=value[i : i + 65_535],
+                attn_mask=None
+                if attn_mask is None
+                else attn_mask[i : i + 65_535],  # [B, Hq, Q, KV]
+                dropout_p=self.dropout if self.training else 0.0,
+                enable_gqa=enable_gqa,
+                is_causal=is_causal,
+                scale=self.scale,
+            ).transpose(-3, -2)  # [B, Q, Hq, C]
+            for i in range(0, query.size(0), 65_535)
+        ]
+        out = outs[0] if len(outs) == 1 else torch.cat(outs)
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
@@ -180,9 +214,11 @@ class Attention(torch.nn.Module):
             scaled dot-product attention.
         query_scaling: Query scaling module to scale projected query heads
             before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        gate: Multiplicative output gate computed from unprojected queries.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
+        dropout: Attention dropout probability.
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
@@ -196,7 +232,9 @@ class Attention(torch.nn.Module):
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
+        gate: torch.nn.Module | None = None,
         scale: float | None = None,
+        dropout: float = 0.0,
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -229,7 +267,9 @@ class Attention(torch.nn.Module):
             num_key_value_heads=num_key_value_heads,
             query_scaling=query_scaling,
             scale=scale,
+            dropout=dropout,
         )
+        self.gate = gate
         self.out_lin = Linear(channels, channels, bias=bias, **factory_kwargs)
 
         torch.nn.init.zeros_(self.out_lin.weight)
@@ -243,7 +283,10 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: Literal[False] = False,
     ) -> Tensor: ...
 
@@ -254,7 +297,10 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
@@ -265,7 +311,10 @@ class Attention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
@@ -274,8 +323,11 @@ class Attention(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -291,8 +343,15 @@ class Attention(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
+                ``Hq`` is the number of query heads.
+                For boolean masks, entries set to ``True`` participate in
+                attention. Floating-point masks act as additive bias.
+            query_pos: Query positions with shape ``[..., Q]`` passed to
+                ``query_transform``.
+            key_pos: Key positions with shape ``[..., KV]`` passed to
+                ``key_transform``.
+            is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
 
@@ -302,6 +361,11 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
+        gate = self.gate(query) if self.gate is not None else None
+
+        if key_value is None and key_pos is None:
+            key_pos = query_pos
+
         if isinstance(key_value, KVCacheEntry):
             query = F.linear(
                 query,
@@ -343,29 +407,39 @@ class Attention(torch.nn.Module):
             )
 
         if self.query_transform is not None:
-            query = self.query_transform(query)
+            if query_pos is None:
+                query = self.query_transform(query)
+            else:
+                query = self.query_transform(query, pos=query_pos)
+
         if (
             not isinstance(key_value, KVCacheEntry)
             and self.key_transform is not None
         ):
-            key = self.key_transform(key)
+            if key_pos is None:
+                key = self.key_transform(key)
+            else:
+                key = self.key_transform(key, pos=key_pos)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
             key=key,  # [..., KV, Hkv, C // Hq]
             value=value,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
-            attn_mask=attn_mask,  # [..., Q, KV]
+            attn_mask=attn_mask,  # [..., Hq, Q, KV]
+            is_causal=is_causal,
         )  # [..., Q, Hq, C // Hq]
 
         out = out.flatten(-2, -1)  # [..., Q, C]
+        if gate is not None:
+            out = out * gate
         out = self.out_lin(out)  # [..., Q, C]
         if return_key_value:
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
             return out, KVCacheEntry(
-                key=key.to(value.dtype),
-                value=value,
+                key=key.to(value.dtype).contiguous(),
+                value=value.contiguous(),
             )
         return out
 
@@ -390,9 +464,11 @@ class TransformerBlock(torch.nn.Module):
             scaled dot-product attention.
         query_scaling: Query scaling module to scale projected query heads
             before scaled dot-product attention, *e.g.*, :class:`QASSMax`.
+        gate: Multiplicative output gate computed from unprojected queries.
         scale: Scaling factor passed to
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses ``1 / sqrt(channels_per_head)``.
+        dropout: Attention dropout probability.
         bias: If set to ``False``, the module will not learn an additive bias.
         device: The device.
         dtype: The dtype.
@@ -402,7 +478,7 @@ class TransformerBlock(torch.nn.Module):
         self,
         channels: int,
         num_query_heads: int,
-        mlp: torch.nn.Module,
+        mlp: torch.nn.Module | None,
         num_key_value_heads: int | None = None,
         query_norm: torch.nn.Module | None = None,
         key_value_norm: torch.nn.Module | None = None,
@@ -410,7 +486,9 @@ class TransformerBlock(torch.nn.Module):
         query_transform: torch.nn.Module | None = None,
         key_transform: torch.nn.Module | None = None,
         query_scaling: QueryScaling | None = None,
+        gate: torch.nn.Module | None = None,
         scale: float | None = None,
+        dropout: float = 0.0,
         bias: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -430,7 +508,9 @@ class TransformerBlock(torch.nn.Module):
             query_transform=query_transform,
             key_transform=key_transform,
             query_scaling=query_scaling,
+            gate=gate,
             scale=scale,
+            dropout=dropout,
             bias=bias,
             **factory_kwargs,
         )
@@ -442,7 +522,10 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
@@ -455,7 +538,10 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
@@ -468,7 +554,10 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
@@ -479,8 +568,11 @@ class TransformerBlock(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
@@ -498,8 +590,15 @@ class TransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
+                ``Hq`` is the number of query heads.
+                For boolean masks, entries set to ``True`` participate in
+                attention. Floating-point masks act as additive bias.
+            query_pos: Query positions with shape ``[..., Q]`` passed to
+                ``query_transform``.
+            key_pos: Key positions with shape ``[..., KV]`` passed to
+                ``key_transform``.
+            is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
             batch_size_limit: Maximum number of batch elements processed at
@@ -512,6 +611,9 @@ class TransformerBlock(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
+        if isinstance(key_value, KVCacheEntry):
+            key_pos = None
+
         if out is not None and torch.is_grad_enabled():
             raise RuntimeError(
                 "'out' is only supported when gradients are disabled"
@@ -528,37 +630,30 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
+                query_pos=query_pos,
+                key_pos=key_pos,
+                is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=out,
             )
 
         if batch_size_limit == "auto":
-            batch_size_limit = None
-            if query.is_cuda:
-                key_value_length: int | None = None
-                if isinstance(key_value, Tensor):
-                    key_value_length = key_value.size(-2)
-                elif isinstance(key_value, KVCacheEntry):
-                    key_value_length = key_value.key.size(-3)
+            key_value_length: int | None = None
+            if isinstance(key_value, Tensor):
+                key_value_length = key_value.size(-2)
+            elif isinstance(key_value, KVCacheEntry):
+                key_value_length = key_value.key.size(-3)
 
-                bytes_per_example = self.peak_bytes_per_example(
-                    element_size=torch.empty(
-                        size=(),
-                        dtype=torch.get_autocast_dtype(query.device.type),
-                    ).element_size()
-                    if torch.is_autocast_enabled(query.device.type)
-                    else query.element_size(),
-                    query_length=query.size(-2),
-                    key_value_length=key_value_length,
-                )
-
-                memory_limit = int(
-                    torch.cuda.get_device_properties(query.device).total_memory
-                    * torch.cuda.get_per_process_memory_fraction(query.device)
-                    * float(os.getenv("SDM_CHUNK_MEMORY_FRACTION", "0.05"))
-                )
-                batch_size_limit = memory_limit // max(bytes_per_example, 1)
-                batch_size_limit = max(batch_size_limit, 1)
+            batch_size_limit = self.auto_batch_size_limit(
+                device=query.device,
+                element_size=torch.get_autocast_dtype(
+                    query.device.type
+                ).itemsize
+                if torch.is_autocast_enabled(query.device.type)
+                else query.element_size(),
+                query_length=query.size(-2),
+                key_value_length=key_value_length,
+            )
 
         batch_size_limit = min(batch_size_limit or 65_535, 65_535)
 
@@ -567,6 +662,8 @@ class TransformerBlock(torch.nn.Module):
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
+            query_pos=query_pos,
+            key_pos=key_pos,
         )
         batch_size = math.prod(batch_shape)
 
@@ -588,6 +685,9 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
+                query_pos=query_pos,
+                key_pos=key_pos,
+                is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=out,
             )
@@ -612,13 +712,10 @@ class TransformerBlock(torch.nn.Module):
                     start=start,
                     end=end,
                 ),
-                attn_mask=_chunk(
-                    attn_mask,
-                    batch_shape,
-                    trailing_dims=2,
-                    start=start,
-                    end=end,
-                ),
+                attn_mask=_chunk(attn_mask, batch_shape, 3, start, end),
+                query_pos=_chunk(query_pos, batch_shape, 1, start, end),
+                key_pos=_chunk(key_pos, batch_shape, 1, start, end),
+                is_causal=is_causal,
                 return_key_value=return_key_value,
                 out=flat_out[start:end] if flat_out is not None else None,
             )
@@ -649,7 +746,7 @@ class TransformerBlock(torch.nn.Module):
                 for size in reversed(batch_shape):
                     batch_indices.append(flat_index % size)
                     flat_index = flat_index // size
-                out[tuple(reversed(batch_indices))] = chunk
+                out[tuple(reversed(batch_indices))] = chunk.to(out.dtype)
             elif flat_out is None:
                 flat_out = chunk.new_empty((batch_size, *query.size()[-2:]))
                 flat_out[start:end] = chunk
@@ -676,11 +773,17 @@ class TransformerBlock(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
+        query_pos: Tensor | None = None,
+        key_pos: Tensor | None = None,
         *,
+        is_causal: bool = False,
         return_key_value: bool = False,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
+
+        if key_value is None and key_pos is None:
+            key_pos = query_pos
 
         if self.key_value_norm is None:
             pass
@@ -694,6 +797,9 @@ class TransformerBlock(torch.nn.Module):
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
+            query_pos=query_pos,
+            key_pos=key_pos,
+            is_causal=is_causal,
             return_key_value=return_key_value,
         )
         del key_value
@@ -711,11 +817,15 @@ class TransformerBlock(torch.nn.Module):
             and torch.compiler.is_compiling()
             and not out.is_contiguous()
         ):
-            tmp = attn_out + query
-            out.copy_(tmp + self.mlp(tmp))
+            tmp = (attn_out + query).to(out.dtype)
+            if self.mlp is not None:
+                tmp += self.mlp(tmp)
+            out.copy_(tmp)
         else:
             tmp = torch.add(attn_out, query, out=out)
-            out = torch.add(tmp, self.mlp(tmp), out=out)
+            if self.mlp is not None:
+                tmp = torch.add(tmp, self.mlp(tmp), out=out)
+            out = tmp
 
         return (out, kv) if return_key_value else out
 
@@ -728,12 +838,32 @@ class TransformerBlock(torch.nn.Module):
         r""":meta private:"""  # noqa: D415
         return 0
 
+    def auto_batch_size_limit(
+        self,
+        device: torch.device,
+        element_size: int,
+        query_length: int,
+        key_value_length: int | None = None,
+    ) -> int:
+        r""":meta private:"""  # noqa: D415
+        if device.type != "cuda":
+            return 65_535
+        bytes_per_example = self.peak_bytes_per_example(
+            element_size=element_size,
+            query_length=query_length,
+            key_value_length=key_value_length,
+        )
+        limit = chunk_memory_limit(device) // max(bytes_per_example, 1)
+        return min(max(limit, 1), 65_535)
+
 
 def _batch_shape(
     query: Tensor,
     key_value: Tensor | KVCacheEntry | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
+    query_pos: Tensor | None,
+    key_pos: Tensor | None,
 ) -> torch.Size:
     shapes = [query.size()[:-2]]
     if isinstance(key_value, Tensor):
@@ -743,7 +873,10 @@ def _batch_shape(
     if seqused_key_value is not None:
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
-        shapes.append(attn_mask.size()[:-2])
+        shapes.append(attn_mask.size()[:-3])
+    for pos in (query_pos, key_pos):
+        if pos is not None:
+            shapes.append(pos.size()[:-1])
     return torch.broadcast_shapes(*shapes)
 
 

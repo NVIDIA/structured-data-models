@@ -6,7 +6,7 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import RobustScale
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 @withCUDA
@@ -194,3 +194,28 @@ def test_robust_scale_fits_half_precision(
     assert out.numerical.dtype == dtype
     expected = torch.tensor([[-1.0], [0.0], [1.0]], device=device)
     torch.testing.assert_close(out.numerical.float(), expected)
+
+
+@onlyCUDA
+def test_robust_scale_column_chunks_match_single_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inp = torch.randn(2, 50, 5, device="cuda")
+    inp[:, ::7, 0] = float("nan")
+    inp[:, 3, 1] = float("inf")
+    table = TableTensor.from_tensor(inp)
+
+    # Chunks run without autograd:
+    with torch.inference_mode():
+        expected = RobustScale().fit_transform(table)
+        # Chunks of a single column:
+        monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-12")
+        out = RobustScale().fit_transform(table)
+
+    torch.testing.assert_close(
+        out.numerical,
+        expected.numerical,
+        rtol=0,
+        atol=0,
+        equal_nan=True,
+    )

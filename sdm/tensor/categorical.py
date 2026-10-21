@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
@@ -26,6 +26,12 @@ if TYPE_CHECKING:
     import cudf
 
 aten = torch.ops.aten
+
+
+def _iter_categories(tensor: CategoricalTensor) -> Iterator[Tensor]:
+    """Yield category tensors through attributes tracked by torch.compile."""
+    for index in range(tensor.size(-1)):
+        yield getattr(tensor, f"_category_{index}")
 
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:
@@ -127,6 +133,8 @@ class CategoricalTensor(Tensor):
 
         out._code = code
         out._categories = tuple(categories)
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
 
         return out
 
@@ -346,6 +354,29 @@ class CategoricalTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "code",
+            *(f"_category_{i}" for i in range(self.code.size(-1))),
+        ]
+        return attrs, (self.__class__,)
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> CategoricalTensor:
+        (cls,) = ctx
+        code = inner_tensors["code"]
+        return cls(
+            code=code,
+            categories=tuple(
+                inner_tensors[f"_category_{i}"] for i in range(code.size(-1))
+            ),
+        )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
         return (self.__class__, args)
@@ -430,6 +461,16 @@ class CategoricalTensor(Tensor):
             for column in self.split(1, dim=-1)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
+        out += f", num_categories={tuple(c.numel() for c in self.categories)}"
+        out += f", dtype={self.dtype}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
 
 
 @CategoricalTensor.implements(aten.isnan.default)
@@ -685,6 +726,15 @@ def _flatten(
     end_dim: int = -1,
 ) -> Tensor:
     return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
+
+
+@CategoricalTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: CategoricalTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> Tensor:
+    return aten.unflatten.int.decompose(inp, dim, sizes)
 
 
 @CategoricalTensor.implements(aten.squeeze.default)

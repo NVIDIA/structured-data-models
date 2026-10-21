@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import abc
-import copy
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Generic, Self, TypeVar, cast, overload
 
@@ -13,6 +12,7 @@ from torch import Tensor
 
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
+from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T")
@@ -146,14 +146,31 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
+        vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
+            if torch.compiler.is_compiling():
+                # Compilation: id() can fail or give one tensor different IDs.
+                categories = tuple(_iter_categories(table.categorical))
+                for vocabulary_id, other in enumerate(vocabularies):
+                    if len(categories) == len(other) and all(
+                        category is other_category
+                        for category, other_category in zip(categories, other)
+                    ):
+                        vocabulary_key = (vocabulary_id,)
+                        break
+                else:
+                    # No tuple matched; the next list index is its new ID.
+                    vocabulary_key = (len(vocabularies),)
+                    vocabularies.append(categories)
+            else:
+                # Eager execution: use id() directly to avoid the search.
+                vocabulary_key = tuple(
+                    id(category) for category in table.categorical.categories
+                )
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
-                tuple(
-                    (stype, columns)
-                    for stype, columns in table.columns.items()
-                ),
+                table.column_groups,
                 tuple(
                     (
                         stype,
@@ -162,12 +179,10 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                         block.layout,
                         block.dtype,
                     )
-                    for stype, block in table.items()
+                    for stype, block in TableTensor.items(table)
                 ),
                 table.device,
-                tuple(
-                    id(category) for category in table.categorical.categories
-                ),
+                vocabulary_key,
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
 
@@ -212,15 +227,20 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             group = self._groups[group_id]
             selected_positions = tuple(positions)
             group_ids[group_id] = new_group_id
+            start = selected_positions[0]
+            step = (
+                selected_positions[1] - start
+                if len(selected_positions) > 1
+                else 1
+            )
+            stop = start + step * len(selected_positions)
             if selected_positions == tuple(range(group.size(0))):
                 groups.append(group)
-            elif len(selected_positions) == 1:
-                groups.append(
-                    cast(
-                        TableTensor,
-                        group.narrow(0, selected_positions[0], 1),
-                    )
-                )
+            elif step > 0 and selected_positions == tuple(
+                range(start, stop, step)
+            ):
+                # Evenly spaced members are selected as a view, not a copy.
+                groups.append(group[start:stop:step])
             else:
                 groups.append(
                     cast(
@@ -235,13 +255,13 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                     )
                 )
 
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        ensemble._locations = tuple(
-            (group_ids[group_id], positions_by_group[group_id][position])
-            for group_id, position in locations
+        return self.__class__(
+            groups=groups,
+            locations=tuple(
+                (group_ids[group_id], positions_by_group[group_id][position])
+                for group_id, position in locations
+            ),
         )
-        return ensemble
 
     def gather_members(
         self,
@@ -485,9 +505,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                 f"Expected one replacement per group "
                 f"({self.num_groups}), got {len(groups)}."
             )
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        return ensemble
+        return self.__class__(groups=groups, locations=self._locations)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Self
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 
@@ -31,12 +32,12 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     #: Semantic types this processor operates on.
-    handles_stypes: frozenset[Stype]
+    handles_stypes: tuple[Stype, ...]
 
     #: Whether this processor requires fitting.
     requires_fit: bool
 
-    _fitted_state: torch.Tensor
+    _fitted_state: Tensor
 
     def __init__(self) -> None:
         super().__init__()
@@ -90,15 +91,20 @@ class Processor(torch.nn.Module, abc.ABC):
         unexpected_keys: list[str],
         error_msgs: list[str],
     ) -> None:
-        # Resize dynamically shaped buffers before PyTorch copies saved values.
+        # Resize uninitialized buffers before PyTorch copies saved values.
         for name, buffer in self._buffers.items():
             state = state_dict.get(f"{prefix}{name}")
             if (
                 buffer is not None
-                and isinstance(state, torch.Tensor)
-                and buffer.shape != state.shape
+                and isinstance(state, Tensor)
+                and (
+                    buffer.shape != state.shape or buffer.dtype != state.dtype
+                )
             ):
-                buffer.resize_(state.shape)
+                self._buffers[name] = buffer.new_empty(
+                    state.shape,
+                    dtype=state.dtype,
+                )
         super()._load_from_state_dict(
             state_dict,
             prefix,
@@ -110,8 +116,19 @@ class Processor(torch.nn.Module, abc.ABC):
         )
         self.__fitted = bool(self._fitted_state)
 
+    def _set_buffer(self, name: str, value: Tensor) -> None:
+        # Use register_buffer to avoid assignment errors in torch.compile.
+        self.register_buffer(
+            name,
+            value,
+            persistent=name not in self._non_persistent_buffers_set,
+        )
+
     def _set_fitted(self, device: torch.device) -> None:
-        self._fitted_state = self._fitted_state.to(device=device)
+        # Create fitted state explicitly so tracing preserves its value.
+        self._set_buffer(
+            "_fitted_state", torch.ones_like(self._fitted_state, device=device)
+        )
         self._fitted = True
 
     def _check_is_fitted(self) -> None:
@@ -143,6 +160,14 @@ class Processor(torch.nn.Module, abc.ABC):
             self._fit(table, generator=generator)
         return self._transform(table)
 
+    def _handles_table(self, table: TableTensor) -> bool:
+        # Check column counts directly so torch.compile can trace this without
+        # constructing or intersecting sets of column types.
+        for stype in self.handles_stypes:
+            if getattr(table, stype.value).size(-1) > 0:
+                return True
+        return False
+
     def fit(
         self,
         table: TableTensor,
@@ -155,7 +180,7 @@ class Processor(torch.nn.Module, abc.ABC):
             table: The table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not self._handles_table(table):
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -171,7 +196,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not self._handles_table(table):
             return table
         self._check_is_fitted()
         return self._transform(table)
@@ -195,7 +220,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        if not table.active_stypes & self.handles_stypes:
+        if not self._handles_table(table):
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:

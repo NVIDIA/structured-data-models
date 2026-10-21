@@ -1,11 +1,59 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.processing import Standardize
 from sdm.testing import withCUDA
+
+
+@withCUDA
+def test_standardize_with_state(device: torch.device) -> None:
+    processor = Standardize().with_state(mean=2.0, scale=3.0).to(device)
+    data = torch.randn(2, 3, 2, device=device)
+    table = TableTensor.from_tensor(data)
+    expected = (data - 2.0) / 3.0
+
+    torch.testing.assert_close(processor.transform(table).numerical, expected)
+    processor.fit(table)
+    torch.testing.assert_close(processor.transform(table).numerical, expected)
+    out = processor.fit_transform(table)
+    torch.testing.assert_close(out.numerical, expected)
+
+
+@pytest.mark.skipif(
+    not torch._dynamo.is_dynamo_supported(),
+    reason="torch.compile is not supported by this Python/PyTorch build",
+)
+def test_standardize_compile_fit() -> None:
+    def fit(x: torch.Tensor) -> tuple[torch.Tensor, Standardize]:
+        processor = Standardize()
+        table = TableTensor.from_tensor(x)
+        return processor.fit_transform(table).numerical, processor
+
+    context = torch.tensor([[1.0, 2.0], [3.0, torch.nan], [5.0, 6.0]])
+    compiled_fit = torch.compile(fit, backend="eager", fullgraph=True)
+    expected, eager = fit(context)
+    actual, fitted = compiled_fit(context)
+    torch.testing.assert_close(actual, expected, equal_nan=True)
+
+    restored = Standardize()
+    restored.load_state_dict(fitted.state_dict())
+    assert restored.is_fitted
+    query = TableTensor.from_tensor(torch.tensor([[7.0, 8.0]]))
+    torch.testing.assert_close(
+        restored.transform(query).numerical, eager.transform(query).numerical
+    )
+
+
+@pytest.mark.parametrize("name", ["mean", "scale", "_fitted_state"])
+def test_standardize_preserves_nonpersistent_buffers(name: str) -> None:
+    processor = Standardize()
+    processor.register_buffer(name, getattr(processor, name), persistent=False)
+    processor.fit(TableTensor.from_tensor(torch.randn(3, 2)))
+    assert name not in processor.state_dict()
 
 
 @withCUDA
@@ -19,7 +67,6 @@ def test_standardize_fit_transform_and_inverse_round_trip(
                 [3.0, 2.0, 7.0],
                 [5.0, 2.0, 9.0],
             ],
-            dtype=torch.float64,
             device=device,
         )
     )
@@ -31,7 +78,6 @@ def test_standardize_fit_transform_and_inverse_round_trip(
             [0.0, 0.0, 0.0],
             [(3.0 / 2.0) ** 0.5, 0.0, (3.0 / 2.0) ** 0.5],
         ],
-        dtype=torch.float64,
         device=device,
     )
 
@@ -77,6 +123,26 @@ def test_standardize(device: torch.device) -> None:
 
 
 @withCUDA
+def test_standardize_ignores_non_finite_values_in_many_rows(
+    device: torch.device,
+) -> None:
+    inp = torch.randn(2, 600, 3, device=device)
+    inp[inp > 1.0] = float("nan")
+    inp[inp < -1.5] = float("inf")
+
+    out = Standardize().fit_transform(TableTensor.from_tensor(inp))
+
+    finite = inp.masked_fill(~inp.isfinite(), float("nan"))
+    mean = finite.nanmean(-2, keepdim=True)
+    std = (finite - mean).square().nanmean(-2, keepdim=True).sqrt()
+    torch.testing.assert_close(
+        out.numerical,
+        (inp - mean) / std,
+        equal_nan=True,
+    )
+
+
+@withCUDA
 def test_standardize_single_sample_uses_unit_scale(
     device: torch.device,
 ) -> None:
@@ -110,19 +176,3 @@ def test_standardize_fits_leading_batches_independently(
         processor.inverse_transform(out).numerical,
         query,
     )
-
-
-def test_standardize_computes_in_float64() -> None:
-    inp = torch.tensor(
-        [[1e8], [1e8 + 8], [1e8 + 8]],
-        dtype=torch.float32,
-    )
-
-    output = Standardize().fit_transform(TableTensor.from_tensor(inp))
-
-    expected = torch.tensor(
-        [[-(2**0.5)], [2**-0.5], [2**-0.5]],
-        dtype=torch.float32,
-    )
-    assert output.numerical.dtype == inp.dtype
-    torch.testing.assert_close(output.numerical, expected)

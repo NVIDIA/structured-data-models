@@ -119,4 +119,6 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
     device = torch.device(device)
     if device.type == "cuda" and device.index is None:
         return torch.device("cuda", torch.cuda.current_device())
+    if device.type == "mps" and device.index is None:
+        return torch.device("mps", 0)
     return device

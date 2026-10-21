@@ -55,6 +55,12 @@ def test_init() -> None:
         Stype.text: (),
         Stype.id: (),
     }
+    assert tensor.numerical_columns == ("age", "income")
+    assert tensor.categorical_columns == ("country", "segment")
+    assert tensor.datetime_columns == ()
+    assert tensor.text_columns == ()
+    assert tensor.id_columns == ()
+
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
         "income": (Stype.numerical, 1),
@@ -87,6 +93,20 @@ def test_empty() -> None:
         Stype.id: (),
     }
     assert tensor._column_to_loc == {}
+
+
+def test_column_groups() -> None:
+    tensor = TableTensor(
+        columns={"text": (), "numerical": ("age",)},
+        numerical=torch.zeros(2, 1),
+    )
+    assert tensor.column_groups == (
+        (Stype.text, ()),
+        (Stype.numerical, ("age",)),
+        (Stype.categorical, ()),
+        (Stype.datetime, ()),
+        (Stype.id, ()),
+    )
 
 
 def test_column_names() -> None:
@@ -991,6 +1011,39 @@ def test_cat_all_column_empty(device: torch.device) -> None:
     assert out.columns == tensor1.columns
 
 
+@withCUDA
+@pytest.mark.parametrize("dim", [0, -1])
+def test_cat_keeps_empty_block_dtype(device: torch.device, dim: int) -> None:
+    tensor = TableTensor(
+        numerical=torch.empty(2, 0, dtype=torch.float64, device=device),
+        categorical=CategoricalTensor(
+            code=torch.empty(2, 0, dtype=torch.int64, device=device),
+            categories=(),
+        ),
+    )
+
+    out = torch.cat([tensor, tensor], dim=dim)
+    assert isinstance(out, TableTensor)
+    assert out.size() == ((4, 0) if dim == 0 else (2, 0))
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.code.dtype == torch.int64
+
+    if dim == -1:
+        values = torch.arange(2, dtype=torch.float32, device=device).view(2, 1)
+        non_empty = TableTensor(numerical=values)
+        for inputs in ((tensor, non_empty), (non_empty, tensor)):
+            out = torch.cat(inputs, dim=dim)
+            assert isinstance(out, TableTensor)
+            torch.testing.assert_close(out.numerical, values)
+
+
+def test_cat_column_size_mismatch() -> None:
+    tensor1 = TableTensor(numerical=torch.randn(2, 1))
+    tensor2 = TableTensor(size=(3,))
+    with pytest.raises(RuntimeError, match="Sizes of tensors must match"):
+        torch.cat([tensor1, tensor2], dim=-1)
+
+
 def test_cat_stack_reorder() -> None:
     tensor1 = TableTensor(
         columns={
@@ -1171,6 +1224,320 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+def test_from_pandas_numerical_storage_is_independent() -> None:
+    df = pd.DataFrame({"number": pd.Series([1.0, 2.0], dtype="float32")})
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"number": Stype.numerical},
+    )
+
+    df.iloc[0, 0] = 3.0
+    tensor.numerical[1, 0] = 4.0
+
+    assert tensor.numerical.equal(torch.tensor([[1.0], [4.0]]))
+    assert df["number"].tolist() == [3.0, 2.0]
+
+
+def test_from_pandas_empty_numerical() -> None:
+    df = pd.DataFrame({"number": pd.Series(dtype="float32")})
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"number": Stype.numerical},
+    )
+
+    assert tensor.size() == (0, 1)
+    assert tensor.numerical.size() == (0, 1)
+    assert tensor.numerical.dtype == torch.get_default_dtype()
+    assert tensor.numerical.is_contiguous()
+
+    with pytest.raises(KeyError, match="missing"):
+        TableTensor.from_pandas(
+            df=df,
+            stypes={"missing": Stype.numerical},
+        )
+
+
+def test_from_pandas_numerical_default_device() -> None:
+    dfs = (
+        pd.DataFrame({"number": [1.0]}),
+        pd.DataFrame({"number": pd.Series(dtype="float32")}),
+    )
+
+    with torch.device("meta"):
+        tensors = tuple(
+            TableTensor.from_pandas(
+                df=df,
+                stypes={"number": Stype.numerical},
+            )
+            for df in dfs
+        )
+
+    assert all(tensor.device.type == "meta" for tensor in tensors)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.float32, torch.float64, torch.bfloat16],
+)
+def test_from_pandas_numerical_default_dtype(dtype: torch.dtype) -> None:
+    default_dtype = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(dtype)
+        tensor = TableTensor.from_pandas(
+            df=pd.DataFrame({"number": [1.0000000000000002]}),
+            stypes={"number": Stype.numerical},
+        )
+    finally:
+        torch.set_default_dtype(default_dtype)
+
+    assert tensor.numerical.dtype == dtype
+    assert tensor.numerical.equal(
+        torch.tensor([[1.0000000000000002]], dtype=dtype)
+    )
+
+
+def test_from_pandas_rejects_complex_numerical() -> None:
+    dfs = (
+        pd.DataFrame({"number": [1 + 2j, 3 + 4j]}),
+        pd.DataFrame({"number": pd.Series(dtype="complex64")}),
+    )
+
+    for df in dfs:
+        with pytest.raises(TypeError, match="real values"):
+            TableTensor.from_pandas(
+                df=df,
+                stypes={"number": Stype.numerical},
+            )
+
+
+def test_from_pandas_categorical_default_device() -> None:
+    dfs = (
+        pd.DataFrame(
+            {
+                "value": [1.0],
+                "number": [1],
+                "string": pd.Series(["a"], dtype="string"),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "value": pd.Series(dtype="float64"),
+                "number": pd.Series(dtype="int64"),
+                "string": pd.Series(dtype="string"),
+            }
+        ),
+    )
+    stypes = {
+        "value": Stype.numerical,
+        "number": Stype.categorical,
+        "string": Stype.categorical,
+    }
+
+    with torch.device("meta"):
+        default_tensors = tuple(
+            TableTensor.from_pandas(df=df, stypes=stypes) for df in dfs
+        )
+        cpu_tensors = tuple(
+            TableTensor.from_pandas(df=df, stypes=stypes, device="cpu")
+            for df in dfs
+        )
+
+    for tensors, device_type in (
+        (default_tensors, "meta"),
+        (cpu_tensors, "cpu"),
+    ):
+        for tensor in tensors:
+            assert tensor.device.type == device_type
+            assert tensor.numerical.device.type == device_type
+            assert tensor.categorical.code.device.type == device_type
+            assert all(
+                category.device.type == device_type
+                for category in tensor.categorical.categories
+            )
+
+
+@pytest.mark.parametrize(
+    ("pandas_dtype", "torch_dtype"),
+    [("float32", torch.float32), ("float64", torch.float64)],
+)
+def test_from_pandas_float_categorical_signed_zero(
+    pandas_dtype: str,
+    torch_dtype: torch.dtype,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "category": pd.Series(
+                [-0.0, 0.0, None, -0.0],
+                dtype=pandas_dtype,
+            )
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"category": Stype.categorical},
+    )
+
+    assert tensor.categorical.code.equal(
+        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
+    )
+    category = tensor.categorical.categories[0]
+    assert category.dtype == torch_dtype
+    assert category.numel() == 2
+    assert category.signbit().equal(torch.tensor([True, False]))
+
+
+@pytest.mark.parametrize(
+    ("index_type", "code_dtype"),
+    [(pa.int8(), torch.int32), (pa.int64(), torch.int64)],
+)
+def test_from_pandas_arrow_dictionary_categorical(
+    index_type: pa.DataType,
+    code_dtype: torch.dtype,
+) -> None:
+    dtype = pd.ArrowDtype(pa.dictionary(index_type, pa.string()))
+    df = pd.DataFrame(
+        {"category": pd.Series(["b", None, "a", "b"], dtype=dtype)}
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"category": Stype.categorical},
+    )
+
+    assert tensor.categorical.code.equal(
+        torch.tensor([[0], [-1], [1], [0]], dtype=code_dtype)
+    )
+    assert tensor.categorical.code.dtype == code_dtype
+    assert tensor.categorical.categories[0].tolist() == ["b", "a"]
+
+    empty = TableTensor.from_pandas(
+        df=df.iloc[:0],
+        stypes={"category": Stype.categorical},
+    )
+    assert empty.categorical.code.dtype == code_dtype
+
+
+def test_from_pandas_object_numeric_categorical() -> None:
+    df = pd.DataFrame(
+        {
+            "category": pd.Series(
+                [1, 1.0, 2, 2.0],
+                dtype=object,
+            )
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"category": Stype.categorical},
+    )
+
+    assert tensor.categorical.code.equal(
+        torch.tensor([[0], [0], [1], [1]], dtype=torch.int32)
+    )
+    category = tensor.categorical.categories[0]
+    assert category.dtype == torch.float64
+    assert category.equal(torch.tensor([1.0, 2.0], dtype=torch.float64))
+
+
+def test_from_pandas_declared_categoricals() -> None:
+    df = pd.DataFrame(
+        {
+            "string": pd.Categorical(
+                ["b", None, "a"],
+                categories=["unused", "a", "b"],
+            ),
+            "number": pd.Categorical(
+                [2, 1, None],
+                categories=[1, 2],
+            ),
+        }
+    )
+
+    stypes = {
+        "string": Stype.categorical,
+        "number": Stype.categorical,
+    }
+    tensor = TableTensor.from_pandas(df=df, stypes=stypes)
+
+    assert tensor.categorical.code.is_contiguous()
+    assert tensor.categorical.code.equal(
+        torch.tensor([[2, 1], [-1, 0], [1, -1]], dtype=torch.int32)
+    )
+    assert tensor.categorical.categories[0].tolist() == ["unused", "a", "b"]
+    assert tensor.categorical.categories[1].equal(torch.tensor([1, 2]))
+
+    empty = TableTensor.from_pandas(df=df.iloc[:0], stypes=stypes)
+    assert empty.categorical.code.size() == (0, 2)
+    assert empty.categorical.code.dtype == torch.int32
+    assert empty.categorical.code.is_contiguous()
+
+
+@withCUDA
+def test_from_pandas_nullable_and_categorical_dtypes(
+    device: torch.device,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "ignored": ["not", "converted", "by", "the fast path"],
+            "number": pd.Series([1, None, 3, 4], dtype="Int64"),
+            "category": pd.Categorical(
+                ["b", None, "a", "b"],
+                categories=["unused", "a", "b"],
+            ),
+            "string": pd.Series(["b", None, "a", "b"], dtype="string"),
+            "boolean": pd.Series([True, False, None, True], dtype="boolean"),
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={
+            "category": "categorical",
+            "number": "numerical",
+            "string": "categorical",
+            "boolean": "categorical",
+        },
+        device=device,
+    )
+
+    assert tensor.numerical_columns == ("number",)
+    assert tensor.categorical_columns == (
+        "category",
+        "string",
+        "boolean",
+    )
+    assert tensor.numerical.dtype == torch.get_default_dtype()
+    assert tensor.numerical.is_contiguous()
+    torch.testing.assert_close(
+        tensor.numerical,
+        torch.tensor(
+            [[1.0], [float("nan")], [3.0], [4.0]],
+            device=device,
+        ),
+        equal_nan=True,
+    )
+    assert tensor.categorical.code.equal(
+        torch.tensor(
+            [
+                [2, 0, 0],
+                [-1, -1, 1],
+                [1, 1, -1],
+                [2, 0, 0],
+            ],
+            dtype=torch.int32,
+            device=device,
+        )
+    )
+    assert all(
+        category.device == device for category in tensor.categorical.categories
+    )
+    assert tensor.categorical.categories[0].tolist() == ["unused", "a", "b"]
+    assert tensor.categorical.categories[1].tolist() == ["b", "a"]
+    assert tensor.categorical.categories[2].tolist() == [True, False]
+
+
 def test_from_pandas_period() -> None:
     df = pd.DataFrame(
         {
@@ -1249,7 +1616,7 @@ def test_text() -> None:
     )
 
     assert tensor.size() == (3, 3)
-    assert tensor.columns[Stype.text] == ("title", "body")
+    assert tensor.text_columns == ("title", "body")
     assert tensor.text.size() == (3, 2)
 
     assert tensor.to_arrow().to_pydict() == data

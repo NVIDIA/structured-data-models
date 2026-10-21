@@ -23,7 +23,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             permutations.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(
@@ -125,8 +125,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             shuffled = table.__class__(
                 columns={
                     Stype.numerical: tuple(
-                        table.columns[Stype.numerical][i]
-                        for i in host_permutation
+                        table.numerical_columns[i] for i in host_permutation
                     )
                 },
                 numerical=table.numerical.index_select(
@@ -167,7 +166,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             shuffled = table.__class__(
                 columns={
                     Stype.numerical: tuple(
-                        table.columns[Stype.numerical][i]
+                        table.numerical_columns[i]
                         for i in inverse_host_permutation
                     )
                 },

@@ -12,7 +12,11 @@ from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
-from benchmark.tabular.model import MODEL_CONFIGS
+from benchmark.tabular.model import (
+    MODEL_CONFIGS,
+    add_finetune_args,
+    finetune_config_overrides,
+)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
@@ -45,6 +49,13 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+add_finetune_args(parser)
+parser.add_argument(
+    "--enable-kv-cache",
+    action="store_true",
+    help="Cache context key/value projections at fit and reuse them "
+    "across prediction batches.",
+)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -54,14 +65,31 @@ result_dir = (
     / model_config.name
     / "outer_model"
 )
-result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
+    "kv_cache": args.enable_kv_cache,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
+finetune_overrides = finetune_config_overrides(args)
+if finetune_overrides and not args.model.endswith("-ft"):
+    raise ValueError(
+        f"--finetune_* flags were passed but --model {args.model!r} isn't "
+        "a '-ft' variant, so fine-tuning is disabled and the flags would "
+        "silently have no effect; pass the matching '-ft' model instead."
+    )
+config.update(finetune_overrides)
+
+if finetune_overrides:
+    # tabarena's cache key is positional, not content-based; key by
+    # hyperparameters so different LRs don't silently collide.
+    variant = "_".join(
+        f"{key}={value}" for key, value in sorted(config.items())
+    )
+    result_dir = result_dir / variant
+result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = ConfigGenerator(
     search_space={},

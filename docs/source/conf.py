@@ -10,6 +10,7 @@ from pathlib import Path
 from docutils import nodes
 from docutils.nodes import Node
 from sphinx.application import Sphinx
+from sphinx.ext.autodoc import AttributeDocumenter, PropertyDocumenter
 from sphinx.ext.autosummary import generate
 from sphinx.ext.autosummary.generate import AutosummaryEntry
 
@@ -36,6 +37,7 @@ templates_path = ["_templates"]
 html_theme = "shibuya"
 html_title = project
 html_logo = "images/nvidia.svg"
+html_favicon = "images/nvidia.svg"
 html_theme_options = {
     "accent_color": "green",
     "github_url": "https://github.com/NVIDIA/structured-data-models",
@@ -45,6 +47,9 @@ html_css_files = ["custom.css"]
 autosummary_generate = True
 autosummary_context = {"import_module": importlib.import_module}
 autodoc_member_order = "bysource"
+autodoc_use_legacy_class_based = True
+AttributeDocumenter.member_order = 45
+PropertyDocumenter.member_order = 45
 autodoc_typehints = "both"
 copybutton_prompt_text = r">>> |\.\.\. "
 copybutton_prompt_is_regexp = True

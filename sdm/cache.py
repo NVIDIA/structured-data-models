@@ -90,7 +90,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 value._mode = Cache.Mode.replay
                 for item in value.values():
                     _freeze(item)
-            elif isinstance(value, list | tuple):
+            elif isinstance(value, (list, tuple)):
                 for item in value:
                     _freeze(item)
             elif isinstance(value, Mapping):

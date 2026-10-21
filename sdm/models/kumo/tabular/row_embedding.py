@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import Embedding, Linear, ModuleList, Parameter, RMSNorm
+from torch.nn import Embedding, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
@@ -16,6 +16,7 @@ from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
     LogScale,
+    RMSNorm,
     RotaryEmbedding,
 )
 
@@ -112,12 +113,18 @@ class RowEmbedding(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        num_columns: Tensor | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
         *B, R, C = x.size()
         R_train = y.size(-1)
         K = self.readout_token.size(-2)
         D = self.channels
+        row_key_lengths = (
+            None
+            if num_columns is None
+            else (K + num_columns).unsqueeze(-1).to(torch.int32)
+        )
 
         buffer: Tensor | None = None
         if torch.is_grad_enabled():
@@ -125,6 +132,7 @@ class RowEmbedding(torch.nn.Module):
                 x=x,
                 categorical_mask=categorical_mask,
                 train_size=R_train,
+                num_columns=num_columns,
                 cache=cache,
             )  # [..., R, C, D]
         else:
@@ -140,6 +148,7 @@ class RowEmbedding(torch.nn.Module):
                 x=x,
                 categorical_mask=categorical_mask,
                 train_size=R_train,
+                num_columns=num_columns,
                 cache=cache,
                 batch_size_limit="auto",
                 out=buffer[..., K:, :],
@@ -196,6 +205,7 @@ class RowEmbedding(torch.nn.Module):
                     if i == len(self.row_blocks) - 1
                     else x,
                     key_value=x,
+                    seqused_key_value=row_key_lengths,
                     batch_size_limit="auto",
                 )
             else:
@@ -204,6 +214,7 @@ class RowEmbedding(torch.nn.Module):
                     if i == len(self.row_blocks) - 1
                     else buffer,
                     key_value=buffer,
+                    seqused_key_value=row_key_lengths,
                     batch_size_limit="auto",
                     out=buffer[..., :K, :]
                     if i == len(self.row_blocks) - 1

@@ -8,6 +8,7 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.numerical._stats import _ndtri
 
 BOUNDS_THRESH = 1e-7
 _MAX_NUM_COLS = 32
@@ -92,7 +93,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         output_distribution: Distribution to map the empirical quantiles to.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     _quantiles: Tensor
@@ -185,8 +186,8 @@ class QuantileTransform(Processor, InvertibleMixin):
             )
             .movedim(-1, -2)
         )
-        self._quantiles = quantiles
-        self._references = references
+        self._set_buffer("_quantiles", quantiles)
+        self._set_buffer("_references", references)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
@@ -239,9 +240,9 @@ class QuantileTransform(Processor, InvertibleMixin):
                 eps = input_chunk.new_tensor(
                     BOUNDS_THRESH - torch.finfo(torch.float64).eps
                 )
-                output = torch.special.ndtri(output)
-                clip_min = torch.special.ndtri(eps)
-                clip_max = torch.special.ndtri(1.0 - eps)
+                output = _ndtri(output)
+                clip_min = _ndtri(eps)
+                clip_max = _ndtri(1.0 - eps)
                 output = output.clamp(clip_min, clip_max)
 
             transformed_columns[start:end] = output

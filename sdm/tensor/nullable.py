@@ -732,6 +732,18 @@ def _flatten(
     )
 
 
+@NullableTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: NullableTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> NullableTensor:
+    return cast(
+        NullableTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @NullableTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: NullableTensor) -> NullableTensor:

@@ -342,8 +342,7 @@ class StringTensor(VarLenTensor):
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
-        if self.valid is not None:
-            out += f", null_count={int((~self.valid).sum())}"
+        out += self._null_count_repr()
         if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"

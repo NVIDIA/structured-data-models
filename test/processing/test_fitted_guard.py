@@ -54,7 +54,7 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 
 
 class StatelessProcessor(Processor):
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -62,7 +62,7 @@ class StatelessProcessor(Processor):
 
 
 class StatefulProcessor(Processor):
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def _fit(
@@ -137,3 +137,32 @@ def test_processor_fit_transform_handles_empty_table() -> None:
 
     assert output.size() == table.size()
     assert output.schema == table.schema
+
+
+@pytest.mark.parametrize(
+    "processor_factory",
+    [sp.RobustScale, sp.PowerTransform, sp.RankGaussian],
+)
+def test_processor_state_dict_preserves_buffer_dtype(
+    processor_factory: ProcessorFactory,
+) -> None:
+    table = TableTensor.from_tensor(
+        torch.tensor(
+            [[1e8 + 1], [1e8 + 2], [1e8 + 4], [1e8 + 7]],
+            dtype=torch.float64,
+        )
+    )
+    fitted = processor_factory().fit(table)
+
+    reloaded = processor_factory()
+    reloaded.load_state_dict(fitted.state_dict())
+
+    for name, state in fitted.state_dict().items():
+        assert reloaded.state_dict()[name].dtype == state.dtype
+
+    torch.testing.assert_close(
+        fitted.transform(table).numerical,
+        reloaded.transform(table).numerical,
+        rtol=0,
+        atol=0,
+    )
