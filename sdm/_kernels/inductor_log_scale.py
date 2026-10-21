@@ -6,11 +6,6 @@
 import torch
 from torch import Tensor
 
-# Explicit benchmark setting: multiple ranks/gate modes/inference contexts
-# share this one code object. Fullgraph keeps any cache exhaustion observable.
-# Dynamo's mutable setting is typed as its default literal.
-torch._dynamo.config.recompile_limit = 64  # ty: ignore[invalid-assignment]
-
 
 def native(
     query: Tensor,
@@ -33,15 +28,6 @@ def native(
     return out
 
 
-@torch.compile(
-    backend="inductor",
-    fullgraph=True,
-    options={
-        "compile_threads": 1,
-        "emulate_precision_casts": True,
-        "eager_numerics.use_pytorch_libdevice": True,
-    },
-)
 def compiled(
     query: Tensor, key_len: int, head_scale: Tensor, gate: Tensor | None = None
 ) -> Tensor:
@@ -54,6 +40,25 @@ def compiled(
         torch._dynamo.mark_static(gate, -2)
         torch._dynamo.mark_static(gate, -1)
     return native(query, key_len, head_scale, gate)
+
+
+# PyTorch may support a Python version before its compiler does.
+if torch._dynamo.is_dynamo_supported():
+    # Multiple ranks, gate modes and inference contexts share this code object.
+    # Dynamo's mutable setting is typed as its default literal.
+    torch._dynamo.config.recompile_limit = 64  # ty: ignore[invalid-assignment]
+    compiled_fn = torch.compile(
+        compiled,
+        backend="inductor",
+        fullgraph=True,
+        options={
+            "compile_threads": 1,
+            "emulate_precision_casts": True,
+            "eager_numerics.use_pytorch_libdevice": True,
+        },
+    )
+else:
+    compiled_fn = native
 
 
 def log_scale(
@@ -79,5 +84,5 @@ def log_scale(
             torch.is_grad_enabled() and any(x.requires_grad for x in inputs)
         )
     ):
-        return compiled(query, key_len, head_scale, gate)
+        return compiled_fn(query, key_len, head_scale, gate)
     return native(query, key_len, head_scale, gate)
