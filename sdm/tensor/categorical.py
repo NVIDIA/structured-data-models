@@ -466,8 +466,7 @@ class CategoricalTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", num_categories={tuple(c.numel() for c in self.categories)}"
-        if self.dtype != torch.int64:
-            out += f", dtype={self.dtype}"
+        out += f", dtype={self.dtype}"
         if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
