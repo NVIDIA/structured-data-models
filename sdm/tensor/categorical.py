@@ -121,7 +121,7 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
-        return CategoricalTensor._make(
+        return CategoricalTensor._from_code(
             code=code,
             categories=tuple(categories),
             cls=None if cls is CategoricalTensor else cls,
@@ -130,7 +130,7 @@ class CategoricalTensor(Tensor):
     # Keep construction together so torch.compile cannot inspect it midway.
     @staticmethod
     @torch.compiler.allow_in_graph
-    def _make(
+    def _from_code(
         code: Tensor,
         categories: tuple[Tensor, ...],
         cls: type[CategoricalTensor] | None = None,
