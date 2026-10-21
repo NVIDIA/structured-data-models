@@ -35,27 +35,6 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-def _make_empty_columnar_subclass(
-    cls: type[ColumnarTensor],
-    empty: Tensor,
-) -> ColumnarTensor:
-    out = Tensor._make_wrapper_subclass(
-        cls,
-        size=empty.size(),
-        dtype=torch.uint8,
-        device=empty.device,
-        requires_grad=False,
-    )
-    out._columns = ()
-    out._empty = empty
-    return out
-
-
-@torch.compiler.allow_in_graph
-def _make_empty_columnar(empty: Tensor) -> ColumnarTensor:
-    return _make_empty_columnar_subclass(ColumnarTensor, empty)
-
-
 class ColumnarTensor(Tensor):
     r"""A :class:`torch.Tensor` for column-wise heterogeneous data.
 
@@ -157,15 +136,24 @@ class ColumnarTensor(Tensor):
             setattr(out, f"_column_{i}", column)
         return out
 
-    @classmethod
-    def _from_empty(cls, empty: Tensor) -> Self:
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _from_empty(empty: Tensor) -> ColumnarTensor:
         r"""Wrap the supplied zero-column tensor without copying it.
 
         Reusing the tensor lets ``torch.compile`` track it through operations.
         """
-        if cls is ColumnarTensor:
-            return cast(Self, _make_empty_columnar(empty))
-        return cast(Self, _make_empty_columnar_subclass(cls, empty))
+        out = Tensor._make_wrapper_subclass(
+            cls=ColumnarTensor,
+            size=empty.size(),
+            dtype=torch.uint8,
+            device=empty.device,
+            requires_grad=False,
+        )
+        out._columns = ()
+        out._empty = empty
+        return out
 
     def _with_columns(self, columns: Sequence[Tensor]) -> Self:
         r"""Create a tensor from the selected columns.
