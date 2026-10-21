@@ -51,7 +51,8 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-# Keep the two context managers in separate frames for graph-break resumption.
+# Keep inference and gradient contexts in separate functions so torch.compile
+# can resume correctly after a graph break.
 def _call_with_grad_enabled(
     fn: Callable, grad_enabled: bool, /, *args: Any, **kwargs: Any
 ) -> Any:
@@ -73,6 +74,7 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         inference_mode_enabled = torch.is_inference_mode_enabled()
         grad_enabled = torch.is_grad_enabled()
+        # Re-enter the caller's exact inference state, including when disabled.
         with torch.inference_mode(inference_mode_enabled):
             return _call_with_grad_enabled(fn, grad_enabled, *args, **kwargs)
 
@@ -1161,6 +1163,7 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        # PyTorch 2.7 can reuse the previous handler when tracing .get().
         if func in cls.HANDLED_FUNCTIONS:
             return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
