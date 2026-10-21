@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.testing import withCUDA
 
 
@@ -63,7 +63,7 @@ def test_impute_mode_uses_most_frequent_category(
             device=device,
         ),
     )
-    assert output.columns[Stype.categorical] == ("cat_0", "cat_1")
+    assert output.categorical_columns == ("cat_0", "cat_1")
     for actual, expected in zip(
         output.categorical.categories,
         query.categorical.categories,
@@ -159,8 +159,8 @@ def test_impute_mode_composes_before_to_numerical() -> None:
 
     output = processor.fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("cat_0", "cat_1")
-    assert output.columns[Stype.categorical] == ()
+    assert output.numerical_columns == ("cat_0", "cat_1")
+    assert output.categorical_columns == ()
     assert torch.equal(
         output.numerical,
         torch.tensor(

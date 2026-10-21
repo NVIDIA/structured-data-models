@@ -100,7 +100,7 @@ def test_forward(
     out = cls_model(x_context, _cls_target(), x_query, recipe=_recipe())
 
     assert out.size() == (2, 3)
-    assert out.columns[Stype.numerical] == ("0", "10", "20")
+    assert out.numerical_columns == ("0", "10", "20")
     assert out.dtype == x_query.dtype
     assert torch.is_inference(out)
 
@@ -113,9 +113,7 @@ def test_forward(
     )
 
     assert out.size() == (2, 999)
-    assert out.columns[Stype.numerical] == tuple(
-        f"q{i:03d}" for i in range(1, 1000)
-    )
+    assert out.numerical_columns == tuple(f"q{i:03d}" for i in range(1, 1000))
 
 
 def test_categorical_features_are_marked(cls_model: KumoTabular) -> None:

@@ -56,9 +56,9 @@ def test_forward(
     assert out.size() == (3, 3)
     assert out.device == device
     assert out.numerical.isfinite().all()
-    assert "y1" in out.columns["numerical"]
-    assert "y2" in out.columns["numerical"]
-    assert "y3" in out.columns["numerical"]
+    assert "y1" in out.numerical_columns
+    assert "y2" in out.numerical_columns
+    assert "y3" in out.numerical_columns
 
     with (
         nullcontext()

@@ -1001,10 +1001,10 @@ class TableTensor(Tensor):
 
         .. testcode:: drop_stypes
 
-            assert table.columns[Stype.categorical] == ("country", "segment")
+            assert table.categorical_columns == ("country", "segment")
             table = table.drop_stypes("categorical")
-            assert table.columns[Stype.categorical] == ()
-            assert table.columns[Stype.numerical] == ("age", "income")
+            assert table.categorical_columns == ()
+            assert table.numerical_columns == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
