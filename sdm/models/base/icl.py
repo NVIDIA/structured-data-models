@@ -88,41 +88,6 @@ class ICLModel(Model):
                 f"{invalid}"
             )
 
-    def train_forward(
-        self,
-        x_context: Tensor | TableTensor,  # [..., R_context, D]
-        y_context: Tensor | TableTensor,  # [..., R_context, 1]
-        x_query: Tensor | TableTensor,  # [..., R_query, D]
-        *,
-        context_lengths: Tensor | None = None,  # [...]
-        column_mask: Tensor | None = None,  # [..., D]
-    ) -> Tensor:  # [..., R_query, *]
-        """Predict query examples from preprocessed training batches.
-
-        Args:
-            x_context: The feature tensor of in-context examples with shape
-                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
-                columns.
-            y_context: The targets of in-context examples with shape
-                ``[..., R_context, 1]``. Classification targets hold class
-                indices.
-            x_query: The feature tensor of query examples with shape
-                ``[..., R_query, D]`` and the same columns as ``x_context``.
-            context_lengths: Integer tensor with shape ``[...]`` giving the
-                number of valid in-context examples per table. Valid rows
-                come first, followed by padding. If ``None``, all rows are
-                valid.
-            column_mask: Boolean mask with shape ``[..., D]``; ``True`` marks
-                valid feature columns of both context and query. Each table
-                needs at least one valid column. If ``None``, all columns are
-                valid.
-
-        Returns:
-            Model outputs with shape ``[..., R_query, *]``, *e.g.*, class
-            logits or regression quantiles.
-        """
-        raise NotImplementedError
-
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
