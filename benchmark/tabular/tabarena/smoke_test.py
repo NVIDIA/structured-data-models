@@ -58,6 +58,10 @@ with TemporaryDirectory() as tmp_dir:
         debug_mode=True,
     )
     assert len(results) == 1
-    leaderboard = context.compare(output_dir=output_dir / "evals")
+    leaderboard = context.compare(
+        output_dir=output_dir / "evals",
+        plot=False,
+        leaderboard_kwargs={"include_elo": False, "include_winrate": False},
+    )
     assert not leaderboard.empty
     print(leaderboard.to_string(index=False))
