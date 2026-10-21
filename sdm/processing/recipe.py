@@ -54,7 +54,6 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-        # torch.compile can defer property setters on newly created objects.
         self._set_features(features)
         self._set_target(target)
         self._set_output(output)
