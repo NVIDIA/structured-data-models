@@ -318,7 +318,7 @@ class RelationalData(DeviceMixin):
             else:
                 columns = [
                     f"{column}: {stype}"
-                    for stype, columns in table._columns.items()
+                    for stype, columns in table.columns.items()
                     for column in columns
                 ]
                 label = f"{{{table_name}|{left_align(columns)}}}"

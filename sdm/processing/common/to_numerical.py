@@ -39,8 +39,8 @@ class ToNumerical(Processor):
         # CategoricalTensor to its raw ordinal ids as a plain tensor.
         categorical = table.categorical.to(table.numerical.dtype)
         columns = (
-            *table.columns[Stype.numerical],
-            *table.columns[Stype.categorical],
+            *table.numerical_columns,
+            *table.categorical_columns,
         )
         numerical = (
             categorical

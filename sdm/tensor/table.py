@@ -51,6 +51,15 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+# torch.compile on PyTorch 2.7 can fail after a graph break with both
+# contexts in one function. Keep the gradient context in a helper.
+def _call_with_grad_enabled(
+    fn: Callable, grad_enabled: bool, /, *args: Any, **kwargs: Any
+) -> Any:
+    with torch.set_grad_enabled(grad_enabled):
+        return fn(*args, **kwargs)
+
+
 def preserve_autograd_state(fn: Callable) -> Callable:
     r"""Re-apply the caller's autograd/inference-mode state for non-view ops.
 
@@ -65,11 +74,8 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         inference_mode_enabled = torch.is_inference_mode_enabled()
         grad_enabled = torch.is_grad_enabled()
-        with (
-            torch.inference_mode(inference_mode_enabled),
-            torch.set_grad_enabled(grad_enabled),
-        ):
-            return fn(*args, **kwargs)
+        with torch.inference_mode(inference_mode_enabled):
+            return _call_with_grad_enabled(fn, grad_enabled, *args, **kwargs)
 
     return wrapper
 
@@ -834,6 +840,40 @@ class TableTensor(Tensor):
     # Properties ##############################################################
 
     @property
+    def numerical_columns(self) -> tuple[str, ...]:
+        r"""Return numerical column names as an immutable tuple."""
+        return self._columns[Stype.numerical]
+
+    @property
+    def categorical_columns(self) -> tuple[str, ...]:
+        r"""Return categorical column names as an immutable tuple."""
+        return self._columns[Stype.categorical]
+
+    @property
+    def datetime_columns(self) -> tuple[str, ...]:
+        r"""Return datetime column names as an immutable tuple."""
+        return self._columns[Stype.datetime]
+
+    @property
+    def text_columns(self) -> tuple[str, ...]:
+        r"""Return text column names as an immutable tuple."""
+        return self._columns[Stype.text]
+
+    @property
+    def id_columns(self) -> tuple[str, ...]:
+        r"""Return identifier column names as an immutable tuple."""
+        return self._columns[Stype.id]
+
+    @property
+    def column_groups(self) -> tuple[tuple[Stype, tuple[str, ...]], ...]:
+        r"""Return column names grouped by semantic type as an immutable tuple.
+
+        Pairs follow ``columns`` iteration order and include types with no
+        columns.
+        """
+        return tuple(self._columns.items())
+
+    @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
         return self._columns.copy()
@@ -940,7 +980,7 @@ class TableTensor(Tensor):
             id: Replacement identifier block with shape ``[..., C_id]``.
         """
         return self.__class__(
-            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            columns=cast(Mapping[StypeLike, Sequence[str]], self._columns),
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
                 self.categorical if categorical is None else categorical
@@ -976,10 +1016,10 @@ class TableTensor(Tensor):
 
         .. testcode:: drop_stypes
 
-            assert table.columns[Stype.categorical] == ("country", "segment")
+            assert table.categorical_columns == ("country", "segment")
             table = table.drop_stypes("categorical")
-            assert table.columns[Stype.categorical] == ()
-            assert table.columns[Stype.numerical] == ("age", "income")
+            assert table.categorical_columns == ()
+            assert table.numerical_columns == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
@@ -1084,9 +1124,7 @@ class TableTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["numerical", "categorical", "datetime", "text"]
-        if self.id.size(-1) > 0:
-            attrs.append("id")
+        attrs = ["numerical", "categorical", "datetime", "text", "id"]
         # Let torch.compile track backing fields and their public properties.
         attrs = [f"_{name}" for name in attrs] + attrs
         columns = tuple(
@@ -1110,7 +1148,7 @@ class TableTensor(Tensor):
             categorical=inner_tensors["categorical"],
             datetime=inner_tensors["datetime"],
             text=inner_tensors["text"],
-            id=inner_tensors.get("id"),
+            id=inner_tensors["id"],
         )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
@@ -1133,8 +1171,8 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+        if func in cls.HANDLED_FUNCTIONS:
+            return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -1212,11 +1250,12 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} "
+                f"({len(self._columns[stype]):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
-            for stype, tensor in self.items()
-            if tensor.size(-1) > 0
+            for stype, _ in self.items()
+            if self._columns[stype]
         ]
 
         out = f"{' ' * indent}{self.__class__.__name__}(\n"
@@ -1977,8 +2016,8 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
                 )
 
     blocks: dict[Stype, Tensor] = {}
-    for stype, _ in ref.items():
-        block_list = [tensor.blocks[stype] for tensor in tensors]
+    for stype, _ in TableTensor.items(ref):
+        block_list = [getattr(tensor, stype.value) for tensor in tensors]
         if is_column_dim:
             # Skip empty blocks so their dtypes cannot promote the others,
             # but keep one so that an all-empty block retains its dtype.
@@ -1997,11 +2036,11 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
-            for stype, _ in ref.items()
+            for stype, _ in TableTensor.items(ref)
         }
 
     return ref.__class__(
-        columns=cast(dict[StypeLike, tuple[str, ...]], columns),
+        columns=cast("dict[StypeLike, tuple[str, ...]]", columns),
         **blocks,
     )
 

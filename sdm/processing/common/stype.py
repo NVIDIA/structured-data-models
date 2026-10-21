@@ -85,13 +85,14 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> tuple[str, ...]:
+        active_stypes = tuple(
+            stype.value
+            for group in ensemble_table._iter_groups()
+            for stype, columns in group.column_groups
+            if columns
+        )
         return tuple(
-            stype
-            for stype in self.processors
-            if any(
-                len(group.columns[Stype(stype)]) > 0
-                for group in ensemble_table._iter_groups()
-            )
+            stype for stype in self.processors if stype in active_stypes
         )
 
     def _fit_ensemble(

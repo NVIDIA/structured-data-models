@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.models import TabICLv2
 from sdm.testing import withCUDA
 
@@ -108,7 +108,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert model_features.size() == features.size()
     assert model_features.numerical.device == device
     assert model_features.categorical.size(-1) == 0
-    assert set(model_features.columns[Stype.numerical]) == {
+    assert set(model_features.numerical_columns) == {
         "num_0",
         "num_1",
         "cat_0",

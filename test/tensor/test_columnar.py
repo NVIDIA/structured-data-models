@@ -6,6 +6,7 @@ import io
 import pyarrow as pa
 import pytest
 import torch
+from torch._subclasses.fake_tensor import FakeTensorMode, is_fake
 
 from sdm import (
     CategoricalTensor,
@@ -14,6 +15,30 @@ from sdm import (
     StringTensor,
 )
 from sdm.testing import onlyCUDA, onlyMPS
+
+
+@pytest.mark.parametrize("num_columns", [0, 1])
+def test_fake_zero_column_ops(num_columns: int) -> None:
+    columns = (torch.arange(6).view(2, 3),) if num_columns else ()
+    mode = FakeTensorMode()
+    fake = mode.from_tensor(ColumnarTensor(columns, size=(2, 3)))
+    empty = fake[..., :0]
+    index = mode.from_tensor(torch.tensor([1, 0]))
+
+    outputs = [
+        (empty, (2, 3, 0)),
+        (empty[:1], (1, 3, 0)),
+        (empty[index], (2, 3, 0)),
+        (torch.cat([empty, empty], dim=0), (4, 3, 0)),
+        (torch.stack([empty, empty], dim=0), (2, 2, 3, 0)),
+        *((part, (3, 0)) for part in empty.unbind(0)),
+        *((part, (1, 3, 0)) for part in empty.split([1, 1], dim=0)),
+    ]
+    for out, size in outputs:
+        assert type(out) is ColumnarTensor
+        assert is_fake(out)
+        assert out.size() == size
+        assert out.device == fake.device
 
 
 def test_init() -> None:
@@ -206,7 +231,8 @@ def test_empty_clone_preserves_device() -> None:
 
 
 def test_empty_resolves_mps_device_index() -> None:
-    tensor = ColumnarTensor((), size=(2, 3), device="mps")
+    with FakeTensorMode():
+        tensor = ColumnarTensor((), size=(2, 3), device="mps")
 
     assert tensor.device == torch.device("mps", 0)
 
@@ -426,27 +452,34 @@ def test_tolist() -> None:
     ]
 
 
-def test_pin_memory() -> None:
+@pytest.mark.parametrize("num_columns", [0, 2])
+def test_pin_memory(num_columns: int) -> None:
     tensor = ColumnarTensor(
         (
             torch.randn(2, 3),
             torch.arange(6).view(2, 3),
-        )
+        )[:num_columns],
+        size=(2, 3),
     )
 
     assert not tensor.is_pinned()
 
 
 @onlyCUDA
-def test_pin_memory_cuda() -> None:
+@pytest.mark.parametrize("num_columns", [0, 2])
+def test_pin_memory_cuda(num_columns: int) -> None:
     tensor = ColumnarTensor(
         (
             torch.randn(2, 3),
             torch.arange(6).view(2, 3),
-        )
+        )[:num_columns],
+        size=(2, 3),
     )
 
-    assert tensor.pin_memory().is_pinned()
+    out = tensor.pin_memory()
+    expected = torch.empty(2, 3, num_columns).pin_memory()
+    assert out.is_pinned() == expected.is_pinned()
+    assert out.size() == tensor.size()
 
 
 def test_share_memory() -> None:

@@ -18,6 +18,7 @@ from sdm import (
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.relational.join import join_index
+from sdm.tensor.categorical import _iter_categories
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
@@ -173,7 +174,7 @@ class AlignCategories(EnsembleProcessor):
             [] for _ in range(codes.size(0))
         ]
         for column_index, input_categories in enumerate(
-            table.categorical.categories
+            _iter_categories(table.categorical)
         ):
             fitted_categories, aligned_column_codes = self._fit_column(
                 input_categories=input_categories,
@@ -396,9 +397,8 @@ class AlignCategories(EnsembleProcessor):
         fitted_categories: Tensor,
         codes: Tensor,
     ) -> Tensor:
-        lookup = codes.new_full((input_categories.numel(),), -1)
         if fitted_categories.numel() == 0:
-            return lookup
+            return codes.new_full((input_categories.numel(),), -1)
 
         comparable_categories = input_categories
         sorted_categories = fitted_categories
@@ -416,10 +416,7 @@ class AlignCategories(EnsembleProcessor):
         )
         position = position.clamp(max=sorted_categories.numel() - 1)
         match = sorted_categories[position] == comparable_categories
-        left_index = match.nonzero().view(-1)
-        right_index = perm[position[left_index]]
-        lookup[left_index] = right_index.to(codes.dtype)
-        return lookup
+        return torch.where(match, perm[position].to(codes.dtype), -1)
 
     def _align_to_categories(
         self,
@@ -432,11 +429,11 @@ class AlignCategories(EnsembleProcessor):
             codes = codes.unsqueeze(0)
         aligned_codes = torch.full_like(codes, -1)
         lookups_by_column: list[dict[int, Tensor]] = [
-            {} for _ in table.categorical.categories
+            {} for _ in range(codes.size(-1))
         ]
         string_requests: list[tuple[int, int, StringTensor, Tensor]] = []
         for column_index, input_categories in enumerate(
-            table.categorical.categories
+            _iter_categories(table.categorical)
         ):
             if input_categories.numel() == 0:
                 continue
@@ -498,7 +495,7 @@ class AlignCategories(EnsembleProcessor):
             lookups_by_column[column_index][identity] = lookup
 
         for column_index, input_categories in enumerate(
-            table.categorical.categories
+            _iter_categories(table.categorical)
         ):
             if input_categories.numel() == 0:
                 continue
@@ -521,7 +518,7 @@ class AlignCategories(EnsembleProcessor):
             (table if single_table else table[batch_index]).replace_blocks(
                 categorical=CategoricalTensor(
                     aligned_codes[batch_index],
-                    categories=batch_categories,
+                    categories=tuple(batch_categories),
                 ),
             )
             for batch_index, batch_categories in enumerate(fitted_categories)

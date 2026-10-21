@@ -928,7 +928,7 @@ def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
         [
             [
                 member.input_stypes.get(column) == Stype.categorical
-                for column in member.x._columns[Stype.numerical]
+                for column in member.x.numerical_columns
             ]
             for member in members
         ],
@@ -976,7 +976,7 @@ def _unstack(
         return outs
     # The model labels columns in the first member's class order; member `e`'s
     # column `j` holds class `class_values[e][j]`.
-    labels = out.columns[Stype.numerical]
+    labels = out.numerical_columns
     index = {value: i for i, value in enumerate(first)}
     stacked = cast(Sequence[tuple[Any, ...]], class_values)
     return [

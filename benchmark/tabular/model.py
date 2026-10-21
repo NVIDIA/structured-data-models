@@ -344,7 +344,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             return out.numerical.float().mean(dim=-1).cpu().numpy()
 
         assert self.num_classes is not None
-        columns = out.columns[sdm.Stype.numerical]
+        columns = out.numerical_columns
         indices = [columns.index(str(i)) for i in range(self.num_classes)]
         probabilities = out.numerical[..., indices].float().cpu().numpy()
         return self._convert_proba_to_unified_form(probabilities)

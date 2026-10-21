@@ -704,7 +704,7 @@ def test_estimator_batching_aligns_shuffled_class_columns(
     )
 
     def _check(out: TableTensor) -> None:
-        columns = out.columns[Stype.numerical]
+        columns = out.numerical_columns
         assert sorted(columns) == ["10", "20"]
         frequency = torch.tensor(
             [0.75 if column == "10" else 0.25 for column in columns]

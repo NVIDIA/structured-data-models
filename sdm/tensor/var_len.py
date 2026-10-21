@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
@@ -682,8 +683,7 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.valid is not None:
-            out += f", null_count={int((~self.valid).sum())}"
+        out += self._null_count_repr()
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
@@ -692,6 +692,13 @@ class VarLenTensor(Tensor):
             out += ", requires_grad=True"
         out += ")"
         return out
+
+    def _null_count_repr(self) -> str:
+        valid = self.valid
+        # During compilation, the mask may have a shape but no values to count.
+        if valid is None or valid.is_meta or is_fake(valid):
+            return ""
+        return f", null_count={int((~valid).sum())}"
 
 
 @VarLenTensor.implements(aten.alias.default)
