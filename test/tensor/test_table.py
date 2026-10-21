@@ -10,6 +10,8 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
+from torch._subclasses.fake_tensor import FakeTensorMode
+from torch.fx.experimental.symbolic_shapes import ShapeEnv
 
 from sdm import (
     CategoricalTensor,
@@ -20,6 +22,20 @@ from sdm import (
     TableTensor,
 )
 from sdm.testing import onlyCUDA, withCUDA
+
+
+def test_repr_symbolic_block_width() -> None:
+    numerical = torch.empty(2, 1000)
+    with FakeTensorMode(shape_env=ShapeEnv()) as mode:
+        numerical = mode.from_tensor(numerical, static_shapes=False)
+        tensor = TableTensor(
+            columns={"numerical": tuple(f"col{i}" for i in range(1000))},
+            numerical=numerical,
+        )
+        assert isinstance(tensor.numerical.size(-1), torch.SymInt)
+        text = repr(tensor)
+
+    assert "numerical (1,000):" in text
 
 
 def test_init() -> None:

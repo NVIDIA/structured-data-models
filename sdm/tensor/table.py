@@ -1210,11 +1210,12 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} "
+                f"({len(self._columns[stype]):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
-            for stype, tensor in self.items()
-            if tensor.size(-1) > 0
+            for stype, _ in self.items()
+            if self._columns[stype]
         ]
 
         out = f"{' ' * indent}{self.__class__.__name__}(\n"
