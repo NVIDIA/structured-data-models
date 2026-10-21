@@ -40,59 +40,6 @@ _TORCH_NUMPY_DTYPES = {
 }
 
 
-def _make_table_subclass(
-    cls: type[TableTensor],
-    columns: tuple[tuple[str, tuple[str, ...]], ...],
-    numerical: Tensor,
-    categorical: CategoricalTensor,
-    datetime: Tensor,
-    text: StringTensor,
-    id: ColumnarTensor,
-) -> TableTensor:
-    columns_by_stype = {Stype(stype): names for stype, names in columns}
-    column_to_loc = {
-        name: (stype, i)
-        for stype, names in columns_by_stype.items()
-        for i, name in enumerate(names)
-    }
-    out = Tensor._make_wrapper_subclass(
-        cls,
-        size=(*numerical.size()[:-1], len(column_to_loc)),
-        dtype=numerical.dtype,
-        device=numerical.device,
-        requires_grad=False,
-    )
-    out._numerical = numerical
-    out._categorical = categorical
-    out._datetime = datetime
-    out._text = text
-    out._id = id
-    out._columns = columns_by_stype
-    out._column_to_loc = column_to_loc
-    return out
-
-
-# Keep construction atomic so tracing never inspects an unfinished wrapper.
-@torch.compiler.allow_in_graph
-def _make_table(
-    columns: tuple[tuple[str, tuple[str, ...]], ...],
-    numerical: Tensor,
-    categorical: CategoricalTensor,
-    datetime: Tensor,
-    text: StringTensor,
-    id: ColumnarTensor,
-) -> TableTensor:
-    return _make_table_subclass(
-        cls=TableTensor,
-        columns=columns,
-        numerical=numerical,
-        categorical=categorical,
-        datetime=datetime,
-        text=text,
-        id=id,
-    )
-
-
 def preserve_view_inference_mode(fn: Callable) -> Callable:
     r"""Preserve input inference state for tensor view operations."""
 
@@ -391,17 +338,49 @@ class TableTensor(Tensor):
         if len(column_names) != len(set(column_names)):
             raise ValueError("Expected column names to be unique")
 
-        args = (
-            tuple((str(stype), names) for stype, names in columns.items()),
-            numerical,
-            categorical,
-            datetime,
-            text,
-            id,
+        return TableTensor._make_table_tensor(
+            columns=tuple(
+                (str(stype), names) for stype, names in columns.items()
+            ),
+            numerical=numerical,
+            categorical=categorical,
+            datetime=datetime,
+            text=text,
+            id=id,
         )
-        if cls is TableTensor:
-            return cast(Self, _make_table(*args))
-        return cast(Self, _make_table_subclass(cls, *args))
+
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_table_tensor(
+        columns: tuple[tuple[str, tuple[str, ...]], ...],
+        numerical: Tensor,
+        categorical: CategoricalTensor,
+        datetime: Tensor,
+        text: StringTensor,
+        id: ColumnarTensor,
+    ) -> TableTensor:
+        columns_by_stype = {Stype(stype): names for stype, names in columns}
+        column_to_loc = {
+            name: (stype, i)
+            for stype, names in columns_by_stype.items()
+            for i, name in enumerate(names)
+        }
+        out = Tensor._make_wrapper_subclass(
+            cls=TableTensor,
+            size=(*numerical.size()[:-1], len(column_to_loc)),
+            dtype=numerical.dtype,
+            device=numerical.device,
+            requires_grad=False,
+        )
+        out._numerical = numerical
+        out._categorical = categorical
+        out._datetime = datetime
+        out._text = text
+        out._id = id
+        out._columns = columns_by_stype
+        out._column_to_loc = column_to_loc
+        return out
 
     @classmethod
     def from_arrow(
