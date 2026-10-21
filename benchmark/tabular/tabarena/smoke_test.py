@@ -58,10 +58,11 @@ with TemporaryDirectory() as tmp_dir:
         debug_mode=True,
     )
     assert len(results) == 1
-    leaderboard = context.compare(
-        output_dir=output_dir / "evals",
-        plot=False,
-        leaderboard_kwargs={"include_elo": False, "include_winrate": False},
+    scores = context.load_results()
+    assert len(scores) == 1
+    assert scores["metric_error"].notna().all()
+    print(
+        scores[["dataset", "method", "metric", "metric_error"]].to_string(
+            index=False,
+        )
     )
-    assert not leaderboard.empty
-    print(leaderboard.to_string(index=False))
