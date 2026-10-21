@@ -65,10 +65,11 @@ class SelectColumns(EnsembleProcessor):
         tables: list[TableTensor] = []
         for member_id in range(len(ensemble_table)):
             table = ensemble_table[member_id]
+            columns_by_type = dict(table.column_groups)
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
             for stype, block in TableTensor.items(table):
-                column_names = getattr(table, f"{stype.value}_columns")
+                column_names = columns_by_type[stype]
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.
                 if num_columns == 0:
