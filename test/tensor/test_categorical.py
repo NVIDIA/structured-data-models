@@ -12,6 +12,22 @@ from sdm import CategoricalTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
 
 
+@pytest.mark.parametrize("device", ["cpu", "meta"])
+def test_repr(device: str) -> None:
+    tensor = CategoricalTensor(
+        code=torch.zeros(2, 1, dtype=torch.int32, device=device),
+        categories=(torch.arange(3, device=device),),
+    )
+
+    text = repr(tensor)
+    assert "CategoricalTensor" in text
+    assert "size=(2, 1)" in text
+    assert "num_categories=(3,)" in text
+    assert "dtype=torch.int32" in text
+    assert str(tensor) == text
+    assert f"{tensor}" == text
+
+
 def test_to_copy_string_categories() -> None:
     data = torch.randint(0, 2, size=(10, 2))
     categories = (
