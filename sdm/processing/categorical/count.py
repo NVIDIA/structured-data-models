@@ -69,7 +69,7 @@ class AddCategoryCounts(Processor):
         self._columns = tuple(
             column
             for column, categories in zip(
-                table.columns[Stype.categorical], _iter_categories(categorical)
+                table.categorical_columns, _iter_categories(categorical)
             )
             if categories.numel() > self.min_cardinality
         )

@@ -941,7 +941,7 @@ def _unstack(
         return outs
     # The model labels columns in the first member's class order; member `e`'s
     # column `j` holds class `class_values[e][j]`.
-    labels = out.columns[Stype.numerical]
+    labels = out.numerical_columns
     index = {value: i for i, value in enumerate(first)}
     stacked = cast(Sequence[tuple[Any, ...]], class_values)
     return [

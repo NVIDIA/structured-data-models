@@ -322,9 +322,9 @@ class RecipeExecution:
         if len(outputs) == 1:
             out = outputs[0].unsqueeze(0)
         else:
-            expected = set(outputs[0].columns[Stype.numerical])
+            expected = set(outputs[0].numerical_columns)
             for output in outputs[1:]:
-                if set(output.columns[Stype.numerical]) != expected:
+                if set(output.numerical_columns) != expected:
                     raise ValueError(
                         "Expected all model outputs to have the same columns "
                         "before applying 'Recipe.output'. Ensure every target "

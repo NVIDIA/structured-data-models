@@ -62,7 +62,7 @@ class ShuffleCategories(EnsembleProcessor):
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
-                column_name = table.columns[Stype.categorical][column_index]
+                column_name = table.categorical_columns[column_index]
                 key = (column_name, n_classes)
                 offsets = unused_offsets.get(key)
                 if offsets is None or offsets.numel() == 0:

@@ -55,6 +55,12 @@ def test_init() -> None:
         Stype.text: (),
         Stype.id: (),
     }
+    assert tensor.numerical_columns == ("age", "income")
+    assert tensor.categorical_columns == ("country", "segment")
+    assert tensor.datetime_columns == ()
+    assert tensor.text_columns == ()
+    assert tensor.id_columns == ()
+
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
         "income": (Stype.numerical, 1),

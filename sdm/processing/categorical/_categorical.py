@@ -5,7 +5,7 @@ import os
 
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.tensor.categorical import _iter_categories
 
@@ -20,7 +20,7 @@ def _check_categorical_codes(table: TableTensor) -> None:
     """
     if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
         return
-    columns = table.columns[Stype.categorical]
+    columns = table.categorical_columns
     categorical = table.categorical
     for index, category in enumerate(_iter_categories(categorical)):
         codes = categorical.code[..., index]
@@ -43,7 +43,7 @@ def _check_categories(
     """
     if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
         return
-    columns = table.columns[Stype.categorical]
+    columns = table.categorical_columns
     categorical = table.categorical
     if categorical.code.size(-1) != len(categories):
         raise ValueError(

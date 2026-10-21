@@ -76,7 +76,7 @@ class DropConstantColumns(EnsembleProcessor):
         table: TableTensor,
         kept_indices: tuple[int, ...],
     ) -> TableTensor:
-        numerical_columns = table.columns[Stype.numerical]
+        numerical_columns = table.numerical_columns
         if len(kept_indices) == len(numerical_columns):
             return table
         kept_numerical_columns = tuple(
@@ -138,7 +138,7 @@ class DropConstantColumns(EnsembleProcessor):
                     tensor=self._keep_mask(group.numerical)
                     .to(dtype=group.numerical.dtype)
                     .unsqueeze(-2),
-                    columns=group.columns[Stype.numerical],
+                    columns=group.numerical_columns,
                 )
                 for group in groups
             ]

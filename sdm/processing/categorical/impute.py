@@ -49,7 +49,7 @@ class ImputeMode(Processor):
         data = table.categorical
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []
-        columns = table.columns[Stype.categorical]
+        columns = table.categorical_columns
         observed_mask = data.isfinite()
         for index, category in enumerate(table.categorical.categories):
             codes = data[..., index]  # [*batch, n_samples]
