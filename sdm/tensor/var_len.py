@@ -36,48 +36,6 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-def _make_var_len_subclass(
-    cls: type[VarLenTensor],
-    data: Tensor,
-    offset: Tensor,
-    valid: Tensor | None,
-    layout: tuple[tuple[int, ...], tuple[int, ...], int],
-) -> VarLenTensor:
-    # Initialize all leaves before Dynamo observes the wrapper.
-    size, stride, storage_offset = layout
-    out = Tensor._make_wrapper_subclass(
-        cls,
-        size=size,
-        strides=stride,
-        storage_offset=storage_offset,
-        dtype=data.dtype,
-        device=data.device,
-        requires_grad=False,  # Autograd lives on `_data` only.
-    )
-
-    out._data = data
-    out._offset = offset
-    out._valid = valid
-
-    return out
-
-
-@torch.compiler.allow_in_graph
-def _make_var_len(
-    data: Tensor,
-    offset: Tensor,
-    valid: Tensor | None,
-    layout: tuple[tuple[int, ...], tuple[int, ...], int],
-) -> VarLenTensor:
-    return _make_var_len_subclass(
-        cls=VarLenTensor,
-        data=data,
-        offset=offset,
-        valid=valid,
-        layout=layout,
-    )
-
-
 class VarLenTensor(Tensor):
     r"""A :class:`torch.Tensor` for rectangular variable-length values.
 
@@ -259,7 +217,9 @@ class VarLenTensor(Tensor):
             data=data,
             offset=offset,
             valid=valid,
-            layout=(size, stride, storage_offset),
+            size=size,
+            stride=stride,
+            storage_offset=storage_offset,
         )
 
     @classmethod
@@ -268,28 +228,49 @@ class VarLenTensor(Tensor):
         data: Tensor,
         offset: Tensor,
         valid: Tensor | None,
-        layout: tuple[tuple[int, ...], tuple[int, ...], int],
+        size: tuple[int, ...],
+        stride: tuple[int, ...],
+        storage_offset: int,
     ) -> Self:
-        if cls is VarLenTensor:
-            return cast(
-                Self,
-                _make_var_len(
-                    data=data,
-                    offset=offset,
-                    valid=valid,
-                    layout=layout,
-                ),
-            )
         return cast(
             Self,
-            _make_var_len_subclass(
-                cls=cls,
+            VarLenTensor._make_var_len_tensor(
                 data=data,
                 offset=offset,
                 valid=valid,
-                layout=layout,
+                size=size,
+                stride=stride,
+                storage_offset=storage_offset,
+                cls=None if cls is VarLenTensor else cls,
             ),
         )
+
+    # Avoid Dynamo reading _valid before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_var_len_tensor(
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        size: tuple[int, ...],
+        stride: tuple[int, ...],
+        storage_offset: int,
+        cls: type[VarLenTensor] | None = None,
+    ) -> VarLenTensor:
+        cls = VarLenTensor if cls is None else cls
+        out = Tensor._make_wrapper_subclass(
+            cls=cls,
+            size=size,
+            strides=stride,
+            storage_offset=storage_offset,
+            dtype=data.dtype,
+            device=data.device,
+            requires_grad=False,  # Autograd lives on `_data` only.
+        )
+        out._data = data
+        out._offset = offset
+        out._valid = valid
+        return out
 
     @classmethod
     def from_tensor(

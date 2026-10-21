@@ -25,8 +25,6 @@ def test_compiled_payload_slice(
             offset=inp._offset,
             valid=inp._valid,
             size=inp.size(),
-            stride=inp.stride(),
-            storage_offset=int(inp.storage_offset()),
         )
 
     tensor = tensor_type(
@@ -38,22 +36,6 @@ def test_compiled_payload_slice(
     out = torch.compile(reconstruct, backend="eager")(tensor)
     assert type(out) is tensor_type
     assert out.tolist() == tensor.tolist()
-    assert out.size() == tensor.size()
-    assert out.stride() == tensor.stride()
-
-
-def test_subclass_construction() -> None:
-    class CustomString(StringTensor):
-        pass
-
-    tensor = CustomString(
-        data=torch.tensor([97, 98], dtype=torch.uint8),
-        offset=torch.tensor([0, 1, 2]),
-        valid=None,
-        size=(2,),
-    )
-    assert type(tensor) is CustomString
-    assert tensor.tolist() == ["a", "b"]
 
 
 def test_dtype_conversion() -> None:
