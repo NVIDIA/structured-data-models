@@ -54,15 +54,10 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-        if type(self) is Recipe:
-            # Dynamo 2.7 defers setters on new objects until graph replay.
-            self._set_features(features)
-            self._set_target(target)
-            self._set_output(output)
-        else:
-            self.features = features
-            self.target = target
-            self.output = output
+        # Initialize pipelines without property setters during tracing.
+        self._set_features(features)
+        self._set_target(target)
+        self._set_output(output)
 
     @property
     def features(self) -> EnsembleProcessor:
