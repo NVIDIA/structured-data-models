@@ -150,7 +150,7 @@ def test_column_padding_parity(grad_enabled: bool) -> None:
                 model(x=x[1], y=y[1], categorical_mask=categorical_mask[1]),
             ]
         )
-        actual = model.train_forward(
+        actual = model.forward_train(
             x=x,
             y=y,
             categorical_mask=categorical_mask,

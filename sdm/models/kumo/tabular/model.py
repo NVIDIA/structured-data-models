@@ -309,7 +309,7 @@ class _KumoTabular(torch.nn.Module):
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
 
-    def train_forward(
+    def forward_train(
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
