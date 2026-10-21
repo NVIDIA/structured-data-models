@@ -163,15 +163,15 @@ class ColumnarTensor(Tensor):
             return self.__class__(
                 columns=columns, size=self.size()[:-1], device=self.device
             )
-        leaf = self._columns[0] if self._columns else self._empty
-        while hasattr(leaf, "__tensor_flatten__"):
+        source = self._columns[0] if self._columns else self._empty
+        while hasattr(source, "__tensor_flatten__"):
             flatten = cast(
-                Callable[[], tuple[list[str], Any]], leaf.__tensor_flatten__
+                Callable[[], tuple[list[str], Any]], source.__tensor_flatten__
             )
             attrs, _ = flatten()
-            leaf = getattr(leaf, attrs[0])
+            source = getattr(source, attrs[0])
         return self._from_empty(
-            leaf.new_empty((*self.size()[:-1], 0), dtype=torch.uint8)
+            source.new_empty((*self.size()[:-1], 0), dtype=torch.uint8)
         )
 
     @classmethod
