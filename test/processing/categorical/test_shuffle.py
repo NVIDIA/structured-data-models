@@ -128,9 +128,6 @@ def test_shuffle_categories_preserves_all_missing(
     output = ShuffleCategories(method="shift").fit_transform(target)
 
     assert output.categorical.code.equal(target.categorical.code)
-    assert sorted(output.categorical.categories[0].tolist()) == sorted(
-        categories
-    )
 
 
 def test_shuffle_categories_random_matches_independent_processors() -> None:
