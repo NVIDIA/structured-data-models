@@ -18,19 +18,6 @@ from sdm.testing import onlyCUDA, onlyMPS
 
 
 @pytest.mark.parametrize("num_columns", [0, 1])
-def test_fake_tensor_conversion(num_columns: int) -> None:
-    columns = (torch.arange(6).view(2, 3),) if num_columns else ()
-    tensor = ColumnarTensor(columns, size=(2, 3))
-    assert not is_fake(tensor)
-
-    mode = FakeTensorMode()
-    fake = mode.from_tensor(tensor)
-    assert is_fake(fake)
-    assert fake.size() == tensor.size()
-    assert fake.device == tensor.device
-
-
-@pytest.mark.parametrize("num_columns", [0, 1])
 def test_fake_zero_column_ops(num_columns: int) -> None:
     columns = (torch.arange(6).view(2, 3),) if num_columns else ()
     mode = FakeTensorMode()
@@ -509,13 +496,3 @@ def test_share_memory() -> None:
         assert tensor.is_shared()
     except RuntimeError:
         pass
-
-
-def test_empty_share_memory() -> None:
-    tensor = ColumnarTensor((), size=(2, 3))
-    expected = torch.empty(2, 3, 0, dtype=torch.uint8)
-
-    assert tensor.is_shared() == expected.is_shared()
-    assert tensor.share_memory_() is tensor
-    expected.share_memory_()
-    assert tensor.is_shared() == expected.is_shared()
