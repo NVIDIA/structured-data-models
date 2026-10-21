@@ -14,6 +14,7 @@ from torch import Tensor
 from sdm import Recipe, Stype, TableTensor
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
 
 
 class KumoAnomaly(Model):
@@ -78,7 +79,7 @@ class KumoAnomaly(Model):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return Recipe()
+        return default_recipe()
 
     def forward(
         self,

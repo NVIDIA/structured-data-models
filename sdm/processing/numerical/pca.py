@@ -14,7 +14,8 @@ class PCA(Processor):
     r"""Project numerical columns onto their principal components.
 
     Args:
-        num_components: Number of principal components to keep.
+        num_components: Number of principal components to keep. Numerical
+            columns are unchanged when their count is at most this value.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -36,11 +37,8 @@ class PCA(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        if table.numerical.size(-1) == 0:
-            raise ValueError(
-                f"{self.__class__.__name__!r} requires 'table' to have "
-                f"numerical features"
-            )
+        if table.numerical.size(-1) <= self.num_components:
+            return
 
         self._set_buffer("mean", table.numerical.mean(dim=-2, keepdim=True))
         _, _, vh = torch.linalg.svd(
@@ -58,6 +56,9 @@ class PCA(Processor):
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if table.numerical.size(-1) <= self.num_components:
+            return table
+
         x = (table.numerical - self.mean) @ self.components
         out = TableTensor(
             columns={Stype.numerical: [f"pca_{i}" for i in range(x.size(-1))]},
