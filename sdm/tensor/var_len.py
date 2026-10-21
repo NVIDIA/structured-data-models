@@ -213,7 +213,6 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
-        # An inherited factory needs cls to preserve the subclass type.
         return cls._make_var_len_tensor(
             data=data,
             offset=offset,

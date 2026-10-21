@@ -14,7 +14,7 @@ from sdm.testing import onlyCUDA, withCUDA
 
 
 @pytest.mark.parametrize("tensor_type", [VarLenTensor, StringTensor])
-def test_compiled_payload_slice(
+def test_compiled_var_len_reconstruction(
     compilation: None,
     tensor_type: type[VarLenTensor],
 ) -> None:
