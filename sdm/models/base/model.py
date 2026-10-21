@@ -124,9 +124,8 @@ class _Prefetcher(Generic[T]):
 
             if self._transfer_stream is not None:
                 assert self._compute_stream is not None
-                self._compute_stream.wait_event(
-                    self._transfer_stream.record_event()
-                )
+                event = self._transfer_stream.record_event()
+                self._compute_stream.wait_event(event)
                 if isinstance(item, DeviceMixin):
                     for tensor in item._tensors():
                         tensor.record_stream(self._compute_stream)
