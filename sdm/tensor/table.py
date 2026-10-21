@@ -1162,8 +1162,6 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        # When compiling .get(func), PyTorch 2.7 can miss changes to func
-        # and run the wrong operation's handler. Indexing keeps that check.
         if func in cls.HANDLED_FUNCTIONS:
             return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
