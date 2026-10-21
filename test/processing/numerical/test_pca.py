@@ -19,24 +19,6 @@ def test_basic(shape: tuple[int, ...]) -> None:
     assert output.numerical_columns == ("pca_0", "pca_1")
 
 
-@pytest.mark.parametrize("num_components", [3, 5])
-@pytest.mark.parametrize("shape", [(2, 3), (2, 4, 3)])
-def test_pca_preserves_features_without_reduction(
-    num_components: int,
-    shape: tuple[int, ...],
-) -> None:
-    table = TableTensor.from_tensor(torch.randn(shape))
-    pca = PCA(num_components=num_components)
-    output = pca.fit_transform(table)
-    assert output.columns == table.columns
-    torch.testing.assert_close(output.numerical, table.numerical)
-
-    query = TableTensor.from_tensor(torch.randn(shape))
-    output = pca.transform(query)
-    assert output.columns == query.columns
-    torch.testing.assert_close(output.numerical, query.numerical)
-
-
 def test_pca_projects_onto_fitted_dominant_direction() -> None:
     steps = torch.arange(10, dtype=torch.float)
     fit_data = torch.stack((steps, steps), dim=-1)

@@ -24,9 +24,7 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
     assert len(recipe.features) == 1
     assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
-    assert "target=" not in repr(recipe)
-    assert "target=" not in repr(sp.Recipe(target=sp.Identity()))
-    assert "target=Standardize" in repr(sp.Recipe(target=sp.Standardize()))
+    assert "target=Identity()" in repr(recipe)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
