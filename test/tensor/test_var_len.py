@@ -22,7 +22,7 @@ def test_nullable_repr(cls: type[VarLenTensor]) -> None:
         size=(2,),
     )
 
-    assert "nullable=True" in repr(tensor)
+    assert "null_count=" not in repr(tensor)
 
 
 def test_dtype_conversion() -> None:

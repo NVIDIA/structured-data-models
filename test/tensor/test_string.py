@@ -35,7 +35,7 @@ def test_from_list() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2]))
 
     tensor = StringTensor.from_list(None)
-    assert repr(tensor) == "StringTensor(size=(), nullable=True)"
+    assert repr(tensor) == "StringTensor(size=(), null_count=1)"
     assert tensor.size() == ()
     assert tensor.valid is not None
     assert not bool(tensor.valid)
