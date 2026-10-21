@@ -44,7 +44,7 @@ jobs:
         env:
           FULL_TEST: ${{ ((github.event_name == 'push' && github.ref_name == 'main') || contains(github.event.pull_request.labels.*.name, 'ci-full-test')) && '1' || '0' }}
         run: |
-          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
+          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10 --junitxml=junit.xml
 
       - name: Upload coverage
         if: ${{ runner.os == 'Linux' }}
@@ -52,3 +52,9 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3  # v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
