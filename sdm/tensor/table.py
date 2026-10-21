@@ -2002,7 +2002,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
     blocks: dict[Stype, Tensor] = {}
     for stype, _ in TableTensor.items(ref):
-        block_list = [tensor.blocks[stype] for tensor in tensors]
+        block_list = [getattr(tensor, stype.value) for tensor in tensors]
         if is_column_dim:
             # Skip empty blocks so their dtypes cannot promote the others,
             # but keep one so that an all-empty block retains its dtype.
@@ -2025,7 +2025,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         }
 
     return ref.__class__(
-        columns=cast(dict[StypeLike, tuple[str, ...]], columns),
+        columns=cast("dict[StypeLike, tuple[str, ...]]", columns),
         **blocks,
     )
 
