@@ -14,8 +14,7 @@ class PCA(Processor):
     r"""Project numerical columns onto their principal components.
 
     Args:
-        num_components: Number of principal components to keep. Numerical
-            columns are unchanged when their count is at most this value.
+        num_components: Number of principal components to keep.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -45,11 +44,7 @@ class PCA(Processor):
             table.numerical - self.mean,
             full_matrices=False,
         )
-        num_components = min(
-            self.num_components,
-            table.numerical.size(-2),
-            table.numerical.size(-1),
-        )
+        num_components = min(self.num_components, table.numerical.size(-2))
         self._set_buffer(
             name="components",
             value=vh[..., :num_components, :].transpose(-2, -1),
