@@ -45,39 +45,6 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
-def _make_categorical_subclass(
-    cls: type[CategoricalTensor],
-    code: Tensor,
-    categories: tuple[Tensor, ...],
-) -> CategoricalTensor:
-    # Initialize all leaves before Dynamo observes the wrapper.
-    out = Tensor._make_wrapper_subclass(
-        cls=cls,
-        size=code.size(),
-        strides=code.stride(),
-        storage_offset=code.storage_offset(),
-        dtype=code.dtype,
-        device=code.device,
-        requires_grad=False,
-    )
-
-    out._code = code
-    out._categories = categories
-    for i, category in enumerate(out._categories):
-        setattr(out, f"_category_{i}", category)
-
-    return out
-
-
-@torch.compiler.allow_in_graph
-def _make_categorical(
-    code: Tensor,
-    categories: tuple[Tensor, ...],
-) -> CategoricalTensor:
-    # Keep validation and non-tensor state outside this opaque factory.
-    return _make_categorical_subclass(CategoricalTensor, code, categories)
-
-
 class CategoricalTensor(Tensor):
     r"""A :class:`torch.Tensor` for categorical columns.
 
@@ -154,10 +121,38 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
-        categories = tuple(categories)
-        if cls is CategoricalTensor:
-            return cast(Self, _make_categorical(code, categories))
-        return cast(Self, _make_categorical_subclass(cls, code, categories))
+        return CategoricalTensor._make(
+            code=code,
+            categories=tuple(categories),
+            cls=None if cls is CategoricalTensor else cls,
+        )
+
+    # Keep construction together so torch.compile cannot inspect it midway.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make(
+        code: Tensor,
+        categories: tuple[Tensor, ...],
+        cls: type[CategoricalTensor] | None = None,
+    ) -> CategoricalTensor:
+        if cls is None:
+            cls = CategoricalTensor
+        out = Tensor._make_wrapper_subclass(
+            cls=cls,
+            size=code.size(),
+            strides=code.stride(),
+            storage_offset=code.storage_offset(),
+            dtype=code.dtype,
+            device=code.device,
+            requires_grad=False,
+        )
+
+        out._code = code
+        out._categories = categories
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
+
+        return out
 
     @classmethod
     def from_arrow(
