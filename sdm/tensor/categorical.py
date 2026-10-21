@@ -121,15 +121,15 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
-        return CategoricalTensor._make_categorical(
+        return CategoricalTensor._make_categorical_tensor(
             code=code,
             categories=tuple(categories),
         )
 
-    # Keep construction together so torch.compile cannot inspect it midway.
+    # Avoid Dynamo reading _code before construction has finished.
     @staticmethod
     @torch.compiler.allow_in_graph
-    def _make_categorical(
+    def _make_categorical_tensor(
         code: Tensor,
         categories: tuple[Tensor, ...],
     ) -> CategoricalTensor:
