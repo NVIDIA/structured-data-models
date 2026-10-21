@@ -860,7 +860,7 @@ class TableTensor(Tensor):
 
     @property
     def column_groups(self) -> tuple[tuple[Stype, tuple[str, ...]], ...]:
-        r"""Return immutable pairs of semantic types and column names.
+        r"""Return column names grouped by semantic type as an immutable tuple.
 
         Pairs follow ``columns`` iteration order and include types with no
         columns.
