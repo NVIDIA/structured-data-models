@@ -37,13 +37,7 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 
 - Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
 - PR metadata should describe the code change only.
-- Follow `.github/PULL_REQUEST_TEMPLATE/default.md` when writing a PR body. Keep its headings, fill each section, and delete its HTML comments.
-- Write `# Summary` for a human in at most two sentences. This is a hard limit: no third sentence, no list, no code block, no nested detail.
-- Keep `# Description of the change` and `# Validation` concise and descriptive. Include only what a reviewer needs to assess the change; remove redundant details.
-- Never enumerate the change file by file, symbol by symbol, or commit by commit in those three sections.
-- Under `# Validation`, state only what CI does not already cover, such as manual verification or benchmark numbers. Do not restate lint, type-check, or unit-test status.
-- Put any remaining detail in the collapsed `<details>` block at the end, and delete that block when there is nothing to put in it.
-- Do not end a PR description with an attribution footer, badge, or emoji signature.
+- Follow `.github/PULL_REQUEST_TEMPLATE/default.md` when writing a PR body.
 
 # Markdown Style
 
