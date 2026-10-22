@@ -330,12 +330,13 @@ In general, using shift offsets of `(0, 1, 3, ..., 2**n - 1)`, which form groups
 In practice, the TabICL authors found no major performance benefit from groups larger than 3, so we'll default to `(0, 1, 3)`.
 
 After grouping, we apply a shared linear transformation that maps all groups to a fixed embedding dimension, ready for the next layer.
-This generalizes the cell embedding of `NanoTabICL` from single columns to groups of columns, so using it amounts to replacing `self.cell_embedding(x.unsqueeze(-1))` in `NanoTabICL` with a `FeatureGrouping(embedding_dim=channels)` applied to `x`.
+This generalizes the cell embedding of `NanoTabICL` from single columns to groups of columns.
 
 Tensor dimension key:
 
 - `R`: the number of rows.
 - `C`: the number of columns.
+- `G`: the number of columns per group, i.e. `len(shift_pattern)`.
 - `d`: the embedding dimension.
 
 ```python
@@ -352,15 +353,18 @@ class FeatureGrouping(nn.Module):
         self.lin = nn.Linear(len(shift_pattern), embedding_dim)
 
     def forward(self, x: Tensor) -> Tensor:
-        assert len(x.shape) == 2  # (R, C)
-
-        # accumulate into (R, C, #offsets)
-        groups = torch.stack(
-            [x.roll(offset, dims=1) for offset in self.shift_pattern],
+        # x: (R, C, 1)
+        groups = torch.cat(
+            [x.roll(-offset, dims=1) for offset in self.shift_pattern],
             dim=-1,
-        )
-
+        )  # (R, C, G)
         return self.lin(groups)  # (R, C, d)
+```
+
+To use it, replace the cell embedding in `NanoTabICL.__init__`:
+
+```python
+self.cell_embedding = FeatureGrouping(embedding_dim=channels)
 ```
 
 ### QASSMax
