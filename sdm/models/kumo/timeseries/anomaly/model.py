@@ -62,8 +62,6 @@ class KumoAnomaly(Model):
     ) -> None:
         super().__init__()
 
-        # Build on the target device, since the checkpoint does not contain
-        # the non-persistent sinusoidal lookup of the step embedding:
         self.model = _KumoAnomaly(device=device)
 
         if pretrained:
