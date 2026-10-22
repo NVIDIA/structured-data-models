@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Sequence
 from typing import ClassVar
 
@@ -12,9 +13,11 @@ import torch
 from torch import Tensor
 
 from sdm import Recipe, Stype, TableTensor
+from sdm._inference import inference_mode
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
+from sdm.processing.execution import MemberContext, RecipeExecution
 
 
 class KumoAnomaly(Model):
@@ -83,14 +86,14 @@ class KumoAnomaly(Model):
 
     def forward(
         self,
-        x: Tensor | TableTensor,
+        x: Tensor | TableTensor,  # [ ..., R, D]
         *,
         recipe: Recipe | None = None,
         num_samples: int = 30,
         num_steps: int = 20,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:
+    ) -> TableTensor:  # [..., R, 1]
         r"""The forward pass.
 
         Args:
@@ -111,7 +114,62 @@ class KumoAnomaly(Model):
             absolute reconstruction error across preprocessed features at each
             time step.
         """
-        raise NotImplementedError
+        callbacks = () if callbacks is None else callbacks
+        requires_grad = self.training
+        requires_grad |= any(callback.requires_grad for callback in callbacks)
+
+        recipe_execution = RecipeExecution(
+            self.default_recipe() if recipe is None else copy.deepcopy(recipe)
+        )
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode("no_grad" if requires_grad else "inference"),
+        ):
+            context = recipe_execution.fit_transform(
+                x=x,
+                y=None,
+                related_tables=None,
+                num_members=1,
+                generator=generator,
+            )[0]
+
+        for callback in callbacks:
+            context = MemberContext(
+                *callback.on_context_preprocessing_end(
+                    model=self,
+                    x=context.x,
+                    y=context.y,
+                    x_context_only=context.x_context_only,
+                    related_tables=context.related_tables,
+                ),
+                input_stypes=context.input_stypes,
+            )
+
+        self._validate_context(
+            x=context.x,
+            y=context.y,
+            x_context_only=context.x_context_only,
+            related_tables=context.related_tables,
+        )
+
+        with inference_mode("grad" if requires_grad else "inference"):
+            out = self.model(
+                context.x.numerical,
+                num_samples=num_samples,
+                num_steps=num_steps,
+                generator=generator,
+            )
+
+            for callback in callbacks:
+                out = callback.on_model_forward_end(self, out)
+
+            out = out.to(context.x.numerical)
+
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode("grad" if requires_grad else "inference"),
+        ):
+            return recipe_execution.transform_output([out])[0]
 
 
 class _KumoAnomaly(torch.nn.Module):
@@ -121,3 +179,12 @@ class _KumoAnomaly(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+
+    def forward(
+        self,
+        x: Tensor,  # [..., R, C]
+        num_samples: int,
+        num_steps: int,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:  # [..., R, 1]
+        return x.mean(dim=-1, keepdim=True)

@@ -10,7 +10,7 @@ from sdm.processing.numerical._stats import _isfinite
 
 
 class MinMaxScale(Processor, InvertibleMixin):
-    """Scale each numerical column by its fitted minimum and range.
+    """Scale each numerical column by its fitted min-max range.
 
     NaN and infinite values are ignored when fitting statistics and preserved
     during the transform.
