@@ -554,12 +554,13 @@ class VarLenTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        # Compare layout offsets before the unrelated payload length.
+        # Check offsets first to avoid a torch.compile shape-check failure
+        # when comparing the element count with the data buffer length.
         attrs = ["_offset", "_data"]
         if self._valid is not None:
             attrs.append("_valid")
-        # Track logical shape separately from the backing buffer lengths.
-        # torch.compile can otherwise rebuild a vocabulary with the wrong size.
+        # Include shape and stride in compiler metadata; otherwise repeated
+        # compiled calls can reconstruct a vocabulary with the wrong size.
         ctx = (
             self.__class__,
             self.storage_offset(),
