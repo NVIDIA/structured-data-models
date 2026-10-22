@@ -32,6 +32,7 @@ tensor
 icl
 processing
 nim
+nanotabicl
 ```
 
 ```{toctree}
