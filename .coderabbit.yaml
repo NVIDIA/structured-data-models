@@ -65,6 +65,7 @@ reviews:
 
   slop_detection:
     enabled: true
+    include_all_authors: true
 
   finishing_touches:
     docstrings:
