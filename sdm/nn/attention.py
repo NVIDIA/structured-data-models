@@ -812,11 +812,7 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
 
-        if (
-            out is not None
-            and torch.compiler.is_compiling()
-            and not out.is_contiguous()
-        ):
+        if out is not None and torch.compiler.is_compiling():
             tmp = (attn_out + query).to(out.dtype)
             if self.mlp is not None:
                 tmp += self.mlp(tmp)
