@@ -502,6 +502,8 @@ class VarLenTensor(Tensor):
     @property
     def _logical_storage_offset(self) -> int:
         """Expose the logical view offset as traceable Python metadata."""
+        # torch.compile can read this integer as an attribute, but rejects
+        # the direct storage_offset() call on this tensor subclass.
         return cast(int, self.storage_offset())
 
     @property
