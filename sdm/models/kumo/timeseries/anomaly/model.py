@@ -18,6 +18,7 @@ from sdm import Recipe, Stype, TableTensor
 from sdm._inference import inference_mode
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.timeseries.anomaly.ckpt import remap_ckpt
 from sdm.models.kumo.timeseries.anomaly.denoiser import DiffusionDenoiser
 from sdm.models.kumo.timeseries.anomaly.embedding import SideEmbedding
 from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
@@ -106,7 +107,7 @@ class KumoAnomaly(Model):
         Args:
             x: The feature tensor with shape ``[..., R, D]`` with ``R`` rows
                 and ``D`` columns.
-            recipe: The custom recipe for pre-processing.
+            recipe: The custom recipe for pre- and post-processing.
             num_samples: The number of reconstruction samples per complementary
                 masking strategy. Reconstructions are combined using the
                 sample median.
