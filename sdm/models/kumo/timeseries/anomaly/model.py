@@ -124,9 +124,6 @@ class KumoAnomaly(Model):
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
-        param = next(self.parameters())
-        x = x.to(param.device)
-
         recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
@@ -152,16 +149,10 @@ class KumoAnomaly(Model):
             )
 
         self._validate_feature_stype(query.x)
-        if query.x.numerical.size(-1) > self.model.num_features:
-            raise ValueError(
-                f"{self.__class__.__name__!r} supports at most "
-                f"{self.model.num_features} features after pre-processing "
-                f"(got {query.x.numerical.size(-1)})"
-            )
 
         with inference_mode("grad" if requires_grad else "inference"):
             out = self.model(
-                x=query.x.numerical.to(param.dtype),
+                x=query.x.numerical,
                 num_samples=num_samples,
                 num_steps=num_steps,
                 generator=generator,
@@ -181,9 +172,7 @@ class KumoAnomaly(Model):
             torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            out = recipe_execution.transform_output([out])
-            # Output reducers may already have removed the single-member axis.
-            return out[0] if out.ndim == query.x.ndim + 1 else out
+            return recipe_execution.transform_output([out])[0]
 
 
 class _KumoAnomaly(torch.nn.Module):
@@ -235,6 +224,13 @@ class _KumoAnomaly(torch.nn.Module):
         num_steps: int,
         generator: torch.Generator | None,
     ) -> Tensor:  # [..., R]
+
+        if x.size(-1) > self.num_features:
+            raise ValueError(
+                f"{self.__class__.__name__!r} supports at most "
+                f"{self.num_features} features after pre-processing "
+                f"(got {x.size(-1)})"
+            )
 
         *size, length, features = x.size()
         x = x.reshape(-1, length, features)
