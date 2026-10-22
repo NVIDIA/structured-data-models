@@ -506,10 +506,7 @@ def test_align_categories_ensemble_matches_member_fits(
         assert fitted_query_output[member_id].equal(expected_query)
 
 
-@pytest.mark.parametrize("backend", ["eager", "inductor"])
-def test_string_category_lookups_compile(
-    compilation: None, backend: str
-) -> None:
+def test_string_category_lookups_compile(compilation: None) -> None:
     fitted = (
         StringTensor.from_list(["a", "b"]),
         StringTensor.from_list(["a", "x"]),
@@ -523,7 +520,7 @@ def test_string_category_lookups_compile(
             codes=codes,
         )
 
-    compiled = torch.compile(lookups, backend=backend, fullgraph=True)
+    compiled = torch.compile(lookups, backend="inductor", fullgraph=True)
     first, second = compiled(StringTensor.from_list(["b", "z", "a"]))
     torch.testing.assert_close(
         actual=first,

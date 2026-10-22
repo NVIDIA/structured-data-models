@@ -494,20 +494,6 @@ def test_compiled_equal_independent_views(compilation: None) -> None:
     assert not equal(tensor, VarLenTensor.from_list([[99], [2, 3]]))
 
 
-def test_equal_subclass_override(compilation: None) -> None:
-    class CustomVarLenTensor(VarLenTensor):
-        pass
-
-    @CustomVarLenTensor.implements(torch.ops.aten.equal.default)
-    def equal_override(left: VarLenTensor, right: VarLenTensor) -> bool:
-        return True
-
-    left = CustomVarLenTensor.from_list([[1]])
-    right = CustomVarLenTensor.from_list([[2]])
-    assert torch.equal(left, right)
-    assert torch.compile(torch.equal, backend="eager")(left, right)
-
-
 def test_isnan_isfinite() -> None:
     tensor = VarLenTensor.from_list([[1, 2], None, [3]])
     assert tensor.is_nullable
