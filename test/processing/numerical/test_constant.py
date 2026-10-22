@@ -142,3 +142,16 @@ def test_unique_filter_nan(device: torch.device) -> None:
 
     assert output.numerical_columns == ("2",)
     torch.testing.assert_close(output.numerical, data[:, [2]], equal_nan=True)
+
+
+def test_compile_refit_empty_schema() -> None:
+    processor = DropConstantColumns()
+    fit_transform = torch.compile(processor.fit_transform, backend="eager")
+    for data in (
+        torch.ones(3, 3),
+        torch.arange(9, dtype=torch.float32).reshape(3, 3),
+        torch.ones(3, 3),
+    ):
+        table = TableTensor.from_tensor(data)
+        expected = DropConstantColumns().fit_transform(table)
+        assert fit_transform(table).equal(expected)

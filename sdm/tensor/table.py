@@ -338,8 +338,9 @@ class TableTensor(Tensor):
         if len(column_names) != len(set(column_names)):
             raise ValueError("Expected column names to be unique")
 
+        # Keep enum objects out of captured graph arguments.
         return TableTensor._make_table_tensor(
-            columns=columns,
+            columns={str(stype): names for stype, names in columns.items()},
             numerical=numerical,
             categorical=categorical,
             datetime=datetime,
@@ -352,7 +353,7 @@ class TableTensor(Tensor):
     @staticmethod
     @torch.compiler.allow_in_graph
     def _make_table_tensor(
-        columns: dict[Stype, tuple[str, ...]],
+        columns: dict[str, tuple[str, ...]],
         numerical: Tensor,
         categorical: CategoricalTensor,
         datetime: Tensor,
@@ -361,9 +362,12 @@ class TableTensor(Tensor):
         cls: type[TableTensor] | None = None,
     ) -> TableTensor:
         cls = TableTensor if cls is None else cls
+        stype_columns = {
+            Stype(stype): names for stype, names in columns.items()
+        }
         column_to_loc = {
             name: (stype, i)
-            for stype, names in columns.items()
+            for stype, names in stype_columns.items()
             for i, name in enumerate(names)
         }
         out = Tensor._make_wrapper_subclass(
@@ -378,7 +382,7 @@ class TableTensor(Tensor):
         out._datetime = datetime
         out._text = text
         out._id = id
-        out._columns = columns
+        out._columns = stype_columns
         out._column_to_loc = column_to_loc
         return out
 
