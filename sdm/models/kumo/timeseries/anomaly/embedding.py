@@ -87,7 +87,7 @@ class SideEmbedding(torch.nn.Module):
     before conversion to the parameter dtype.
 
     Args:
-        num_features: Number of features in checkpoint order.
+        in_channels: Number of features in checkpoint order.
         time_channels: Even sinusoidal time embedding width, at least two.
         feature_channels: Learned feature embedding width.
         is_unconditional: Append the conditioning mask as the last channel.
@@ -97,7 +97,7 @@ class SideEmbedding(torch.nn.Module):
 
     def __init__(
         self,
-        num_features: int,
+        in_channels: int,
         time_channels: int = 128,
         feature_channels: int = 16,
         is_unconditional: bool = False,
@@ -109,7 +109,7 @@ class SideEmbedding(torch.nn.Module):
         self.time_channels = time_channels
         self.is_unconditional = is_unconditional
         self.embed_layer = torch.nn.Embedding(
-            num_embeddings=num_features,
+            num_embeddings=in_channels,
             embedding_dim=feature_channels,
             **factory_kwargs,
         )
@@ -129,7 +129,7 @@ class SideEmbedding(torch.nn.Module):
             time: Model time coordinates with shape ``[B, L]``. Coordinates
                 are used as supplied, with no normalization or resampling.
             mask: Conditioning mask with shape ``[B, K, L]`` in checkpoint
-                feature order, where ``K`` equals ``num_features``. One marks
+                feature order, where ``K`` equals ``in_channels``. One marks
                 an observed value used for conditioning; zero marks a target.
                 Both inputs must be on the module's device.
 

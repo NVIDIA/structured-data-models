@@ -19,7 +19,7 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             deviation before detrending.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(self, threshold: float | None = None) -> None:

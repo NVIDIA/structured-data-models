@@ -7,7 +7,6 @@ from sdm import (
     CategoricalTensor,
     ColumnarTensor,
     StringTensor,
-    Stype,
     TableTensor,
 )
 from sdm.processing import ToNumerical
@@ -34,13 +33,13 @@ def test_to_numerical_converts_categorical_stype() -> None:
     output = ToNumerical().transform(table)
 
     assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == (
+    assert output.numerical_columns == (
         "num_0",
         "num_1",
         "cat_0",
         "cat_1",
     )
-    assert output.columns[Stype.categorical] == ()
+    assert output.categorical_columns == ()
     assert torch.equal(output.numerical[..., :2], table.numerical)
     assert torch.equal(output.numerical[..., 2:], categorical_ids)
     assert output.categorical.size(-1) == 0
@@ -60,8 +59,8 @@ def test_to_numerical_preserves_unhandled_stype() -> None:
 
     output = ToNumerical().transform(table)
 
-    assert output.columns[Stype.numerical] == ("num_0",)
-    assert output.columns[Stype.id] == ("id_0",)
+    assert output.numerical_columns == ("num_0",)
+    assert output.id_columns == ("id_0",)
     assert torch.equal(output.id, table.id)
 
 
@@ -76,8 +75,8 @@ def test_to_numerical_converts_categorical_only_table() -> None:
     output = ToNumerical().transform(table)
 
     assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == ("cat_0",)
-    assert output.columns[Stype.categorical] == ()
+    assert output.numerical_columns == ("cat_0",)
+    assert output.categorical_columns == ()
     assert torch.equal(
         output.numerical,
         table.categorical.code.to(table.numerical.dtype),

@@ -5,8 +5,8 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.models import TabICLv2
+from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm.models import KumoTabular, TabICLv2
 from sdm.testing import withCUDA
 
 
@@ -25,6 +25,16 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
     assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
     assert "target=Identity()" in repr(recipe)
+
+
+def test_recipe_initialization_compiles(compilation: None) -> None:
+    def initialize(value: torch.Tensor) -> torch.Tensor:
+        recipe = KumoTabular.default_recipe()
+        return value + recipe.features.requires_fit
+
+    compiled = torch.compile(initialize, backend="eager", fullgraph=True)
+    value = torch.ones(1)
+    torch.testing.assert_close(compiled(value), value + 1)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
@@ -108,7 +118,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert model_features.size() == features.size()
     assert model_features.numerical.device == device
     assert model_features.categorical.size(-1) == 0
-    assert set(model_features.columns[Stype.numerical]) == {
+    assert set(model_features.numerical_columns) == {
         "num_0",
         "num_1",
         "cat_0",

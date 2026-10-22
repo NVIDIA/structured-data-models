@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm._memory import split_size
@@ -31,8 +32,11 @@ class RankGaussian(Processor):
             ``None``, retain all fitted values.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
+
+    _values: Tensor
+    _probabilities: Tensor
 
     def __init__(self, *, max_knots: int | None = None) -> None:
         super().__init__()
@@ -131,8 +135,8 @@ class RankGaussian(Processor):
             )
 
         values, probabilities = zip(*knots, strict=True)
-        self._values = torch.cat(values, dim=-2)
-        self._probabilities = torch.cat(probabilities, dim=-2)
+        self._set_buffer("_values", torch.cat(values, dim=-2))
+        self._set_buffer("_probabilities", torch.cat(probabilities, dim=-2))
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
