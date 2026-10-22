@@ -130,7 +130,7 @@ class CellEmbedding(torch.nn.Module):
         ).sum(dim=-2)  # [..., 1, C, D]
         bias = bias.to(dtype)
 
-        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+        if torch.is_grad_enabled():
             return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         if batch_size_limit == "auto":
