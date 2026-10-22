@@ -186,23 +186,15 @@ class _KumoAnomaly(torch.nn.Module):
         num_heads: int = 8,
         embedding_channels: int = 256,
         num_steps: int = 500,
-        window_size: int = 100,
-        num_blocks: int = 4,
-        batch_size: int = 32,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
         self.in_channels = in_channels
-        self.num_steps = num_steps
-        self.window_size = window_size
-        self.num_blocks = num_blocks
-        self.batch_size = batch_size
 
         self.side_embedding = SideEmbedding(
-            num_features=in_channels,
+            in_channels=in_channels,
             time_channels=time_channels,
             feature_channels=feature_channels,
             **factory_kwargs,
@@ -222,27 +214,27 @@ class _KumoAnomaly(torch.nn.Module):
         x: Tensor,  # [..., R, D]
         num_samples: int,
         num_steps: int,
-        generator: torch.Generator | None,
+        window_size: int = 100,
+        num_blocks: int = 4,
+        batch_size: int = 32,
+        generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R]
 
-        if x.size(-1) > self.num_features:
+        if x.size(-1) > self.in_channels:
             raise ValueError(
-                f"{self.__class__.__name__!r} supports at most "
-                f"{self.num_features} features after pre-processing "
-                f"(got {x.size(-1)})"
+                f"'KumoAnomaly' supports at most {self.in_channels} columns "
+                f"after pre-processing (got {x.size(-1)})"
             )
 
-        *size, length, features = x.size()
-        x = x.reshape(-1, length, features)
-        x = F.pad(x, (0, self.num_features - features))
+        *B, R, D = x.size()
+        x = F.pad(x.reshape(-1, R, D), (0, self.in_channels - D))
 
-        # Pad the last window by repeating the last row:
-        padding = -length % self.window_size
-        x = torch.cat([x, x[:, -1:].expand(-1, padding, -1)], dim=1)
-        windows = x.reshape(-1, self.window_size, self.num_features)
+        # Pad last window by repeating last row:
+        x = torch.cat([x, x[:, -1:].expand(-1, -R % window_size, -1)], dim=-2)
+        window = x.reshape(-1, window_size, self.in_channels)
 
         schedule = DiffusionSchedule(
-            num_steps=self.num_steps,
+            num_steps=self.denoiser.num_steps,
             beta_start=0.0001,
             beta_end=0.01,
             schedule="linear",
@@ -252,35 +244,44 @@ class _KumoAnomaly(torch.nn.Module):
 
         out = torch.cat(
             [
-                self.reconstruct(batch, sampler, num_samples, generator)
-                for batch in windows.split(self.batch_size)
-            ]
+                self.reconstruct(
+                    x=_x,
+                    sampler=sampler,
+                    num_samples=num_samples,
+                    num_blocks=num_blocks,
+                    generator=generator,
+                )
+                for _x in window.split(batch_size)
+            ],
+            dim=0,
         )
-        out = out.reshape(x.size())[:, :length, :features]
-        out = (out - x[:, :length, :features]).abs().mean(dim=-1)
-        return out.reshape(*size, length)
+
+        out = out.view(x.size())[:, :R, :D]
+        out = (out - x[:, :R, :D]).abs().mean(dim=-1)
+        return out.view(*B, R)
 
     def reconstruct(
         self,
-        x: Tensor,  # [B, L, K]
+        x: Tensor,  # [B, R, D]
         sampler: DPMSolver,
         num_samples: int,
+        num_blocks: int,
         generator: torch.Generator | None,
-    ) -> Tensor:  # [B, L, K]
+    ) -> Tensor:  # [B, R, D]
 
-        x = x.transpose(1, 2)  # [B, K, L]
-        batch, _, length = x.size()
+        B, R, _ = x.size()
+        x = x.transpose(1, 2)  # [B, D, R]
         mean = x.mean(dim=(1, 2), keepdim=True)
         std = x.std(dim=(1, 2), keepdim=True) + 1e-5
         x = ((x - mean) / std).clamp(-10, 10)
 
-        time = torch.arange(length, device=x.device).expand(batch, -1)
-        blocks = time // (length // self.num_blocks)
+        time = torch.arange(R, device=x.device).expand(B, -1)
+        blocks = time // (R // num_blocks)
 
         out = x.new_zeros((num_samples, *x.size()))
         for strategy in range(2):
             mask = ((blocks % 2) == strategy).to(x.dtype)
-            mask = mask.unsqueeze(1).expand_as(x)  # [B, K, L]
+            mask = mask.unsqueeze(1).expand_as(x)  # [B, D, R]
             predict_noise = partial(
                 self.predict_noise,
                 cond=mask * x,
@@ -297,14 +298,14 @@ class _KumoAnomaly(torch.nn.Module):
 
     def predict_noise(
         self,
-        x: Tensor,  # [B, K, L]
+        x: Tensor,  # [B, D, R]
         step: Tensor,  # [1]
         *,
-        cond: Tensor,  # [B, K, L]
-        target_mask: Tensor,  # [B, K, L]
-        side_info: Tensor,  # [B, S, K, L]
+        cond: Tensor,  # [B, D, R]
+        target_mask: Tensor,  # [B, D, R]
+        side_info: Tensor,  # [B, S, D, R]
         strategy: Tensor,  # [1]
-    ) -> Tensor:  # [B, K, L]
+    ) -> Tensor:  # [B, D, R]
         return self.denoiser(
             x=torch.stack([cond, target_mask * x], dim=1),
             side_info=side_info,
