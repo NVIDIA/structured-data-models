@@ -554,10 +554,18 @@ class VarLenTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_data", "_offset"]
+        # Compare layout offsets before the unrelated payload length.
+        attrs = ["_offset", "_data"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
+        # Track logical shape separately from the backing buffer lengths.
+        # torch.compile can otherwise rebuild a vocabulary with the wrong size.
+        ctx = (
+            self.__class__,
+            self.storage_offset(),
+            tuple(self.size()),
+            tuple(self.stride()),
+        )
         return attrs, ctx
 
     @staticmethod
@@ -567,7 +575,7 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
-        cls, storage_offset = ctx
+        cls, storage_offset, _, _ = ctx
         return cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
