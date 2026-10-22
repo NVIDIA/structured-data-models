@@ -616,4 +616,6 @@ def _string_category_lookup_fake(
     fitted_layout: list[int],
     codes: Tensor,
 ) -> Tensor:
+    # E.g. inputs ["red", "blue", "unknown"], fitted ["blue", "red"]:
+    # real lookup [1, 0, -1]; the fake result only describes its shape (3,).
     return codes.new_empty((sum(input_layout[::3]),))
