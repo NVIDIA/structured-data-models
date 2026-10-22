@@ -921,7 +921,7 @@ class TableTensor(Tensor):
     def active_stypes(self) -> frozenset[Stype]:
         r"""Semantic types with at least one column."""
         return frozenset(
-            stype for stype, tensor in self.items() if tensor.size(-1) > 0
+            stype for stype, columns in self.column_groups if columns
         )
 
     @property

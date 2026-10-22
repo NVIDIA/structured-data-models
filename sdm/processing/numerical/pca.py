@@ -63,3 +63,9 @@ class PCA(Processor):
             TableTensor,
             torch.cat([table.drop_stypes(Stype.numerical), out], dim=-1),
         )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"num_components={self.num_components})"
+        )

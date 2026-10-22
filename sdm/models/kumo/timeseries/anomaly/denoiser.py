@@ -29,6 +29,7 @@ class DiffusionDenoiser(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.num_steps = num_steps
 
         self.diffusion_embedding = DiffusionEmbedding(
             num_steps=num_steps,

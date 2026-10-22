@@ -8,6 +8,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=sp.StypeDispatch(
             numerical=[
+                sp.ImputeMean(),
                 sp.PCA(num_components=40),
                 sp.MinMaxScale(),
             ]
