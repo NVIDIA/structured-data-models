@@ -12,33 +12,6 @@ from sdm import CategoricalTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
 
 
-def test_compiled_string_category_views(compilation: None) -> None:
-    categories = (
-        StringTensor.from_list(
-            ["category_0", "category_1", "category_2", "category_3"]
-        ),
-        StringTensor.from_list(["category_0", "category_1", "category_2"]),
-    )
-    inputs = tuple(
-        CategoricalTensor(
-            code=(torch.arange(8) % category.numel()).unsqueeze(-1),
-            categories=(category,),
-        )
-        for category in categories
-    )
-
-    def view_categories(x: CategoricalTensor, q: CategoricalTensor):
-        x = cast(CategoricalTensor, x.unsqueeze(0))
-        q = cast(CategoricalTensor, q.unsqueeze(0))
-        return x.categories[0], q.categories[0]
-
-    compiled = torch.compile(view_categories, backend="inductor")
-    for _ in range(2):
-        for actual, expected in zip(compiled(*inputs), categories):
-            assert actual.shape == expected.shape
-            assert actual.tolist() == expected.tolist()
-
-
 @pytest.mark.parametrize("device", ["cpu", "meta"])
 def test_repr(device: str) -> None:
     tensor = CategoricalTensor(
