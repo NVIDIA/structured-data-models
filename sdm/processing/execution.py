@@ -45,14 +45,13 @@ class RecipeExecution:
             Mapping[str, tuple[tuple[int, int], ...]] | None
         ) = None
         self._num_estimators: int | None = None
-        self._num_members: int | None = None
         self._y_locations: tuple[tuple[int, int], ...] | None = None
 
     @property
     def num_members(self) -> int:
         r"""The number of fitted members."""
-        assert self._num_members is not None
-        return self._num_members
+        assert self._y_locations is not None
+        return len(self._y_locations)
 
     @overload
     def fit_transform(
@@ -91,34 +90,17 @@ class RecipeExecution:
         """Fit and transform context data."""
         self._num_estimators = num_members
 
-        inputs = _to_ensemble_table(x, num_members)
-        self._num_members = len(inputs)
-        self._y_locations = None
-        targets = (
-            None
-            if y is None
-            else _to_ensemble_table(y, num_members, expand=True)
-        )
-        if targets is not None:
-            self._num_members = len(targets)
+        # Transform target first to be able to resolve task type. Inverse
+        # target transforms require distinct member assignment:
+        series_processors: tuple[sp.SeriesEnsembleProcessor, ...] = ()
+        if y is not None:
+            y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
 
-        processors = (self.recipe.features,)
-        if targets is not None:
-            processors += (self.recipe.target,)
-        series_processors = tuple(
-            module
-            for processor in processors
-            for module in _iter_modules(processor)
-            if isinstance(module, sp.SeriesEnsembleProcessor)
-        )
-        for module in series_processors:
-            module._set_buffer(
-                name="_offset",
-                value=torch.zeros(
-                    size=(self.num_members,),
-                    dtype=torch.long,
-                    device=inputs[0].device,
-                ),
+            series_processors = tuple(
+                module
+                for processor in (self.recipe.features, self.recipe.target)
+                for module in _iter_modules(processor)
+                if isinstance(module, sp.SeriesEnsembleProcessor)
             )
             for module in series_processors:
                 module._set_buffer(
@@ -130,13 +112,10 @@ class RecipeExecution:
                     ),
                 )
 
-        # Transform target first to resolve task type and inversion layout.
-        if targets is not None:
-            targets = self.recipe.target.fit_transform_ensemble(
-                targets, generator=generator
+            y = self.recipe.target.fit_transform_ensemble(
+                y, generator=generator
             )
-            self._y_locations = targets._locations
-            self._num_members = len(targets)
+            self._y_locations = y._locations
 
             task_dispatchers = tuple(
                 module
@@ -145,22 +124,19 @@ class RecipeExecution:
                 if isinstance(module, sp.TaskDispatch)
             )
             if len(task_dispatchers) > 0:
-                if any(
-                    group.size(-1) != 1 for group in targets._iter_groups()
-                ):
+                if any(group.size(-1) != 1 for group in y._iter_groups()):
                     raise ValueError(
                         "Expected the transformed target to contain exactly "
                         "one column"
                     )
 
                 if all(
-                    group.numerical.size(-1) == 1
-                    for group in targets._iter_groups()
+                    group.numerical.size(-1) == 1 for group in y._iter_groups()
                 ):
                     task = "regression"
                 elif all(
                     group.categorical.size(-1) == 1
-                    for group in targets._iter_groups()
+                    for group in y._iter_groups()
                 ):
                     task = "classification"
                 else:
@@ -209,7 +185,7 @@ class RecipeExecution:
 
         x_context_only: EnsembleTable | None = None
         if context_only_columns:
-            assert targets is not None
+            assert y is not None
             if not isinstance(x, TableTensor):
                 x = TableTensor.from_tensor(cast(Tensor, x))
             context_only_columns = [str(col) for col in context_only_columns]
@@ -220,14 +196,9 @@ class RecipeExecution:
                 ),
                 generator=generator,
             )
-            if len(x_context_only) != self.num_members:
-                raise ValueError(
-                    "Expected inputs to map to the same number of "
-                    "ensemble members"
-                )
-            inputs = _to_ensemble_table(
-                x.drop_columns(context_only_columns), num_members
-            )
+            x = x.drop_columns(context_only_columns)
+
+        inputs = _to_ensemble_table(x, num_members)
         x: EnsembleTable = self.recipe.features.fit_transform_ensemble(
             inputs,
             generator=generator,
@@ -255,10 +226,10 @@ class RecipeExecution:
                     relationships=related_tables.relationships,
                     task_links=related_tables.task_links,
                 )
-            if targets is not None:
+            if y is not None:
                 member = MemberContext(
                     x=x[member_id],
-                    y=targets[member_id],
+                    y=y[member_id],
                     x_context_only=x_context_only[member_id]
                     if x_context_only is not None
                     else None,

@@ -178,7 +178,7 @@ class KumoAnomaly(Model):
 class _KumoAnomaly(torch.nn.Module):
     def __init__(
         self,
-        num_features: int = 40,
+        in_channels: int = 40,
         time_channels: int = 256,
         feature_channels: int = 64,
         channels: int = 128,
@@ -195,14 +195,14 @@ class _KumoAnomaly(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_features = num_features
+        self.in_channels = in_channels
         self.num_steps = num_steps
         self.window_size = window_size
         self.num_blocks = num_blocks
         self.batch_size = batch_size
 
         self.side_embedding = SideEmbedding(
-            num_features=num_features,
+            num_features=in_channels,
             time_channels=time_channels,
             feature_channels=feature_channels,
             **factory_kwargs,
