@@ -4,14 +4,44 @@
 # ruff: noqa: D101, D102
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm.nn import RMSNorm, TransformerBlock
+from sdm.nn import TransformerBlock
+from sdm.nn.attention import SDPA
+
+
+class RMSNorm(torch.nn.RMSNorm):
+    def forward(self, x: Tensor) -> Tensor:
+        variance = x.float().pow(2).mean(-1, keepdim=True)
+        x = x * torch.rsqrt(variance + cast(float, self.eps))
+        if self.weight.dtype in (torch.float16, torch.bfloat16):
+            x = x.to(self.weight.dtype)
+        return self.weight * x
+
+
+class Attention(SDPA):
+    def forward(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        *,
+        is_causal: bool = False,
+    ) -> Tensor:
+        assert seqused_key_value is None
+        assert not is_causal
+        query, key, value = (x.transpose(-3, -2) for x in (query, key, value))
+        scores = query @ key.transpose(-1, -2)
+        if attn_mask is not None:
+            scores += attn_mask
+        weights = scores.float().softmax(-1).to(scores.dtype)
+        return (weights @ value).transpose(-3, -2)
 
 
 class MLP(torch.nn.Module):
@@ -31,7 +61,19 @@ class MLP(torch.nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.norm(x)
-        x = F.gelu(self.wi_0(x), approximate="tanh") * self.wi_1(x)
+        hidden = self.wi_0(x)
+        activated = (
+            0.5
+            * hidden
+            * (
+                1
+                + (
+                    math.sqrt(2 / math.pi)
+                    * (hidden + 0.044715 * hidden.pow(3))
+                ).tanh()
+            )
+        )
+        x = activated * self.wi_1(x)
         return self.wo(x)
 
 
@@ -56,6 +98,7 @@ class KumoForecastTransformerBlock(TransformerBlock):
             bias=False,
             **factory_kwargs,
         )
+        self.attn.sdpa = Attention(num_heads, scale=1.0)
         self.hidden_channels = hidden_channels
         self.attn.out_lin.reset_parameters()
 

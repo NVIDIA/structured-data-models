@@ -134,13 +134,19 @@ def test_pipeline_passes_generator_to_steps() -> None:
     assert first.equal(second)
 
 
-def test_repr() -> None:
+@pytest.mark.parametrize("division_dtype", [None, torch.float64])
+def test_repr(division_dtype: torch.dtype | None) -> None:
+    suffix = (
+        "" if division_dtype is None else f", division_dtype={division_dtype}"
+    )
     assert repr(sp.Sequential()) == "Sequential()"
     assert repr(
-        sp.Sequential(sp.Standardize(), sp.PowerTransform())
-    ) == dedent("""\
+        sp.Sequential(
+            sp.Standardize(division_dtype=division_dtype), sp.PowerTransform()
+        )
+    ) == dedent(f"""\
         Sequential(
-          Standardize(eps=0.0),
+          Standardize(eps=0.0{suffix}),
           PowerTransform(),
         )""")
     assert repr(sp.Sequential(lambda table: table)) == dedent("""\

@@ -12,8 +12,8 @@ from torch.nn import Embedding, ModuleList
 
 from sdm.models.kumo.timeseries.forecast.block import (
     KumoForecastTransformerBlock,
+    RMSNorm,
 )
-from sdm.nn import RMSNorm
 
 
 class ICLBlock(torch.nn.Module):

@@ -7,6 +7,7 @@ from torch import Tensor
 
 def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
     out = {
+        "pe": ckpt["patch_embedding.position_embedding.pe"][0, :64].clone(),
         "lin.weight": ckpt["patch_embedding.value_embedding.weight"],
         "icl.relative_attention_bias.weight": ckpt[
             "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight"
@@ -46,14 +47,14 @@ def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
             ]
 
     if "cross_channel_attn.attn.in_proj_weight" in ckpt:
-        for old, new in (
-            ("attn.in_proj_weight", "block.attn.qkv_lin.weight"),
-            ("attn.in_proj_bias", "block.attn.qkv_lin.bias"),
-            ("attn.out_proj.weight", "block.attn.out_lin.weight"),
-            ("attn.out_proj.bias", "block.attn.out_lin.bias"),
-            ("norm.weight", "norm.weight"),
-            ("norm.bias", "norm.bias"),
+        for name in (
+            "attn.in_proj_weight",
+            "attn.in_proj_bias",
+            "attn.out_proj.weight",
+            "attn.out_proj.bias",
+            "norm.weight",
+            "norm.bias",
         ):
-            out["cross_channel." + new] = ckpt["cross_channel_attn." + old]
+            out["cross_channel." + name] = ckpt["cross_channel_attn." + name]
 
     return out

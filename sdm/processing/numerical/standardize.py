@@ -23,6 +23,8 @@ class Standardize(Processor, InvertibleMixin):
 
     Args:
         eps: Value added to each fitted standard deviation.
+        division_dtype: Optional arithmetic dtype for scaling, without changing
+            the output dtype.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -31,11 +33,14 @@ class Standardize(Processor, InvertibleMixin):
     mean: Tensor
     scale: Tensor
 
-    def __init__(self, *, eps: float = 0.0) -> None:
+    def __init__(
+        self, *, eps: float = 0.0, division_dtype: torch.dtype | None = None
+    ) -> None:
         super().__init__()
         if eps < 0:
             raise ValueError("epsilon must be non-negative.")
         self.eps = eps
+        self.division_dtype = division_dtype
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
@@ -79,7 +84,11 @@ class Standardize(Processor, InvertibleMixin):
             self.scale.add_(self.eps)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.mean).div_(self.scale)
+        numerical = table.numerical - self.mean
+        dtype = numerical.dtype
+        if self.division_dtype is not None:
+            numerical = numerical.to(self.division_dtype)
+        numerical = numerical.div_(self.scale).to(dtype)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
@@ -88,4 +97,7 @@ class Standardize(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:
-        return f"{' ' * indent}{self.__class__.__name__}(eps={self.eps})"
+        args = f"eps={self.eps}"
+        if self.division_dtype is not None:
+            args += f", division_dtype={self.division_dtype}"
+        return f"{' ' * indent}{self.__class__.__name__}({args})"

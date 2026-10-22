@@ -8,8 +8,6 @@ from typing import Any, Literal
 import torch
 from torch import Tensor
 
-from sdm.nn import TransformerBlock
-
 
 class CrossChannelAttention(torch.nn.Module):
     def __init__(
@@ -21,16 +19,12 @@ class CrossChannelAttention(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        self.block = TransformerBlock(
-            channels=channels,
-            num_query_heads=num_heads,
-            mlp=None,
+        self.attn = torch.nn.MultiheadAttention(
+            embed_dim=channels,
+            num_heads=num_heads,
+            batch_first=True,
             **factory_kwargs,
         )
-        torch.nn.init.xavier_uniform_(self.block.attn.qkv_lin.weight)
-        torch.nn.init.zeros_(self.block.attn.qkv_lin.bias)
-        self.block.attn.out_lin.reset_parameters()
-        torch.nn.init.zeros_(self.block.attn.out_lin.bias)
         self.norm = torch.nn.LayerNorm(channels, **factory_kwargs)
 
     def forward(
@@ -39,10 +33,14 @@ class CrossChannelAttention(torch.nn.Module):
         *,
         batch_size_limit: int | Literal["auto"] | None = "auto",
     ) -> Tensor:  # [..., C, N, D]
-        x = x.transpose(-3, -2)  # [..., P, V, C]
-        x = self.block(
-            query=x,
-            batch_size_limit=batch_size_limit,
-            out=None if torch.is_grad_enabled() else x,
-        ).transpose(-3, -2)
-        return self.norm(x)
+        shape = x.transpose(-3, -2).shape
+        x = x.transpose(-3, -2).flatten(0, -3)
+        limit = 65_535 if batch_size_limit == "auto" else batch_size_limit
+        limit = min(limit or 65_535, 65_535)
+        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+            limit = max(x.size(0), 1)
+        outputs = []
+        for rows in x.split(limit):
+            attended, _ = self.attn(rows, rows, rows, need_weights=True)
+            outputs.append(self.norm(rows + attended))
+        return torch.cat(outputs).reshape(shape).transpose(-3, -2)

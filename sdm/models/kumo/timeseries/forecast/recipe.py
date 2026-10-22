@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import torch
+
 import sdm.processing as sp
 
 
@@ -10,7 +12,11 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
     scale = 8.693312644958496
 
     return sp.Recipe(
-        features=sp.Standardize().with_state(mean, scale),
-        target=sp.Standardize().with_state(mean, scale),
+        features=sp.Standardize(division_dtype=torch.float64).with_state(
+            mean, scale
+        ),
+        target=sp.Standardize(division_dtype=torch.float64).with_state(
+            mean, scale
+        ),
         output=sp.AverageEstimators(),
     )
