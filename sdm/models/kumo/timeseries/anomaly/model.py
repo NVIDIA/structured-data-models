@@ -17,7 +17,7 @@ from sdm._inference import inference_mode
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
-from sdm.processing.execution import MemberContext, RecipeExecution
+from sdm.processing.execution import MemberQuery, RecipeExecution
 
 
 class KumoAnomaly(Model):
@@ -125,7 +125,7 @@ class KumoAnomaly(Model):
             torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),
         ):
-            context = recipe_execution.fit_transform(
+            query = recipe_execution.fit_transform(
                 x=x,
                 y=None,
                 related_tables=None,
@@ -134,27 +134,19 @@ class KumoAnomaly(Model):
             )[0]
 
         for callback in callbacks:
-            context = MemberContext(
-                *callback.on_context_preprocessing_end(
+            query = MemberQuery(
+                *callback.on_query_preprocessing_end(
                     model=self,
-                    x=context.x,
-                    y=context.y,
-                    x_context_only=context.x_context_only,
-                    related_tables=context.related_tables,
+                    x=query.x,
+                    related_tables=query.related_tables,
                 ),
-                input_stypes=context.input_stypes,
             )
 
-        self._validate_context(
-            x=context.x,
-            y=context.y,
-            x_context_only=context.x_context_only,
-            related_tables=context.related_tables,
-        )
+        self._validate_feature_stype(query.x)
 
         with inference_mode("grad" if requires_grad else "inference"):
             out = self.model(
-                context.x.numerical,
+                x=query.x.numerical,
                 num_samples=num_samples,
                 num_steps=num_steps,
                 generator=generator,
@@ -163,7 +155,10 @@ class KumoAnomaly(Model):
             for callback in callbacks:
                 out = callback.on_model_forward_end(self, out)
 
-            out = out.to(context.x.numerical)
+            out = TableTensor(
+                columns={Stype.numerical: ("mae",)},
+                numerical=out.to(query.x.numerical),
+            )
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),

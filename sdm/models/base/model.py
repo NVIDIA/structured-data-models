@@ -8,7 +8,8 @@ from typing import ClassVar, Generic, Self, TypeVar
 import torch
 from torch import Tensor
 
-from sdm import Recipe, Stype
+from sdm import Recipe, Stype, TableTensor
+from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.tensor.mixin import DeviceMixin
 
@@ -73,6 +74,21 @@ class Model(torch.nn.Module, abc.ABC):
         device = next(self.parameters()).device
         device_repr = f"device={device}" if device.type != "cpu" else ""
         return f"{self.__class__.__name__}({device_repr})"
+
+    # Helpers #################################################################
+
+    def _validate_feature_stype(self, x: TableTensor) -> None:
+        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
+        if len(invalid) > 0:
+            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
+            warn_once(
+                key="model-unsupported-feature-stypes",
+                message=(
+                    f"{self.__class__.__name__!r} received unsupported "
+                    f"feature stypes {stypes}. Columns with unsupported "
+                    f"feature stypes will not be consumed by the model."
+                ),
+            )
 
 
 class _Prefetcher(Generic[T]):
