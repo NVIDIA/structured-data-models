@@ -137,3 +137,9 @@ NVIDIA's hosted API Catalog provides a separate way to prototype with available 
 Its model-specific URLs and Bearer authentication differ from a self-hosted NIM's routes and deployment authentication.
 Follow the API example on the model's NVIDIA Build page when using the hosted service.
 For broader deployment information, see the [NVIDIA NIM documentation](https://docs.nvidia.com/nim/).
+
+## See Also
+
+- [`structured-data-models-client` documentation](https://docs.nvidia.com/sdm/client/overview) for installing the Python client, building prediction requests, and running them against a deployed NIM.
+- [Kumo Tabular NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tabular) and [Kumo Relational NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-relational) for the full request and response schemas.
+- [NVIDIA NIM documentation](https://docs.nvidia.com/nim/) for deployment, infrastructure, and operations guidance that applies across NIMs.
