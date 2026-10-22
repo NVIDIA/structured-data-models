@@ -20,7 +20,6 @@ from sdm import (
 )
 from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
-from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
@@ -701,7 +700,8 @@ class ICLModel(Model):
                 f"dimensions (got {tuple(x.size()[:-1])} and "
                 f"{tuple(y.size()[:-1])})"
             )
-        feature_stypes = x.active_stypes
+        self._validate_feature_stype(x)
+
         if x_context_only is not None:
             if x_context_only.size()[:-1] != y.size()[:-1]:
                 raise ValueError(
@@ -710,18 +710,8 @@ class ICLModel(Model):
                     f"(got {tuple(x_context_only.size()[:-1])} and "
                     f"{tuple(y.size()[:-1])})"
                 )
-            feature_stypes = feature_stypes | x_context_only.active_stypes
-        invalid = feature_stypes - self.supported_feature_stypes - {Stype.id}
-        if len(invalid) > 0:
-            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
-            warn_once(
-                key="model-unsupported-feature-stypes",
-                message=(
-                    f"{self.__class__.__name__!r} received unsupported "
-                    f"feature stypes {stypes}. Columns with unsupported "
-                    f"feature stypes will not be consumed by the model."
-                ),
-            )
+            self._validate_feature_stype(x_context_only)
+
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
             stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
@@ -745,21 +735,8 @@ class ICLModel(Model):
                     f"{self.__class__.__name__!r} does not support related "
                     f"tables"
                 )
-            for table_name, table in related_tables.tables.items():
-                invalid = table.active_stypes - self.supported_feature_stypes
-                invalid = invalid - {Stype.id}
-                if len(invalid) > 0:
-                    stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
-                    warn_once(
-                        key="model-unsupported-feature-stypes",
-                        message=(
-                            f"{self.__class__.__name__!r} received "
-                            f"unsupported feature stypes {stypes} in related "
-                            f"table {table_name!r}. Columns with unsupported "
-                            f"feature stypes will not be consumed by the "
-                            f"model."
-                        ),
-                    )
+            for table in related_tables.tables.values():
+                self._validate_feature_stype(table)
 
     def _validate_query(
         self,

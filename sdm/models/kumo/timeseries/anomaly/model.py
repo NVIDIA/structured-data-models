@@ -16,15 +16,14 @@ from torch import Tensor
 
 from sdm import Recipe, Stype, TableTensor
 from sdm._inference import inference_mode
-from sdm._warnings import warn_once
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.timeseries.anomaly.ckpt import remap_ckpt
 from sdm.models.kumo.timeseries.anomaly.denoiser import DiffusionDenoiser
 from sdm.models.kumo.timeseries.anomaly.embedding import SideEmbedding
 from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
 from sdm.models.kumo.timeseries.anomaly.sampling import DPMSolver
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
+from sdm.processing.execution import MemberQuery, RecipeExecution
 
 
 class KumoAnomaly(Model):
@@ -94,14 +93,14 @@ class KumoAnomaly(Model):
 
     def forward(
         self,
-        x: Tensor | TableTensor,
+        x: Tensor | TableTensor,  # [ ..., R, D]
         *,
         recipe: Recipe | None = None,
         num_samples: int = 30,
         num_steps: int = 20,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:
+    ) -> TableTensor:  # [..., R, 1]
         r"""The forward pass.
 
         Args:
@@ -126,61 +125,61 @@ class KumoAnomaly(Model):
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
-        param = next(self.parameters())
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        x = cast(TableTensor, x.to(param.device))
-
-        recipe = (
+        recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
         with (
-            torch.amp.autocast(param.device.type, enabled=False),
+            torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),
         ):
-            x = recipe.features.fit_transform(x, generator=generator)
+            query = recipe_execution.fit_transform(
+                x=x,
+                y=None,
+                related_tables=None,
+                num_members=1,
+                generator=generator,
+            )[0]
 
         for callback in callbacks:
-            x, _ = callback.on_query_preprocessing_end(self, x, None)
-
-        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
-        if len(invalid) > 0:
-            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
-            warn_once(
-                key="model-unsupported-feature-stypes",
-                message=(
-                    f"{self.__class__.__name__!r} received unsupported "
-                    f"feature stypes {stypes}. Columns with unsupported "
-                    f"feature stypes will not be consumed by the model."
+            query = MemberQuery(
+                *callback.on_query_preprocessing_end(
+                    model=self,
+                    x=query.x,
+                    related_tables=query.related_tables,
                 ),
             )
-        if x.numerical.size(-1) > self.model.num_features:
-            raise ValueError(
-                f"{self.__class__.__name__!r} supports at most "
-                f"{self.model.num_features} features after pre-processing "
-                f"(got {x.numerical.size(-1)})"
-            )
+
+        self._validate_feature_stype(query.x)
 
         with inference_mode("grad" if requires_grad else "inference"):
             out = self.model(
-                x.numerical.to(param.dtype),
+                x=query.x.numerical,
                 num_samples=num_samples,
                 num_steps=num_steps,
                 generator=generator,
             )
+
             out = TableTensor(
-                columns={Stype.numerical: ["score"]},
+                columns={Stype.numerical: ("mae",)},
                 numerical=out.unsqueeze(-1),
             )
+
             for callback in callbacks:
                 out = callback.on_model_forward_end(self, out)
-        return cast(TableTensor, out.to(x.dtype))
+
+            out = cast(TableTensor, out.to(query.x.dtype))
+
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode("grad" if requires_grad else "inference"),
+        ):
+            return recipe_execution.transform_output([out])[0]
 
 
 class _KumoAnomaly(torch.nn.Module):
     def __init__(
         self,
-        num_features: int = 40,
+        in_channels: int = 40,
         time_channels: int = 256,
         feature_channels: int = 64,
         channels: int = 128,
@@ -188,23 +187,15 @@ class _KumoAnomaly(torch.nn.Module):
         num_heads: int = 8,
         embedding_channels: int = 256,
         num_steps: int = 500,
-        window_size: int = 100,
-        num_blocks: int = 4,
-        batch_size: int = 32,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.num_features = num_features
-        self.num_steps = num_steps
-        self.window_size = window_size
-        self.num_blocks = num_blocks
-        self.batch_size = batch_size
+        self.in_channels = in_channels
 
         self.side_embedding = SideEmbedding(
-            num_features=num_features,
+            in_channels=in_channels,
             time_channels=time_channels,
             feature_channels=feature_channels,
             **factory_kwargs,
@@ -224,20 +215,27 @@ class _KumoAnomaly(torch.nn.Module):
         x: Tensor,  # [..., R, D]
         num_samples: int,
         num_steps: int,
-        generator: torch.Generator | None,
+        window_size: int = 100,
+        num_blocks: int = 4,
+        batch_size: int = 32,
+        generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R]
 
-        *size, length, features = x.size()
-        x = x.reshape(-1, length, features)
-        x = F.pad(x, (0, self.num_features - features))
+        if x.size(-1) > self.in_channels:
+            raise ValueError(
+                f"'KumoAnomaly' supports at most {self.in_channels} columns "
+                f"after pre-processing (got {x.size(-1)})"
+            )
 
-        # Pad the last window by repeating the last row:
-        padding = -length % self.window_size
-        x = torch.cat([x, x[:, -1:].expand(-1, padding, -1)], dim=1)
-        windows = x.reshape(-1, self.window_size, self.num_features)
+        *B, R, D = x.size()
+        x = F.pad(x.reshape(-1, R, D), (0, self.in_channels - D))
+
+        # Pad last window by repeating last row:
+        x = torch.cat([x, x[:, -1:].expand(-1, -R % window_size, -1)], dim=-2)
+        window = x.reshape(-1, window_size, self.in_channels)
 
         schedule = DiffusionSchedule(
-            num_steps=self.num_steps,
+            num_steps=self.denoiser.num_steps,
             beta_start=0.0001,
             beta_end=0.01,
             schedule="linear",
@@ -247,35 +245,44 @@ class _KumoAnomaly(torch.nn.Module):
 
         out = torch.cat(
             [
-                self.reconstruct(batch, sampler, num_samples, generator)
-                for batch in windows.split(self.batch_size)
-            ]
+                self.reconstruct(
+                    x=_x,
+                    sampler=sampler,
+                    num_samples=num_samples,
+                    num_blocks=num_blocks,
+                    generator=generator,
+                )
+                for _x in window.split(batch_size)
+            ],
+            dim=0,
         )
-        out = out.reshape(x.size())[:, :length, :features]
-        out = (out - x[:, :length, :features]).abs().mean(dim=-1)
-        return out.reshape(*size, length)
+
+        out = out.view(x.size())[:, :R, :D]
+        out = (out - x[:, :R, :D]).abs().mean(dim=-1)
+        return out.view(*B, R)
 
     def reconstruct(
         self,
-        x: Tensor,  # [B, L, K]
+        x: Tensor,  # [B, R, D]
         sampler: DPMSolver,
         num_samples: int,
+        num_blocks: int,
         generator: torch.Generator | None,
-    ) -> Tensor:  # [B, L, K]
+    ) -> Tensor:  # [B, R, D]
 
-        x = x.transpose(1, 2)  # [B, K, L]
-        batch, _, length = x.size()
+        B, R, _ = x.size()
+        x = x.transpose(1, 2)  # [B, D, R]
         mean = x.mean(dim=(1, 2), keepdim=True)
         std = x.std(dim=(1, 2), keepdim=True) + 1e-5
         x = ((x - mean) / std).clamp(-10, 10)
 
-        time = torch.arange(length, device=x.device).expand(batch, -1)
-        blocks = time // (length // self.num_blocks)
+        time = torch.arange(R, device=x.device).expand(B, -1)
+        blocks = time // (R // num_blocks)
 
         out = x.new_zeros((num_samples, *x.size()))
         for strategy in range(2):
             mask = ((blocks % 2) == strategy).to(x.dtype)
-            mask = mask.unsqueeze(1).expand_as(x)  # [B, K, L]
+            mask = mask.unsqueeze(1).expand_as(x)  # [B, D, R]
             predict_noise = partial(
                 self.predict_noise,
                 cond=mask * x,
@@ -292,14 +299,14 @@ class _KumoAnomaly(torch.nn.Module):
 
     def predict_noise(
         self,
-        x: Tensor,  # [B, K, L]
+        x: Tensor,  # [B, D, R]
         step: Tensor,  # [1]
         *,
-        cond: Tensor,  # [B, K, L]
-        target_mask: Tensor,  # [B, K, L]
-        side_info: Tensor,  # [B, S, K, L]
+        cond: Tensor,  # [B, D, R]
+        target_mask: Tensor,  # [B, D, R]
+        side_info: Tensor,  # [B, S, D, R]
         strategy: Tensor,  # [1]
-    ) -> Tensor:  # [B, K, L]
+    ) -> Tensor:  # [B, D, R]
         return self.denoiser(
             x=torch.stack([cond, target_mask * x], dim=1),
             side_info=side_info,

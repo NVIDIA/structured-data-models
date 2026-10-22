@@ -40,6 +40,29 @@ class StringTensor(VarLenTensor):
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
     __hash__ = Tensor.__hash__
 
+    # Keep StringTensor out of the compiler's graph arguments.
+    @override
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_var_len_tensor(
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        size: tuple[int, ...],
+        stride: tuple[int, ...],
+        storage_offset: int,
+        cls: type[VarLenTensor] | None = None,
+    ) -> VarLenTensor:
+        return VarLenTensor._make_var_len_tensor(
+            data=data,
+            offset=offset,
+            valid=valid,
+            size=size,
+            stride=stride,
+            storage_offset=storage_offset,
+            cls=StringTensor if cls is None else cls,
+        )
+
     @override
     @classmethod
     def from_arrow(
