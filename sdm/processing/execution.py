@@ -120,6 +120,15 @@ class RecipeExecution:
                     device=inputs[0].device,
                 ),
             )
+            for module in series_processors:
+                module._set_buffer(
+                    name="_offset",
+                    value=torch.zeros(
+                        size=(len(y),),
+                        dtype=torch.long,
+                        device=y[0].device,
+                    ),
+                )
 
         # Transform target first to resolve task type and inversion layout.
         if targets is not None:
@@ -180,11 +189,6 @@ class RecipeExecution:
                     ensemble_table,
                     generator=generator,
                 )
-                if len(related_ensembles[name]) != self.num_members:
-                    raise ValueError(
-                        "Expected inputs to map to the same number of "
-                        "ensemble members"
-                    )
                 for module in _iter_modules(processor):
                     if isinstance(module, sp.SeriesEnsembleProcessor):
                         module._set_buffer(
@@ -228,10 +232,6 @@ class RecipeExecution:
             inputs,
             generator=generator,
         )
-        if len(x) != self.num_members:
-            raise ValueError(
-                "Expected inputs to map to the same number of ensemble members"
-            )
 
         for module in series_processors:
             module._set_buffer(
@@ -282,10 +282,6 @@ class RecipeExecution:
         """Transform query data."""
         x: EnsembleTable = _to_ensemble_table(x, self._num_estimators)
         x = self.recipe.features.transform_ensemble(x)
-        if len(x) != self.num_members:
-            raise ValueError(
-                "Expected inputs to map to the same number of ensemble members"
-            )
 
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:
@@ -303,11 +299,6 @@ class RecipeExecution:
                 related_ensembles[name] = processor.transform_ensemble(
                     ensemble_table
                 )
-                if len(related_ensembles[name]) != self.num_members:
-                    raise ValueError(
-                        "Expected inputs to map to the same number of "
-                        "ensemble members"
-                    )
 
         members: list[MemberQuery] = []
         for member_id in range(len(x)):
