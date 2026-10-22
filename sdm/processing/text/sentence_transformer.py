@@ -427,7 +427,7 @@ class SentenceTransformer(Processor):
         self._model = _Encoder(model, batch_size, embedding_dim)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        columns = table.columns[Stype.text]
+        columns = table.text_columns
         batch_shape = table.text.shape[:-1]
         output_columns = tuple(
             f"{column}__emb{i}"

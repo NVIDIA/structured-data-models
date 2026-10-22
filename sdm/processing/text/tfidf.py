@@ -387,7 +387,7 @@ class TFIDF(EnsembleProcessor):
             if state.vocabularies
             else torch.get_default_dtype()
         )
-        text_names = table.columns[Stype.text]
+        text_names = table.text_columns
         leading_shape = table.text.shape[:-1]
         n_rows = math.prod(leading_shape)
 

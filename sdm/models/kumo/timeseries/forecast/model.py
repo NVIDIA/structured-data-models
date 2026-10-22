@@ -94,14 +94,14 @@ class KumoForecast(ICLModel):
     ) -> KumoForecast:
         device = torch.get_default_device() if device is None else device
 
-        checkpoint = download_checkpoint(
+        path = download_checkpoint(
             repo_id="nvidia/Kumo-Forecast",
             filename="run8_best_model_cr.pt"
             if use_cross_channel
             else "moment_head_512_6hr.pt",
             revision="abff20a58834638b28227ff4ab934f26206e4b09",
         )
-        ckpt = torch.load(checkpoint, map_location=device, weights_only=True)
+        ckpt = torch.load(path, map_location=device, weights_only=True)
         self.model.load_state_dict(remap_ckpt(ckpt), assign=True)
 
         return self

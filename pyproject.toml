@@ -15,6 +15,7 @@ license-files = [
     "sdm/models/tabiclv2/LICENSE",
     "sdm/models/tabfm/LICENSE",
     "sdm/models/timesfm3/LICENSE",
+    "sdm/models/timestral/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
     "sdm/models/kumo/timeseries/anomaly/NOTICE",
     "third_party/contributor-covenant/LICENSE",

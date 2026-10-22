@@ -93,6 +93,9 @@ print(table.columns)
 print(table.numerical.size())
 # torch.Size([3, 2])
 
+print(table.numerical_columns)
+# ("age", "income")
+
 print(table.categorical.code)
 # tensor([[0],
 #         [1],
@@ -108,6 +111,20 @@ For fully deterministic category mappings, align categories at the processing le
 ```
 
 ### Column Semantics
+
+Use `numerical_columns`, `categorical_columns`, `datetime_columns`, `text_columns`, or `id_columns` to read the names in one semantic block.
+In the example above, `table.numerical_columns` is `("age", "income")`, so `table.numerical[:, 0]` contains ages and `table.numerical[:, 1]` contains incomes.
+Each property returns an immutable tuple of strings, or `()` when the block has no columns, without copying the full column mapping.
+The existing `.columns` property still returns a copy of the mapping for all semantic types.
+
+To iterate over every semantic type and its column labels, use `.column_groups`:
+
+```python
+for stype, labels in table.column_groups:
+    print(stype, labels)
+```
+
+This returns immutable pairs in the same order as `.columns.items()`, including types with no columns.
 
 Because columns are stored in semantic blocks, {py:class}`~sdm.tensor.TableTensor` does not treat the original dataframe column order as a stable invariant.
 Prefer column-name selection over positional assumptions.

@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
@@ -212,8 +213,31 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
+        return cls._make_var_len_tensor(
+            data=data,
+            offset=offset,
+            valid=valid,
+            size=size,
+            stride=stride,
+            storage_offset=storage_offset,
+            cls=None if "_make_var_len_tensor" in cls.__dict__ else cls,
+        )
+
+    # Avoid Dynamo reading _valid before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_var_len_tensor(
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        size: tuple[int, ...],
+        stride: tuple[int, ...],
+        storage_offset: int,
+        cls: type[VarLenTensor] | None = None,
+    ) -> VarLenTensor:
+        cls = VarLenTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls,
+            cls=cls,
             size=size,
             strides=stride,
             storage_offset=storage_offset,
@@ -221,11 +245,9 @@ class VarLenTensor(Tensor):
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
-
         out._data = data
         out._offset = offset
         out._valid = valid
-
         return out
 
     @classmethod
@@ -492,6 +514,9 @@ class VarLenTensor(Tensor):
 
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
+        if self._data.numel() == 0:
+            # An empty payload has only zero offsets, already normalized.
+            return self._data, offset
         data = self._data[offset[0] : offset[-1]]
         if offset.is_cpu and int(offset[0]) == 0:
             return data, offset
@@ -679,8 +704,7 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.valid is not None:
-            out += f", null_count={int((~self.valid).sum())}"
+        out += self._null_count_repr()
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
@@ -689,6 +713,13 @@ class VarLenTensor(Tensor):
             out += ", requires_grad=True"
         out += ")"
         return out
+
+    def _null_count_repr(self) -> str:
+        valid = self.valid
+        # During compilation, the mask may have a shape but no values to count.
+        if valid is None or valid.is_meta or is_fake(valid):
+            return ""
+        return f", null_count={int((~valid).sum())}"
 
 
 @VarLenTensor.implements(aten.alias.default)

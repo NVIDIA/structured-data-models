@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import EnsembleTable, StringTensor, Stype, TableTensor
+from sdm import EnsembleTable, StringTensor, TableTensor
 from sdm.processing import TFIDF
 from sdm.testing import onlyCUDA
 
@@ -94,7 +94,7 @@ def test_empty_string_yields_zero_width_output() -> None:
     output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
 
     assert output.numerical.shape == (1, 0)
-    assert output.columns[Stype.numerical] == ()
+    assert output.numerical_columns == ()
 
 
 def test_short_word_counts_once() -> None:
