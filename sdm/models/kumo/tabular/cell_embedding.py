@@ -43,6 +43,7 @@ class CellEmbedding(TabFMCellEmbedding):
         categorical_mask: Tensor,  # [..., C]
         *,
         train_size: int | None = None,
+        num_columns: Tensor | None = None,  # [...]
         cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
@@ -64,6 +65,7 @@ class CellEmbedding(TabFMCellEmbedding):
         return super().forward(
             x,
             categorical_mask,
+            num_columns=num_columns,
             batch_size_limit=batch_size_limit,
             out=out,
             missing=missing,

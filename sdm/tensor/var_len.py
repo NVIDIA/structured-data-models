@@ -213,8 +213,31 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
+        return cls._make_var_len_tensor(
+            data=data,
+            offset=offset,
+            valid=valid,
+            size=size,
+            stride=stride,
+            storage_offset=storage_offset,
+            cls=None if "_make_var_len_tensor" in cls.__dict__ else cls,
+        )
+
+    # Avoid Dynamo reading _valid before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_var_len_tensor(
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        size: tuple[int, ...],
+        stride: tuple[int, ...],
+        storage_offset: int,
+        cls: type[VarLenTensor] | None = None,
+    ) -> VarLenTensor:
+        cls = VarLenTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls,
+            cls=cls,
             size=size,
             strides=stride,
             storage_offset=storage_offset,
@@ -222,11 +245,9 @@ class VarLenTensor(Tensor):
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
-
         out._data = data
         out._offset = offset
         out._valid = valid
-
         return out
 
     @classmethod

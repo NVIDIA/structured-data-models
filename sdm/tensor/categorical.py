@@ -121,8 +121,23 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
+        return CategoricalTensor._make_categorical_tensor(
+            code=code,
+            categories=tuple(categories),
+            cls=None if cls is CategoricalTensor else cls,
+        )
+
+    # Avoid Dynamo reading _code before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_categorical_tensor(
+        code: Tensor,
+        categories: tuple[Tensor, ...],
+        cls: type[CategoricalTensor] | None = None,
+    ) -> CategoricalTensor:
+        cls = CategoricalTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls,
+            cls=cls,
             size=code.size(),
             strides=code.stride(),
             storage_offset=code.storage_offset(),
@@ -132,7 +147,7 @@ class CategoricalTensor(Tensor):
         )
 
         out._code = code
-        out._categories = tuple(categories)
+        out._categories = categories
         for i, category in enumerate(out._categories):
             setattr(out, f"_category_{i}", category)
 
@@ -461,6 +476,16 @@ class CategoricalTensor(Tensor):
             for column in self.split(1, dim=-1)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
+        out += f", num_categories={tuple(c.numel() for c in self.categories)}"
+        out += f", dtype={self.dtype}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
 
 
 @CategoricalTensor.implements(aten.isnan.default)

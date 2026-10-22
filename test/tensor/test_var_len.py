@@ -8,9 +8,29 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm import VarLenTensor
+from sdm import StringTensor, VarLenTensor
 from sdm.tensor.var_len import _compact
 from sdm.testing import onlyCUDA, withCUDA
+
+
+@pytest.mark.parametrize("tensor_type", [VarLenTensor, StringTensor])
+def test_compiled_var_len_reconstruction(
+    compilation: None,
+    tensor_type: type[VarLenTensor],
+) -> None:
+    def reconstruct(inp: VarLenTensor) -> VarLenTensor:
+        data = inp._data[inp._offset[0] : inp._offset[-1]]
+        return type(inp)(
+            data=data,
+            offset=inp._offset,
+            valid=inp._valid,
+            size=inp.size(),
+        )
+
+    tensor = tensor_type.from_tensor(torch.tensor([97, 98], dtype=torch.uint8))
+    out = torch.compile(reconstruct, backend="eager")(tensor)
+    assert type(out) is tensor_type
+    assert out.tolist() == tensor.tolist()
 
 
 def test_dtype_conversion() -> None:

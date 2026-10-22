@@ -308,3 +308,20 @@ class _KumoTabular(torch.nn.Module):
         x = self.row_embedding(x, y, categorical_mask, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
+
+    def forward_train(
+        self,
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        num_columns: Tensor | None = None,  # [...]
+    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            categorical_mask=categorical_mask,
+            num_columns=num_columns,
+        )
+        x = self.row_project(x)
+        return self.icl_block(x=x, y=y)

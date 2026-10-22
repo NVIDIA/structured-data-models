@@ -335,22 +335,44 @@ class TableTensor(Tensor):
                 )
 
         column_names = list(chain.from_iterable(columns.values()))
-        column_to_loc: dict[str, tuple[Stype, int]] = {}
-        for stype_like, names in columns.items():
-            stype = Stype(stype_like)
-            for i, name in enumerate(names):
-                column_to_loc[name] = (stype, i)
-        if len(column_names) != len(column_to_loc):
+        if len(column_names) != len(set(column_names)):
             raise ValueError("Expected column names to be unique")
 
+        return TableTensor._make_table_tensor(
+            columns=columns,
+            numerical=numerical,
+            categorical=categorical,
+            datetime=datetime,
+            text=text,
+            id=id,
+            cls=None if cls is TableTensor else cls,
+        )
+
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_table_tensor(
+        columns: dict[Stype, tuple[str, ...]],
+        numerical: Tensor,
+        categorical: CategoricalTensor,
+        datetime: Tensor,
+        text: StringTensor,
+        id: ColumnarTensor,
+        cls: type[TableTensor] | None = None,
+    ) -> TableTensor:
+        cls = TableTensor if cls is None else cls
+        column_to_loc = {
+            name: (stype, i)
+            for stype, names in columns.items()
+            for i, name in enumerate(names)
+        }
         out = Tensor._make_wrapper_subclass(
-            cls,
-            size=(*size, len(column_names)),
+            cls=cls,
+            size=(*numerical.size()[:-1], len(column_to_loc)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
         )
-
         out._numerical = numerical
         out._categorical = categorical
         out._datetime = datetime
@@ -358,7 +380,6 @@ class TableTensor(Tensor):
         out._id = id
         out._columns = columns
         out._column_to_loc = column_to_loc
-
         return out
 
     @classmethod
@@ -1004,7 +1025,9 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
+            size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in stypes},
+            device=self.device,
             **{stype: getattr(self, stype) for stype in stypes},
         )
 
