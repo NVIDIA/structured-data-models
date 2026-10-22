@@ -1025,7 +1025,9 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
+            size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in stypes},
+            device=self.device,
             **{stype: getattr(self, stype) for stype in stypes},
         )
 
