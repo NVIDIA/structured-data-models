@@ -101,8 +101,8 @@ class ICLBlock(torch.nn.Module):
                     kv_heads = self.kv_heads
                     if kv_heads is not None and kv_heads < key.size(-2):
                         key, value = _copy_key_value(
-                            key[..., :kv_heads, :],
-                            value[..., :kv_heads, :],
+                            key=key[..., :kv_heads, :],
+                            value=value[..., :kv_heads, :],
                         )
                     cache[cache_key] = KVCacheEntry(key, value)
                     del key, value
