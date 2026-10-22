@@ -265,9 +265,11 @@ def test_nanotabicl_uses_context_labels(
 ) -> None:
     # Isolate each documented label injection so dropping either is caught.
     if label_stage == "column":
-        model.icl_label_embedding.weight.zero_()
+        embedding = model.icl_label_embedding
     else:
-        model.column_label_embedding.weight.zero_()
+        embedding = model.column_label_embedding
+    assert isinstance(embedding, nn.Embedding)
+    embedding.weight.zero_()
     x = torch.randn(7, 5)
     y = torch.zeros(4, dtype=torch.long)
 
