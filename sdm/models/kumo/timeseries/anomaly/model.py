@@ -152,13 +152,13 @@ class KumoAnomaly(Model):
                 generator=generator,
             )
 
-            for callback in callbacks:
-                out = callback.on_model_forward_end(self, out)
-
             out = TableTensor(
                 columns={Stype.numerical: ("mae",)},
                 numerical=out.to(query.x.numerical),
             )
+
+            for callback in callbacks:
+                out = callback.on_model_forward_end(self, out)
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),
