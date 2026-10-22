@@ -13,7 +13,30 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing.execution import RecipeExecution
+from sdm.processing.execution import MemberQuery, RecipeExecution
+
+
+def test_targetless_series_fit_and_transform() -> None:
+    execution = RecipeExecution(Recipe(features=sp.Detrend()))
+    x = torch.arange(4.0).view(4, 1)
+    members = execution.fit_transform(x, None, None, num_members=2)
+    assert execution.num_members == 2
+    assert all(isinstance(member, MemberQuery) for member in members)
+    for member in members:
+        torch.testing.assert_close(member.x.numerical, torch.zeros_like(x))
+    query = torch.arange(4.0, 6.0).view(2, 1)
+    for member in execution.transform(query, None):
+        torch.testing.assert_close(member.x.numerical, torch.zeros_like(query))
+
+
+def test_supervised_member_count_mismatch() -> None:
+    execution = RecipeExecution(Recipe())
+    with pytest.raises(ValueError, match="same number of ensemble members"):
+        execution.fit_transform(
+            x=torch.zeros(2, 4, 3),
+            y=torch.zeros(3, 4, 1),
+            related_tables=None,
+        )
 
 
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:

@@ -4,6 +4,7 @@
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import CategoricalTensor, Recipe, Stype, TableTensor
 from sdm.explain.gradient import CaptureInputs, EnableInputGradients
 from sdm.models import Callback, KumoAnomaly
@@ -20,7 +21,7 @@ def test_forward(device: torch.device) -> None:
 
     out = model(x, num_samples=1, num_steps=1, generator=generator())
     assert out.size() == (2, 130, 1)
-    assert out.columns["numerical"] == ("score",)
+    assert out.columns["numerical"] == ("mae",)
     assert out.device == device
     assert out.numerical.isfinite().all()
     assert (out.numerical >= 0).all()
@@ -36,6 +37,34 @@ def test_wide_float64_forward() -> None:
     out = model(x, num_samples=1, num_steps=1)
     assert out.size() == (60, 1)
     assert out.numerical.dtype == torch.float64
+
+
+@pytest.mark.parametrize("batch_shape", [(), (2,)])
+@pytest.mark.parametrize("reduce_members", [False, True])
+def test_output_recipe(
+    batch_shape: tuple[int, ...], reduce_members: bool
+) -> None:
+    model = KumoAnomaly(pretrained=False)
+    x = torch.randn(*batch_shape, 12, 2)
+    generator = torch.Generator()
+    state = generator.get_state()
+    expected = model(x, num_samples=1, num_steps=1, generator=generator)
+    recipe = model.default_recipe()
+    if reduce_members:
+        recipe.output = sp.AverageEstimators()
+    recipe.append_output(
+        lambda table: table.replace_blocks(numerical=table.numerical + 2)
+    )
+    generator.set_state(state)
+    out = model(
+        x=x,
+        recipe=recipe,
+        num_samples=1,
+        num_steps=1,
+        generator=generator,
+    )
+    assert out.numerical_columns == ("mae",)
+    torch.testing.assert_close(out.numerical, expected.numerical + 2)
 
 
 class DoubleScores(Callback):

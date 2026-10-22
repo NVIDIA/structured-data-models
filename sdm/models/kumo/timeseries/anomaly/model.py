@@ -16,7 +16,6 @@ from torch import Tensor
 
 from sdm import Recipe, Stype, TableTensor
 from sdm._inference import inference_mode
-from sdm._warnings import warn_once
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.anomaly.denoiser import DiffusionDenoiser
@@ -24,6 +23,7 @@ from sdm.models.kumo.timeseries.anomaly.embedding import SideEmbedding
 from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
 from sdm.models.kumo.timeseries.anomaly.sampling import DPMSolver
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
+from sdm.processing.execution import MemberQuery, RecipeExecution
 
 
 class KumoAnomaly(Model):
@@ -92,20 +92,20 @@ class KumoAnomaly(Model):
 
     def forward(
         self,
-        x: Tensor | TableTensor,
+        x: Tensor | TableTensor,  # [ ..., R, D]
         *,
         recipe: Recipe | None = None,
         num_samples: int = 30,
         num_steps: int = 20,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:
+    ) -> TableTensor:  # [..., R, 1]
         r"""The forward pass.
 
         Args:
             x: The feature tensor with shape ``[..., R, D]`` with ``R`` rows
                 and ``D`` columns.
-            recipe: The custom recipe for pre-processing.
+            recipe: The custom recipe for pre- and post-processing.
             num_samples: The number of reconstruction samples per complementary
                 masking strategy. Reconstructions are combined using the
                 sample median.
@@ -125,54 +125,65 @@ class KumoAnomaly(Model):
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         param = next(self.parameters())
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        x = cast(TableTensor, x.to(param.device))
+        x = x.to(param.device)
 
-        recipe = (
+        recipe_execution = RecipeExecution(
             self.default_recipe() if recipe is None else copy.deepcopy(recipe)
         )
         with (
-            torch.amp.autocast(param.device.type, enabled=False),
+            torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("no_grad" if requires_grad else "inference"),
         ):
-            x = recipe.features.fit_transform(x, generator=generator)
+            query = recipe_execution.fit_transform(
+                x=x,
+                y=None,
+                related_tables=None,
+                num_members=1,
+                generator=generator,
+            )[0]
 
         for callback in callbacks:
-            x, _ = callback.on_query_preprocessing_end(self, x, None)
-
-        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
-        if len(invalid) > 0:
-            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
-            warn_once(
-                key="model-unsupported-feature-stypes",
-                message=(
-                    f"{self.__class__.__name__!r} received unsupported "
-                    f"feature stypes {stypes}. Columns with unsupported "
-                    f"feature stypes will not be consumed by the model."
+            query = MemberQuery(
+                *callback.on_query_preprocessing_end(
+                    model=self,
+                    x=query.x,
+                    related_tables=query.related_tables,
                 ),
             )
-        if x.numerical.size(-1) > self.model.num_features:
+
+        self._validate_feature_stype(query.x)
+        if query.x.numerical.size(-1) > self.model.num_features:
             raise ValueError(
                 f"{self.__class__.__name__!r} supports at most "
                 f"{self.model.num_features} features after pre-processing "
-                f"(got {x.numerical.size(-1)})"
+                f"(got {query.x.numerical.size(-1)})"
             )
 
         with inference_mode("grad" if requires_grad else "inference"):
             out = self.model(
-                x.numerical.to(param.dtype),
+                x=query.x.numerical.to(param.dtype),
                 num_samples=num_samples,
                 num_steps=num_steps,
                 generator=generator,
             )
+
             out = TableTensor(
-                columns={Stype.numerical: ["score"]},
+                columns={Stype.numerical: ("mae",)},
                 numerical=out.unsqueeze(-1),
             )
+
             for callback in callbacks:
                 out = callback.on_model_forward_end(self, out)
-        return cast(TableTensor, out.to(x.dtype))
+
+            out = cast(TableTensor, out.to(query.x.dtype))
+
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode("grad" if requires_grad else "inference"),
+        ):
+            out = recipe_execution.transform_output([out])
+            # Output reducers may already have removed the single-member axis.
+            return out[0] if out.ndim == query.x.ndim + 1 else out
 
 
 class _KumoAnomaly(torch.nn.Module):
