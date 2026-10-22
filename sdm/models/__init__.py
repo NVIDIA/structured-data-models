@@ -8,6 +8,7 @@ __lazy_modules__ = {
     "sdm.models.tabfm",
     "sdm.models.kumo",
     "sdm.models.timesfm3",
+    "sdm.models.timestral",
 }
 
 from sdm.models.base import Callback, Model, ICLModel, ECOC
@@ -20,6 +21,7 @@ from sdm.models.kumo import (
     KumoAnomaly,
 )
 from sdm.models.timesfm3 import TimesFM3
+from sdm.models.timestral import Timestral
 
 
 __all__ = [
@@ -34,4 +36,5 @@ __all__ = [
     "KumoForecast",
     "KumoAnomaly",
     "TimesFM3",
+    "Timestral",
 ]

@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Timestral."""
+"""Timestral multivariate forecasting."""
 
-__all__ = []
+from sdm.models.timestral.model import Timestral
+
+__all__ = ["Timestral"]
