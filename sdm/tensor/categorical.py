@@ -338,6 +338,23 @@ class CategoricalTensor(Tensor):
             categories=categories,
         )
 
+    def decode(self) -> Tensor:
+        r"""Decode a single categorical column to its category values.
+
+        Requires exactly one column and no missing values.
+
+        Returns:
+            A tensor with the same shape and device, using the category
+            vector's dtype and tensor type.
+        """
+        if self.size(-1) != 1:
+            raise ValueError(
+                "Decoding requires exactly one categorical column"
+            )
+        if (self.code < 0).any():
+            raise ValueError("Cannot decode missing categorical values")
+        return self.categories[0][self.code]
+
     # Properties ##############################################################
 
     @property

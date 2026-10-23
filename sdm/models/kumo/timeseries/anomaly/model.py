@@ -14,7 +14,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm import Recipe, Stype, TableTensor
+from sdm import CategoricalTensor, Recipe, Stype, TableTensor
 from sdm._inference import inference_mode
 from sdm.models import Callback, Model
 from sdm.models._huggingface import download_checkpoint
@@ -24,6 +24,10 @@ from sdm.models.kumo.timeseries.anomaly.embedding import SideEmbedding
 from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
 from sdm.models.kumo.timeseries.anomaly.sampling import DPMSolver
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
+from sdm.models.kumo.timeseries.anomaly.threshold import (
+    MACSThreshold,
+    SCSThreshold,
+)
 from sdm.processing.execution import MemberQuery, RecipeExecution
 
 
@@ -45,6 +49,10 @@ class KumoAnomaly(Model):
     and the sample median combines repeated reconstructions. Mean absolute
     reconstruction error across features gives a score per time step; larger
     scores indicate less accurately reconstructed observations.
+
+    SCS and MACS thresholding convert scores to boolean anomaly decisions.
+    Both use whole-series statistics, including future observations, and
+    their decisions are not calibrated probabilities.
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
@@ -99,7 +107,7 @@ class KumoAnomaly(Model):
         num_steps: int = 20,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:  # [..., R, 1]
+    ) -> TableTensor:  # [..., R, 3]
         r"""The forward pass.
 
         Args:
@@ -116,9 +124,11 @@ class KumoAnomaly(Model):
                 pre-processing and model execution.
 
         Returns:
-            The anomaly scores with shape ``[..., R, 1]``, denoting the mean
-            absolute reconstruction error across preprocessed features at each
-            time step.
+            A table with shape ``[..., R, 3]`` containing numerical ``mae``
+            reconstruction scores and categorical boolean ``scs`` and ``macs``
+            anomaly decisions. MAE is averaged across preprocessed features at
+            each time step. Thresholding uses the complete series before
+            applying the recipe's output pipeline.
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
@@ -158,9 +168,19 @@ class KumoAnomaly(Model):
                 generator=generator,
             )
 
+            scs = SCSThreshold()(out, query.x.numerical)
+            macs = MACSThreshold()(out)
+            categories = torch.tensor([False, True], device=out.device)
             out = TableTensor(
-                columns={Stype.numerical: ("mae",)},
+                columns={
+                    Stype.numerical: ("mae",),
+                    Stype.categorical: ("scs", "macs"),
+                },
                 numerical=out.unsqueeze(-1),
+                categorical=CategoricalTensor(
+                    code=torch.stack([scs, macs], dim=-1).long(),
+                    categories=(categories, categories),
+                ),
             )
 
             for callback in callbacks:

@@ -4,8 +4,14 @@
 """KumoAnomaly."""
 
 from sdm.models.kumo.timeseries.anomaly.model import KumoAnomaly
+from sdm.models.kumo.timeseries.anomaly.threshold import (
+    SCSThreshold,
+    MACSThreshold,
+)
 
 
 __all__ = [
     "KumoAnomaly",
+    "SCSThreshold",
+    "MACSThreshold",
 ]
