@@ -146,6 +146,7 @@ def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
     )
 
 
+# Available since PyTorch 2.8; keep the plain function for PyTorch 2.7.
 if hasattr(torch.compiler, "nested_compile_region"):
     # Compile cache copies separately to free each layer's full K/V tensors.
     _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)
