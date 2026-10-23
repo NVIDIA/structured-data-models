@@ -221,5 +221,8 @@ scoringbench_out/
 evals/
 datasets.json
 
+# Forecasting benchmarks
+gift_eval_out/
+
 # Checkpoint files
 *.pt
