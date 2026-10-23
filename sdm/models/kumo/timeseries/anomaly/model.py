@@ -166,8 +166,8 @@ class KumoAnomaly(Model):
                 generator=generator,
             )
 
-            scs = scs_threshold(out, query.x.numerical)
-            macs = macs_threshold(out)
+            scs = scs_threshold(out, query.x.numerical).long()
+            macs = macs_threshold(out).long()
             categories = torch.tensor([False, True], device=out.device)
             out = TableTensor(
                 columns={
@@ -176,7 +176,7 @@ class KumoAnomaly(Model):
                 },
                 numerical=out.unsqueeze(-1),
                 categorical=CategoricalTensor(
-                    code=torch.stack([scs, macs], dim=-1).long(),
+                    code=torch.stack([scs, macs], dim=-1),
                     categories=(categories, categories),
                 ),
             )
