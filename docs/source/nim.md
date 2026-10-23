@@ -1,402 +1,145 @@
 # NIM Inference
 
-NVIDIA NIM runs Kumo Tabular and Kumo Relational as inference services on a GPU host.
-This guide shows how to call a deployed NIM from Python and use data connectors to read input tables from a database or warehouse.
-Your Python process prepares the data and receives predictions; it does not need model weights or a local GPU.
+`structured-data-models` (SDM) provides Python building blocks for developing and evaluating structured data models.
+[NVIDIA NIM](https://developer.nvidia.com/nim) packages selected models as GPU inference microservices with an HTTP API for enterprise applications.
 
-Start with installation and a NIM connection, then follow the example for your model.
-The later sections cover data connectors, Databricks Model Serving, and reuse of context across prediction calls.
-For models that run directly in your Python process, see [In-Context Learning](icl).
+The SDM [in-context learning interface](icl) runs models in the application's Python process.
+A NIM runs model execution in a separate GPU service, and applications send structured prediction requests to it over HTTP.
+Applications can call the model without loading its weights or managing the GPU runtime.
+Application capacity and GPU service capacity can be provisioned separately.
 
-## Installation
+## From SDM to a NIM
 
-Install the lightweight client package from PyPI.
-It runs independently of the PyTorch library described in [Installation](install); that library is not needed to call a NIM:
+The Kumo models in SDM are also published as NIMs.
+Get the NIMs and their deployment instructions from NVIDIA Build:
 
-```bash
-python -m pip install "structured-data-models-client"
-```
+| Model ID          | SDM model                              | Prediction inputs                                                | Deployment instructions                                                            |
+| ----------------- | -------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `kumo-tabular`    | {py:class}`~sdm.models.KumoTabular`    | One table; classification and regression                         | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
+| `kumo-relational` | {py:class}`~sdm.models.KumoRelational` | Instance table and related tables; classification and regression | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
 
-For Kumo Relational, include the `relational` extra:
+Start by evaluating the model and prediction task on representative data with SDM.
+When moving inference into an application, deploy the NIM for that model.
+The NIM artifact defines the served model and supported API; the SDM Python interface and the NIM HTTP interface are separate contracts.
+Local SDM customizations, such as changes to a {py:class}`~sdm.processing.recipe.Recipe` or fine-tuned weights, are not automatically carried into a published NIM.
+Validate prediction quality on the deployed NIM with representative requests.
 
-```bash
-python -m pip install "structured-data-models-client[relational]"
-```
+Follow the selected NIM's deployment instructions to run its container on supported NVIDIA GPU infrastructure.
+NIMs can run in a data center or cloud environment managed by your organization.
+Check the model's deployment page for hardware requirements, the container image, access requirements, and license terms.
 
-Use Python 3.10 through 3.14 for Tabular inference.
-The relational-engine wheels are built for CPython 3.10 through 3.13 on Linux with glibc 2.28 or newer, on x86-64 and aarch64.
-Tabular inference can be called from Linux, macOS, or Windows; the relational-engine wheels require Linux.
-The GPU is needed on the NIM host.
+Once deployed, applications call the service at its base URL.
+The examples below assume a NIM at `http://localhost:8000`; replace this address with your deployment's URL.
+Applications can use any HTTP client, regardless of the language or data platform they run in.
 
-(nim-databricks-notebooks)=
+## The NIM API
 
-### Databricks notebooks
+Both Kumo NIMs provide these endpoints:
 
-Use `%pip` to install into a Databricks notebook while preserving the runtime's NumPy version.
-Run each of these steps in its own cell, before running the prediction examples.
-The extras below cover both warehouse access and Databricks Model Serving.
+| Method   | Path                                    | Purpose                                              |
+| -------- | --------------------------------------- | ---------------------------------------------------- |
+| `GET`    | `/v1/health/live`                       | Check whether the service is running.                |
+| `GET`    | `/v1/health/ready`                      | Check whether the model is ready to serve inference. |
+| `GET`    | `/v1/models`                            | List the model IDs served by the deployment.         |
+| `POST`   | `/v1/predictions`                       | Send context and query data for one prediction call. |
+| `POST`   | `/v1/sessions`                          | Retain context for subsequent prediction calls.      |
+| `POST`   | `/v1/sessions/{session_id}/predictions` | Predict using context retained in a session.         |
+| `DELETE` | `/v1/sessions/{session_id}`             | Release a session.                                   |
 
-First, capture the installed NumPy version:
-
-```python
-import numpy
-
-keep_numpy = f"numpy=={numpy.__version__}"
-```
-
-Then install the Python package and platform dependencies:
-
-```text
-%pip install --only-binary=:all: "structured-data-models-client[relational,databricks,databricks-serving]" $keep_numpy
-```
-
-Finally, restart Python so the notebook loads the installed packages:
-
-```python
-dbutils.library.restartPython()
-```
-
-## Connect to a NIM
-
-Choose a model and follow its deployment instructions on a Linux GPU host with Docker and the NVIDIA Container Toolkit:
-
-| Model ID          | Data                                         | Deployment instructions                                                                                                                                                          |
-| ----------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kumo-tabular`    | One table; classification and regression     | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)                                                                                                     |
-| `kumo-relational` | Related tables and temporal prediction tasks | [Kumo Relational tags on NGC](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/kumo-relational/-/tags), [NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
-
-Check the deployment pages for available tags, supported hardware, access requirements, and the terms for the selected artifact.
-For example, authenticate to the registry with an NGC API key as the password:
+Check readiness before sending predictions or listing models:
 
 ```bash
-docker login nvcr.io --username '$oauthtoken'
+NIM_URL=http://localhost:8000
+curl -fsS "$NIM_URL/v1/health/ready" && \
+    curl -fsS "$NIM_URL/v1/models"
 ```
 
-Then run the Relational NIM in one terminal, mapping host port 8001 to the container's port 8000:
+During startup, the service may be unreachable or return a non-success readiness response.
+Retry until readiness returns HTTP 200, then use a model ID advertised by that deployment.
+
+### Prediction Requests
+
+`POST /v1/predictions` accepts a JSON request that describes the task and carries the input data.
+The main fields are:
+
+| Field     | Meaning                                                                       |
+| --------- | ----------------------------------------------------------------------------- |
+| `model`   | The served model ID, such as `kumo-tabular` or `kumo-relational`.             |
+| `task`    | The prediction kind and target, with entity and time information when needed. |
+| `schema`  | Column types, keys, and relationships that describe the tables.               |
+| `context` | Labeled examples that define the task at inference time.                      |
+| `predict` | Query rows to score, with their features and any required related records.    |
+| `output`  | Requested results, such as predictions, class probabilities, or quantiles.    |
+
+Optional `inference` and `metadata` fields carry supported execution options and request metadata.
+Within `context` and `predict`, the `instance_table` holds the labeled examples or query rows.
+The model's API reference defines the accepted tasks, table encodings, and output fields.
+See the [Kumo Tabular](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tabular) and [Kumo Relational](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-relational) references and the complete request examples on their NVIDIA Build pages.
+
+As with SDM, labeled context rows define the prediction task at inference time without updating model weights.
+For Kumo Tabular, context rows contain features and the target; query rows contain the same features without the target.
+For Kumo Relational, the request also includes related tables and the relationships that link them to the instance table.
+
+For time-dependent Kumo Relational predictions, set `task.anchor_time_column` to the instance table's timestamp column and `inference.use_prediction_time` to `true`.
+Include only feature values and related records available at each row's anchor time, and use only context labels that were already known at the query rows' anchor times.
+Sessions run with prediction time turned off, and Kumo Tabular does not support anchor times.
+
+The NIM receives these prepared records; it does not connect to the source database or execute a predictive query against it.
+Save a complete request from the selected model's deployment example as `request.json`, adapt it to your data, and submit it to the running NIM:
 
 ```bash
-docker run --rm --gpus all --shm-size=16GB -p 8001:8000 \
-    nvcr.io/nim/nvidia/kumo-relational:1.0.1
+curl -fsS "$NIM_URL/v1/predictions" \
+    -H 'Content-Type: application/json' \
+    --data-binary @request.json
 ```
 
-For the Tabular example, follow its deployment page and expose the service on host port 8000.
-The Python examples use `http://localhost:8000` for Tabular and `http://localhost:8001` for Relational.
-When the service runs on another machine, replace these addresses with the deployment's reachable base URLs.
-
-Wait for the service to finish starting, then check readiness and the model IDs it advertises:
-
-```python
-from sdm_client import SDMClient
-
-with SDMClient(url="http://localhost:8001") as client:
-    ready = client.health_ready()
-    print(ready)
-    if ready:
-        print(client.models())
-```
-
-`health_ready()` returns `False` for a non-200 response and raises `StructuredDataError` with code `TRANSPORT_ERROR` if the service cannot be reached yet.
-Retry the check while the container starts, and call `models()` only after readiness is `True`.
-Continue when the endpoint advertises the model you intend to use.
-Pass the **base URL**, such as `http://localhost:8001`; `SDMClient` adds the `/v1/...` routes.
-`KumoTabular()` and `KumoRelational()` select the model to call on that endpoint.
-These selectors are distinct from the in-process model implementations in `sdm.models`.
-They do not start a model or connect to a different deployment.
-
-(nim-authentication)=
-
-### Authentication
-
-Registry authentication grants access to the container image.
-Inference authentication is configured separately by the deployment operator.
-If an authenticating gateway accepts `X-API-Key`, supply its key explicitly with `SDMClient(url="https://your-nim-host", api_key=...)`.
-`SDMClient` sends that value as `X-API-Key` and requires HTTPS when sending credentials to a non-local host.
-
-NVIDIA's hosted API Catalog uses model-specific URLs and Bearer authentication.
-`SDMClient` cannot call that hosted API.
-The connection shown here is for a deployed NIM.
-To call NVIDIA's hosted API, follow the model's API example on NVIDIA Build.
-
-## Predict with Kumo Tabular
-
-Supply labeled context rows and query rows with the same feature columns.
-Leave the target out of the query rows:
-
-```python
-import pandas as pd
-from sdm_client import KumoTabular, Request, SDMClient
-
-context = pd.DataFrame(
-    {
-        "age": [31.0, 44.5, 28.0, 51.0, 39.0, 57.0],
-        "spend": [120.0, 430.0, 90.0, 510.0, 260.0, 600.0],
-        "churn": [0, 1, 0, 1, 0, 1],
-    }
-)
-to_score = pd.DataFrame({"age": [33.0, 47.0], "spend": [150.0, 480.0]})
-tabular_request = Request(
-    context=context,
-    predict=to_score,
-    target="churn",
-    task="classification",
-)
-
-with SDMClient(url="http://localhost:8000") as client:
-    result = client.predict(tabular_request, model=KumoTabular())
-    print(result.to_pandas())
-```
-
-The context teaches the prediction task at inference time, without updating model weights.
-Classification returns predictions and class probabilities by default.
-For a numerical target, use `task="regression"`.
-
-## Predict with Kumo Relational
-
-Describe the tables, their keys, their relationships, and their time columns.
-Then express the prediction with the Predictive Query Language (PQL).
-This example asks for each user's spending over the next 30 days:
-
-```python
-import pandas as pd
-from sdm_client import (
-    KumoRelational,
-    PredictiveQuery,
-    Relationship,
-    Schema,
-    SDMClient,
-)
-
-users = pd.DataFrame({"user_id": range(20)})
-orders = pd.DataFrame(
-    {
-        "order_id": range(240),
-        "user_id": [i % 20 for i in range(240)],
-        "amount": [10.0 + i % 17 for i in range(240)],
-        "ordered_at": pd.date_range("2025-01-01", periods=240, freq="D"),
-    }
-)
-schema = Schema.from_data(
-    {"users": users, "orders": orders},
-    primary_keys={"users": "user_id", "orders": "order_id"},
-    time_columns={"users": None, "orders": "ordered_at"},
-    relationships=[Relationship("orders", "user_id", "users", "user_id")],
-)
-model = KumoRelational()
-query = PredictiveQuery(
-    "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
-    schema,
-)
-relational_request = query.materialize(
-    indices=[1, 2, 3],
-    model=model,
-    num_context_samples=64,
-)
-
-with SDMClient(url="http://localhost:8001") as client:
-    result = client.predict(relational_request, model=model)
-    print(result.to_pandas())
-```
-
-`materialize()` resolves the query, constructs historical labeled examples, and samples the related records needed for prediction.
-The sampled data and schema are included in the request.
-The NIM does not connect to your database.
-
-The **prediction anchor** is the timestamp from which the next 30 days are measured.
-Features come from records at or before that timestamp, and labels come from the later target window.
-`0, 30, days` denotes `(anchor, anchor + 30 days]`.
-Use data spanning comfortably more than the target window so historical labels can be constructed.
-`materialize()` reports when no eligible context can be built.
-
-## Data Connectors
-
-Data connectors (`sdm_connectors`) read input data using your database connection, warehouse session, or file path.
-You choose the data source independently of where the model runs: for example, read tables from Snowflake and send a prediction request to a NIM on another host.
-Add the platform extras below to the client installation command to install the required connectors and drivers.
-
-| Data source             | Python API                                    | Installation extra                           |
-| ----------------------- | --------------------------------------------- | -------------------------------------------- |
-| Databricks              | `DatabricksSource`                            | `databricks`                                 |
-| Snowflake               | `SnowflakeSource`                             | `snowflake`                                  |
-| PostgreSQL              | `PostgresSource`                              | `postgres`                                   |
-| DuckDB                  | `DuckDBSource`                                | `duckdb`                                     |
-| SQLite                  | `SQLiteSource`                                | `sqlite`                                     |
-| Databricks Lakebase     | `lakebase()` connection with `PostgresSource` | `lakebase`                                   |
-| S3 CSV/Parquet files    | `read(path)`                                  | `s3`                                         |
-| Local CSV/Parquet files | `read(path)`                                  | No driver extra; connectors package required |
-
-On Databricks, install `lakebase` instead of `postgres` or `all`, even for PostgreSQL outside Lakebase.
-This avoids the bundled OpenSSL in `psycopg[binary]`, which fails its FIPS self-test on Databricks aarch64 hosts.
-
-The `relational` extra also installs the connectors package.
-If you only installed the base package for Tabular inference and want to use local file readers, add the connectors package:
-
-```bash
-python -m pip install structured-data-models-connectors
-```
-
-The Lakebase connection helper is imported from `sdm_connectors.databricks`.
-
-Database sources with `Schema.from_source()` are for Kumo Relational.
-`materialize()` samples the records needed for a prediction instead of loading every table into memory.
-For Kumo Tabular, use `read(path)` for files or `read_table(connection, table=...)` for database tables to load rows into pandas DataFrames, then pass those DataFrames to `Request`.
-`read_table()` requires a DB-API connection, such as one from `databricks.sql.connect(...)`, `warehouse(...)`, or `snowflake.connector.connect(...)`.
-For a Snowpark session, pass its `.connection`; a Spark or Snowpark session itself is not a DB-API connection.
-
-### Databricks and Snowflake
-
-For Databricks:
-
-```bash
-python -m pip install "structured-data-models-client[relational,databricks]"
-```
-
-For Snowflake:
-
-```bash
-python -m pip install "structured-data-models-client[relational,snowflake]"
-```
-
-For installation in a Databricks notebook, follow {ref}`nim-databricks-notebooks`.
-
-The following source examples assume that tables equivalent to `users` and `orders` above already exist in the selected warehouse.
-In a Databricks notebook with an existing `spark` session:
-
-```python
-from sdm_connectors import DatabricksSource
-
-source = DatabricksSource(spark, catalog="main", schema="sales")
-```
-
-This Spark path requires Databricks Runtime 17.3 LTS or serverless environment 4 and later.
-For a SQL warehouse, open a connection with `databricks.sql.connect(...)` or `warehouse(warehouse_id)` from `sdm_connectors.databricks`.
-The `warehouse()` helper uses the Databricks SDK's configured workspace identity.
-Pass that connection to `DatabricksSource(connection, catalog=..., schema=...)`.
-
-With an existing Snowpark session or Snowflake connector connection named `snowflake_session`:
-
-```python
-from sdm_connectors import SnowflakeSource
-
-source = SnowflakeSource(snowflake_session, database="SALES", schema="PUBLIC")
-```
-
-Column names in schema arguments and PQL must match the names reported by the warehouse exactly.
-The shared example below assumes the lowercase column names from the DataFrames above.
-In Snowflake, those names require columns created with quoted lowercase identifiers.
-For ordinary unquoted Snowflake columns, use `USER_ID`, `ORDER_ID`, `ORDERED_AT`, and `AMOUNT` in the schema arguments and PQL, such as `users.USER_ID` and `orders.AMOUNT`.
-
-After choosing one source, build the schema with the same keys and relationships:
-
-```python
-from sdm_client import (
-    KumoRelational,
-    PredictiveQuery,
-    Relationship,
-    Schema,
-    SDMClient,
-)
-
-model = KumoRelational()
-warehouse_schema = Schema.from_source(
-    source,
-    {"users": "users", "orders": "orders"},
-    primary_keys={"users": "user_id", "orders": "order_id"},
-    time_columns={"users": None, "orders": "ordered_at"},
-    relationships=[Relationship("orders", "user_id", "users", "user_id")],
-)
-warehouse_request = PredictiveQuery(
-    "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
-    warehouse_schema,
-).materialize(indices=[1, 2, 3], model=model, num_context_samples=64)
-
-with SDMClient(url="https://your-nim-host") as client:
-    print(client.predict(warehouse_request, model=model).to_pandas())
-```
-
-Schema construction reads catalog metadata, previews up to 1,000 rows per table, and checks primary keys with a full scan of each eligible table.
-Pass `check_keys=False` to skip the key scans when you have already validated those keys.
-`materialize()` samples records with SQL and includes them in the prediction request.
-The source uses your warehouse permissions.
-It does not close your connection; close it yourself when you are done.
-The notebook must be able to reach the NIM host over the network; supply its base URL and, if required by the gateway, its API key as described under {ref}`nim-authentication`.
-
-## Databricks Model Serving
-
-To call a model on Databricks Model Serving, connect by its serving endpoint name.
-The endpoint must serve the Kumo Relational MLflow package with the `request_json` input and `response_json` output fields.
-Obtain that model package through your deployment provider, or ask your workspace operator to register it and create the serving endpoint.
-This section covers invocation of an existing compatible endpoint.
-Install the `relational` and `databricks-serving` extras:
-
-```bash
-python -m pip install "structured-data-models-client[relational,databricks-serving]"
-```
-
-For notebook setup, see {ref}`nim-databricks-notebooks`.
-
-Use the **serving endpoint name**, and the Relational request prepared above:
-
-```python
-with SDMClient.for_databricks_serving("kumo-relational") as client:
-    result = client.predict(relational_request, model=KumoRelational())
-    print(result.to_pandas())
-```
-
-Authentication comes from the Databricks SDK's configured workspace identity, including the notebook's identity when supported by its environment.
-For another workspace or credential, pass `workspace_client=WorkspaceClient(...)` from `databricks.sdk`.
-Each call sends one `request_json` row and reads one `response_json` row.
-The endpoint must support these fields; an MLflow model with a different input signature will not work.
-This path supports one-shot `predict()`; `fit()` and `models()` are unavailable.
-`predict()` checks Databricks' 16 MB limit against the wrapped request; reduce the number of context samples or entities per call when a request exceeds it.
-See [Databricks custom-model endpoint documentation](https://docs.databricks.com/aws/en/machine-learning/model-serving/score-custom-model-endpoints) for the platform's invocation interfaces.
-
-## Snowflake Model Serving
-
-The `SnowflakeSource` connector reads tables; it does not call a model hosted by Snowflake.
-`SDMClient` currently has no public connection for Snowflake Model Serving.
-To use Snowflake data with the Python workflow in this guide, sample tables as above and send the request to a deployed NIM.
-For a model hosted through the Snowflake Model Registry on Snowpark Container Services, use Snowflake's serving interfaces.
-See [Snowflake model serving](https://docs.snowflake.com/en/developer-guide/snowflake-ml/inference/real-time-inference-rest-api) for the platform's own serving interfaces.
-
-## Reuse Context with a Session
-
-A NIM that supports sessions can retain context across prediction calls for the same task and schema.
-Using the schema, model, and query from the Relational example:
-
-```python
-more_request = query.materialize(
-    indices=[4, 5],
-    model=model,
-    num_context_samples=64,
-)
-
-with SDMClient(url="http://localhost:8001") as client:
-    with client.fit(
-        relational_request,
-        model=model,
-        holdout=[1, 2, 3, 4, 5],
-    ) as fitted:
-        first = fitted.predict(relational_request)
-        second = fitted.predict(more_request)
-        print(first.to_pandas())
-        print(second.to_pandas())
-```
-
-`fit()` uploads and pins context; it does not train the model.
-The fitted handle sends query data against that context, and its context manager releases the session.
-Declare every entity the session may score in `holdout` before pinning context, so those entities cannot become their own labeled examples.
-`fit()` emits an `SDMWarning` when it removes holdout rows from the context; this is expected and reduces the context size.
-For temporal tasks, this excludes those entities at every anchor; use one-shot prediction when historical examples for the same entity are needed.
-If the deployment does not support sessions, use `client.predict()`.
-Sessions live in the serving process and can expire, be evicted, or disappear after a restart.
-Route session calls to the same serving process; create a new session or use one-shot prediction if the session is gone.
-
-## Prediction Results
-
-`client.predict()` and the fitted handle return a `PredictionResult`.
-`result.to_pandas()` exposes fields such as `prediction`, `probability_<class>`, and `quantile_<level>`, depending on the task and requested outputs.
-Use the returned entity `id` when present, or `row_index` for a positional request, to join predictions to the input.
-Do not assume the endpoint preserves row order.
-
-Endpoint capabilities depend on the deployed model and version.
-`client.models()` reports the model IDs advertised by a NIM, while `client.capabilities(model)` describes locally known capabilities rather than querying the deployment.
+The call returns prediction results synchronously.
+Outputs depend on the task and requested fields.
+Match prediction records to input rows using `row_index`, the zero-based position of the query row, and the record's `id` when present.
+Kumo Relational returns the query row's `instance_id` as that record's `id`.
+The response-level `id` identifies the call, not an input row.
+
+### Reusing Context
+
+For repeated predictions with the same model, task, and schema, a session can retain context in the serving process.
+Sessions are the HTTP counterpart of the SDM {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow.
+Create it with `POST /v1/sessions`, use the returned session ID for subsequent predictions, and release it with `DELETE /v1/sessions/{session_id}`.
+Session creation retains context; it does not train the model.
+
+Sessions can expire, be evicted, or disappear after a restart.
+Route follow-up calls to the same serving process and recreate the session if it is lost.
+Use one-shot prediction when retaining context is unnecessary.
+
+### Python Client
+
+Applications can call deployed Kumo NIMs from Python with [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client).
+The client prepares structured prediction requests and handles the results, while inference runs in the deployed NIM.
+With Kumo Relational, it also answers ranking and multi-step forecasting questions by combining several classification or regression calls.
+
+## Enterprise Integration
+
+Data preparation may run in an application, a Databricks notebook, or a job reading Snowflake or another database.
+Use database drivers or data connectors to assemble the input tables under your existing data permissions, then send those records to a reachable NIM endpoint.
+Data access and model deployment can be configured independently.
+For example, an application can read Snowflake tables and call a NIM running in your data center.
+
+The deployment operator manages GPU capacity, image updates, network access, authentication, and monitoring.
+The Kumo NIMs do not enforce application authentication on their prediction and session routes.
+Deploy the service within the required network boundary and add TLS and authentication at a gateway, ingress, or service mesh in front of it.
+Registry credentials only pull the container image; callers authenticate with the scheme configured at that gateway.
+
+Use readiness checks when admitting traffic, and measure latency and throughput with representative requests before choosing capacity.
+Request size, context size, and relational neighborhoods affect inference cost.
+Batch work within the deployment's configured request limits, as described in the model's documentation.
+For deployments with multiple serving processes, account for session affinity when routing requests.
+
+NVIDIA's hosted API Catalog provides a separate way to prototype with available models.
+Its model-specific URLs and Bearer authentication differ from a self-hosted NIM's routes and deployment authentication.
+Follow the API example on the model's NVIDIA Build page when using the hosted service.
+For broader deployment information, see the [NVIDIA NIM documentation](https://docs.nvidia.com/nim/).
+
+## See Also
+
+- [`structured-data-models-client` documentation](https://docs.nvidia.com/sdm/client/overview) for installing the Python client, building prediction requests, and running them against a deployed NIM.
+- [Kumo Tabular NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tabular) and [Kumo Relational NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-relational) for the full request and response schemas.
+- [NVIDIA NIM documentation](https://docs.nvidia.com/nim/) for deployment, infrastructure, and operations guidance that applies across NIMs.
