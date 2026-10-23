@@ -354,7 +354,6 @@ class CategoricalTensor(Tensor):
 
     def decode(self) -> Tensor:
         r"""Decode this tensor to its category values."""
-        # Avoid a circular import through sdm.tensor.
         from sdm.tensor import ColumnarTensor  # noqa: PLC0415
 
         if self.size(-1) == 0:
