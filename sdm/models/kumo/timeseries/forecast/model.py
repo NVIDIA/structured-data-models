@@ -24,11 +24,10 @@ from sdm.tensor.table import TableSchema
 
 
 class KumoForecast(ICLModel):
-    r"""The time series forecasting foundation model from
-    `"New NVIDIA NV-Tesseract Time Series Models Advance Dataset Processing and
-    Anomaly Detection" <https://developer.nvidia.com/blog/
-    new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-
-    anomaly-detection>`__.
+    r"""The time series forecasting foundation model from the
+    `"Memory-Augmented Forecasting: Scalability and Generalization Across
+    Temporal Domains"
+    <https://ieeexplore.ieee.org/abstract/document/11402442>`__ paper.
 
     .. figure:: /images/kumo_forecast_light.png
         :width: 100%
