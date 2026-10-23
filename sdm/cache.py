@@ -131,7 +131,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def __getstate__(self) -> dict[str, object]:
         state = self.__dict__.copy()
         # Stable serialization metadata: positions in the tensor traversal.
-        state["_pinned_tensors"] = tuple(
+        state["_pinned_tensor_indices"] = tuple(
             index
             for index, tensor in enumerate(self._tensors())
             if tensor.is_pinned()
@@ -139,7 +139,9 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return state
 
     def __setstate__(self, state: dict[str, object]) -> None:
-        pinned = set(cast(tuple[int, ...], state.pop("_pinned_tensors", ())))
+        pinned = set(
+            cast(tuple[int, ...], state.pop("_pinned_tensor_indices", ()))
+        )
         self.__dict__.update(state)
         if not pinned or not torch.cuda.is_available():
             return
@@ -155,6 +157,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 if not replacements:
                     set_pinned_max_round_threshold(mb=1)
                 replacements[id(tensor)] = tensor.pin_memory()
+
         if replacements:
             self._items = self._apply_tensor(
                 lambda tensor: replacements.get(id(tensor), tensor)

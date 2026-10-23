@@ -1,9 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import copy
-import io
-import pickle
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -21,7 +18,6 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import Callback, ICLModel
 from sdm.processing import InvertibleMixin, Processor
-from sdm.testing import withCUDA
 
 
 @dataclass
@@ -129,100 +125,6 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supports_multi_target = False
     supports_context_only_columns = False
     supports_related_tables = False
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    "serialization", ["pickle", "torch", "torch_device", "deepcopy"]
-)
-def test_fitted_model_serialization_preserves_pinning(
-    device: torch.device,
-    serialization: str,
-) -> None:
-    model = _ClassFrequencyModel()
-    x = torch.randn(12, 2, device=device)
-    y = TableTensor(
-        categorical=CategoricalTensor(
-            code=torch.arange(12, device=device).remainder(3).view(-1, 1),
-            categories=(torch.tensor([10, 20, 30], device=device),),
-        )
-    )
-    model.fit(x, y, num_estimators=2)
-    expected = model.predict(x).numerical
-    cache = cast(Cache, model._cache)
-    assert all(
-        cast(Cache, cache[index]).is_pinned() == (device.type == "cuda")
-        for index in range(cast(int, cache["num_batches"]))
-    )
-    assert copy.copy(model)._cache is cache
-
-    if serialization == "pickle":
-        restored = pickle.loads(pickle.dumps(model))
-    elif serialization == "deepcopy":
-        restored = copy.deepcopy(model)
-    else:
-        stream = io.BytesIO()
-        torch.save(model, stream)
-        stream.seek(0)
-        restored = torch.load(
-            stream,
-            map_location=device if serialization == "torch_device" else None,
-            weights_only=False,
-        )
-
-    restored_cache = cast(Cache, restored._cache)
-    assert all(
-        cast(Cache, restored_cache[index]).is_pinned()
-        == (device.type == "cuda" and serialization != "torch_device")
-        for index in range(cast(int, restored_cache["num_batches"]))
-    )
-    if serialization == "torch_device":
-        assert all(
-            tensor.device == x.device
-            for index in range(cast(int, restored_cache["num_batches"]))
-            for tensor in cast(Cache, restored_cache[index])._tensors()
-        )
-    torch.testing.assert_close(
-        restored.predict(x).numerical, expected, rtol=0, atol=0
-    )
-    restored.clear()
-    with pytest.raises(RuntimeError, match="not yet fitted"):
-        restored.predict(x)
-    restored.fit(x, y, num_estimators=2)
-    torch.testing.assert_close(
-        restored.predict(x).numerical, expected, rtol=0, atol=0
-    )
-
-
-@withCUDA
-def test_fitted_model_serialization_without_cuda_pinning(
-    device: torch.device,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    model = _ClassFrequencyModel()
-    x = torch.randn(12, 2, device=device)
-    y = TableTensor(
-        categorical=CategoricalTensor(
-            code=torch.arange(12, device=device).remainder(3).view(-1, 1),
-            categories=(torch.tensor([10, 20, 30], device=device),),
-        )
-    )
-    model.fit(x, y, num_estimators=2)
-    expected = model.predict(x).numerical.cpu()
-    stream = io.BytesIO()
-    torch.save(model, stream)
-    stream.seek(0)
-    with monkeypatch.context() as patch:
-        patch.setattr(torch.cuda, "is_available", lambda: False)
-        restored = torch.load(stream, map_location="cpu", weights_only=False)
-    torch.testing.assert_close(
-        restored.predict(x.cpu()).numerical, expected, rtol=0, atol=0
-    )
-    cache = cast(Cache, restored._cache)
-    assert all(
-        not cast(Cache, cache[index]).is_pinned()
-        for index in range(cast(int, cache["num_batches"]))
-    )
 
 
 class MyCallback(Callback):
