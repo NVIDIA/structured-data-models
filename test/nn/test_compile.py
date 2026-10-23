@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 from collections.abc import Callable
 
 import pytest
@@ -16,16 +15,9 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyFullTest, withCUDA
 
-# Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
-pytestmark = [
-    pytest.mark.skipif(
-        os.getenv("FULL_TEST", "0") != "1",
-        reason="Fast test run",
-    ),
-    pytest.mark.usefixtures("compilation"),
-]
+pytestmark = pytest.mark.usefixtures("compilation")
 
 
 def fullgraph(module: torch.nn.Module) -> Callable[..., Tensor]:
@@ -35,6 +27,7 @@ def fullgraph(module: torch.nn.Module) -> Callable[..., Tensor]:
     return torch.compile(module, fullgraph=True, backend="eager")
 
 
+@onlyFullTest
 @withCUDA
 @pytest.mark.parametrize(
     "key_len_fn",
@@ -59,6 +52,7 @@ def test_qassmax_compile(
     torch.testing.assert_close(out, expected)
 
 
+@onlyFullTest
 @withCUDA
 @pytest.mark.parametrize("partial_rotary_factor", [1.0, 0.25])
 def test_rotary_embedding_compile(
@@ -78,6 +72,7 @@ def test_rotary_embedding_compile(
     torch.testing.assert_close(out, expected)
 
 
+@onlyFullTest
 @withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "masking"),
@@ -139,6 +134,7 @@ def test_sdpa_compile(
     torch.testing.assert_close(out, expected)
 
 
+@onlyFullTest
 @withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "kv_heads"),
@@ -171,6 +167,7 @@ def test_sdpa_compile_dynamic_shapes(
             torch.testing.assert_close(out, expected)
 
 
+@onlyFullTest
 @withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "self_attn"),
@@ -207,6 +204,7 @@ def test_attention_compile(
     torch.testing.assert_close(out, expected)
 
 
+@onlyFullTest
 @withCUDA
 def test_attention_compile_key_value_cache(device: torch.device) -> None:
     module = Attention(channels=8, num_query_heads=2, device=device)
@@ -231,19 +229,23 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("qassmax", "masking"),
+    ("qassmax", "masking", "batch_size_limit"),
     [
-        (False, None),
-        (True, None),
-        (False, "seqused"),
-        (True, "attn_mask"),
+        (False, None, None),
+        (True, None, None),
+        (False, "seqused", None),
+        (True, "attn_mask", None),
+        (False, None, 1),
+        (False, "seqused", 1),
     ],
 )
 def test_transformer_block_compile(
     device: torch.device,
     qassmax: bool,
     masking: str | None,
+    batch_size_limit: int | None,
 ) -> None:
+    torch.manual_seed(0)
     channels = 8
     module = TransformerBlock(
         channels=channels,
@@ -253,7 +255,10 @@ def test_transformer_block_compile(
         if qassmax
         else None,
         device=device,
-    )
+    ).eval()
+    with torch.no_grad():
+        # A zero residual projection would hide compiled masking errors.
+        module.attn.out_lin.weight.normal_(std=0.1)
     query = torch.randn(2, 3, channels, device=device)
     key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = seqused = None
@@ -265,27 +270,38 @@ def test_transformer_block_compile(
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
 
-    expected = module(
-        query=query,
-        key_value=key_value,
-        seqused_key_value=seqused,
-        attn_mask=attn_mask,
-    )
-    out = fullgraph(module)(
-        query=query,
-        key_value=key_value,
-        seqused_key_value=seqused,
-        attn_mask=attn_mask,
-    )
+    # Chunking only runs with gradients disabled. There, the eager reference
+    # below exercises the real `batch_size_limit` chunking loop while the
+    # compiled call skips chunking via `torch.compiler.is_compiling()` -
+    # so the comparison proves both that passing the kwarg introduces no
+    # graph breaks and that the chunked and unchunked paths agree.
+    with torch.set_grad_enabled(batch_size_limit is None):
+        expected = module(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused,
+            attn_mask=attn_mask,
+            batch_size_limit=batch_size_limit,
+        )
+        out = fullgraph(module)(
+            query=query,
+            key_value=key_value,
+            seqused_key_value=seqused,
+            attn_mask=attn_mask,
+            batch_size_limit=batch_size_limit,
+        )
     torch.testing.assert_close(out, expected)
 
 
 @withCUDA
 @pytest.mark.parametrize("self_attn", [False, True])
+@pytest.mark.parametrize("batch_size_limit", [None, 1])
 def test_induced_transformer_block_compile(
     device: torch.device,
     self_attn: bool,
+    batch_size_limit: int | None,
 ) -> None:
+    torch.manual_seed(0)
     channels = 8
     module = InducedTransformerBlock(
         channels=channels,
@@ -304,12 +320,23 @@ def test_induced_transformer_block_compile(
             device=device,
         ),
         device=device,
-    )
+    ).eval()
+    with torch.no_grad():
+        for block in module.modules():
+            if isinstance(block, TransformerBlock):
+                block.attn.out_lin.weight.normal_(std=0.1)
     query = torch.randn(2, 6, channels, device=device)
     key_value = (
         None if self_attn else torch.randn(2, 5, channels, device=device)
     )
 
-    expected = module(query=query, key_value=key_value)
-    out = fullgraph(module)(query=query, key_value=key_value)
+    # See test_transformer_block_compile: disabling gradients makes the
+    # eager reference exercise the real chunking loop that compilation skips.
+    with torch.set_grad_enabled(batch_size_limit is None):
+        expected = module(
+            query=query, key_value=key_value, batch_size_limit=batch_size_limit
+        )
+        out = fullgraph(module)(
+            query=query, key_value=key_value, batch_size_limit=batch_size_limit
+        )
     torch.testing.assert_close(out, expected)
