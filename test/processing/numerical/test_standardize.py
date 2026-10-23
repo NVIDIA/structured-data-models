@@ -9,10 +9,22 @@ from sdm.processing import Standardize
 from sdm.testing import withCUDA
 
 
+@pytest.mark.parametrize("division_dtype", [None, torch.float64])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.float32, torch.float64]
+)
 @withCUDA
-def test_standardize_with_state(device: torch.device) -> None:
-    processor = Standardize().with_state(mean=2.0, scale=3.0).to(device)
-    data = torch.randn(2, 3, 2, device=device)
+def test_standardize_with_state(
+    device: torch.device,
+    division_dtype: torch.dtype | None,
+    dtype: torch.dtype,
+) -> None:
+    processor = (
+        Standardize(division_dtype=division_dtype)
+        .with_state(mean=2.0, scale=3.0)
+        .to(device)
+    )
+    data = torch.randn(2, 3, 2, device=device, dtype=dtype)
     table = TableTensor.from_tensor(data)
     expected = (data - 2.0) / 3.0
 
@@ -20,6 +32,7 @@ def test_standardize_with_state(device: torch.device) -> None:
     processor.fit(table)
     torch.testing.assert_close(processor.transform(table).numerical, expected)
     out = processor.fit_transform(table)
+    assert out.numerical.dtype == dtype
     torch.testing.assert_close(out.numerical, expected)
 
 
@@ -176,3 +189,21 @@ def test_standardize_fits_leading_batches_independently(
         processor.inverse_transform(out).numerical,
         query,
     )
+
+
+@withCUDA
+def test_standardize_precise_fixed_division(device: torch.device) -> None:
+    # Frozen Forecast statistics and low-variance histories expose scalar
+    # reciprocal rounding on CUDA. Keep fixed statistics on their CPU default.
+    mean, scale = -5.671202659606934, 8.693312644958496
+    data = torch.tensor([[13.000005722045898], [0.000001], [100000.125]])
+    expected = (data - mean) / scale
+    processor = Standardize(division_dtype=torch.float64).with_state(
+        mean, scale
+    )
+    table = TableTensor.from_tensor(data.to(device))
+
+    actual = processor.transform(table).numerical
+    assert actual.dtype == data.dtype
+    assert actual.device == device
+    torch.testing.assert_close(actual.cpu(), expected, rtol=0, atol=0)

@@ -40,6 +40,8 @@ class KumoForecast(ICLModel):
     Optional cross-channel mixing lets forecasts use dependencies between
     variates after temporal encoding. The forecasting head predicts the native
     up to 72-step horizon directly from a 512-step history.
+    Patch embeddings retain the projection parameter dtype when entering the
+    temporal encoder, including under autocast.
 
     Within the :class:`~sdm.models.ICLModel` protocol, :class:`KumoForecast`
     treats rows as ordered time steps. In a default forward pass,
@@ -253,7 +255,11 @@ class _KumoForecast(torch.nn.Module):
             **factory_kwargs,
         )
         torch.nn.init.orthogonal_(self.lin.weight, gain=1.41)
-        self.pe = SinusoidalEmbedding()
+        # Preserve the checkpoint's CPU-generated positional values.
+        pe = SinusoidalEmbedding()(
+            torch.zeros(context_size // patch_size, channels, device="cpu")
+        )
+        self.register_buffer("pe", pe.to(**factory_kwargs))
 
         self.icl = ICLBlock(
             channels=channels,
@@ -283,11 +289,12 @@ class _KumoForecast(torch.nn.Module):
         x: Tensor,  # [..., C, R]
     ) -> Tensor:  # [..., C, prediction_size]
 
+        x = x.contiguous()
         mean, scale = self.revin.compute_stats(x)
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
-        x = self.pe(self.lin(x))  # [..., C, N, D]
+        x = self.lin(x).to(self.lin.weight.dtype) + self.pe  # [..., C, N, D]
 
         x = self.icl(x)  # [..., C, N, D]
         if self.cross_channel is not None:
