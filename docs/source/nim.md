@@ -47,6 +47,7 @@ See the [Kumo Tabular NIM reference](https://docs.api.nvidia.com/nim/reference/n
 
 Applications can call deployed NIMs for structured data models from Python using the [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client).
 The client prepares structured prediction requests and handles the results, while inference runs in the deployed NIM.
+See its [documentation](https://docs.nvidia.com/sdgm/client/overview) for installation instructions and usage examples.
 
 Data preparation may run in an application, a Databricks notebook, or a job reading Snowflake or another database.
 The [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client) uses data connectors to assemble the input tables under your existing data permissions, then sends those records to a reachable NIM endpoint.
