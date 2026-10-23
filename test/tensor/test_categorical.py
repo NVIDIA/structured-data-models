@@ -8,7 +8,7 @@ import pyarrow as pa
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor
+from sdm import CategoricalTensor, ColumnarTensor, NullableTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -75,79 +75,31 @@ def test_to_copy() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("dtype", [torch.bool, torch.int64, torch.float32])
-@pytest.mark.parametrize("code_dtype", [torch.int32, torch.int64])
-def test_decode(
-    device: torch.device, dtype: torch.dtype, code_dtype: torch.dtype
-) -> None:
-    categories = torch.tensor([1, 0], dtype=dtype, device=device)
-    code = torch.tensor(
-        [[[0], [1], [0]], [[1], [0], [1]]], dtype=code_dtype, device=device
-    ).transpose(0, 1)
-    tensor = CategoricalTensor(code=code, categories=(categories,))
-
-    out = tensor.decode()
-
-    assert type(out) is torch.Tensor
-    assert out.device == device
-    assert out.dtype == dtype
-    expected = torch.tensor(
-        [[[1], [0]], [[0], [1]], [[1], [0]]], dtype=dtype, device=device
-    )
-    torch.testing.assert_close(out, expected)
-
-
-@withCUDA
-def test_decode_strings(device: torch.device) -> None:
+def test_decode(device: torch.device) -> None:
     tensor = CategoricalTensor(
-        code=torch.tensor([[1], [0], [1]], device=device),
-        categories=(StringTensor.from_list(["a", "b"], device=device),),
-    )
-
-    out = tensor.decode()
-
-    assert isinstance(out, StringTensor)
-    assert out.device == device
-    assert out.tolist() == [["b"], ["a"], ["b"]]
-
-
-@withCUDA
-def test_decode_empty(device: torch.device) -> None:
-    tensor = CategoricalTensor(
-        code=torch.empty(0, 1, dtype=torch.int64, device=device),
-        categories=(torch.empty(0, dtype=torch.bool, device=device),),
-    )
-
-    out = tensor.decode()
-
-    assert out.shape == (0, 1)
-    assert out.dtype == torch.bool
-    assert out.device == device
-
-
-@pytest.mark.parametrize("num_columns", [0, 2])
-def test_decode_requires_single_column(num_columns: int) -> None:
-    tensor = CategoricalTensor(
-        code=torch.zeros(3, num_columns, dtype=torch.int64),
-        categories=tuple(
-            torch.tensor([False, True]) for _ in range(num_columns)
+        code=torch.tensor([[0, 1, 0], [-1, -1, -1], [1, 0, 1]], device=device),
+        categories=(
+            StringTensor.from_list(["a", "b"], device=device),
+            torch.tensor([10, 20], dtype=torch.int64, device=device),
+            torch.tensor([1.5, 2.5], device=device),
         ),
     )
 
-    with pytest.raises(ValueError, match="exactly one categorical column"):
-        tensor.decode()
+    out = tensor.decode()
 
-
-@withCUDA
-@pytest.mark.parametrize("code", [-1, -2])
-def test_decode_missing(device: torch.device, code: int) -> None:
-    tensor = CategoricalTensor(
-        code=torch.tensor([[code]], device=device),
-        categories=(torch.tensor([False, True], device=device),),
+    assert isinstance(out, ColumnarTensor)
+    assert out.shape == (3, 3)
+    assert out.device == device
+    assert isinstance(out[:, 0], StringTensor)
+    assert out[:, 0].tolist() == ["a", None, "b"]
+    assert isinstance(out[:, 1], NullableTensor)
+    assert out[:, 1].dtype == torch.int64
+    assert out[:, 1].tolist() == [20, None, 10]
+    torch.testing.assert_close(
+        out[:, 2],
+        torch.tensor([1.5, torch.nan, 2.5], device=device),
+        equal_nan=True,
     )
-
-    with pytest.raises(ValueError, match="missing categorical values"):
-        tensor.decode()
 
 
 def test_from_arrow_string_values() -> None:

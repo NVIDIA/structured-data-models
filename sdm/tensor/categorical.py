@@ -14,12 +14,7 @@ from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import override
 
-from sdm.tensor import (
-    ColumnarTensor,
-    NullableTensor,
-    StringTensor,
-    VarLenTensor,
-)
+from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import (
     arrow_as_tensor,
     combine_arrow_chunks,
@@ -359,6 +354,8 @@ class CategoricalTensor(Tensor):
 
     def decode(self) -> Tensor:
         r"""Decode this tensor to its category values."""
+        from sdm.tensor import ColumnarTensor  # noqa: PLC0415
+
         if self.size(-1) == 0:
             raise ValueError("Decoding requires at least one column")
 
