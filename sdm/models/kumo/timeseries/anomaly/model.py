@@ -25,8 +25,8 @@ from sdm.models.kumo.timeseries.anomaly.recipe import default_recipe
 from sdm.models.kumo.timeseries.anomaly.sampling import DPMSolver
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
 from sdm.models.kumo.timeseries.anomaly.threshold import (
-    MACSThreshold,
-    SCSThreshold,
+    macs_threshold,
+    scs_threshold,
 )
 from sdm.processing.execution import MemberQuery, RecipeExecution
 
@@ -49,10 +49,6 @@ class KumoAnomaly(Model):
     and the sample median combines repeated reconstructions. Mean absolute
     reconstruction error across features gives a score per time step; larger
     scores indicate less accurately reconstructed observations.
-
-    SCS and MACS thresholding convert scores to boolean anomaly decisions.
-    Both use whole-series statistics, including future observations, and
-    their decisions are not calibrated probabilities.
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
@@ -126,9 +122,11 @@ class KumoAnomaly(Model):
         Returns:
             A table with shape ``[..., R, 3]`` containing numerical ``mae``
             reconstruction scores and categorical boolean ``scs`` and ``macs``
-            anomaly decisions. MAE is averaged across preprocessed features at
-            each time step. Thresholding uses the complete series before
-            applying the recipe's output pipeline.
+            anomaly labels at each time step. SCS (Segmented Confidence
+            Sequences) segments the preprocessed series and thresholds scores
+            using expanding bounds within each segment. MACS (Multi-Scale
+            Adaptive Confidence Segments) uses variance-weighted expanding
+            score bounds.
         """
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
@@ -168,8 +166,8 @@ class KumoAnomaly(Model):
                 generator=generator,
             )
 
-            scs = SCSThreshold()(out, query.x.numerical)
-            macs = MACSThreshold()(out)
+            scs = scs_threshold(out, query.x.numerical)
+            macs = macs_threshold(out)
             categories = torch.tensor([False, True], device=out.device)
             out = TableTensor(
                 columns={

@@ -7,7 +7,10 @@ from torch import Tensor
 
 from sdm import Recipe, TableTensor
 from sdm.models import KumoAnomaly
-from sdm.models.kumo.timeseries.anomaly import MACSThreshold, SCSThreshold
+from sdm.models.kumo.timeseries.anomaly.threshold import (
+    macs_threshold,
+    scs_threshold,
+)
 from sdm.processing import Callable
 from sdm.testing import withCUDA
 
@@ -54,8 +57,8 @@ def test_threshold_preprocessed_series(
     out = model(x, recipe=recipe)
 
     torch.testing.assert_close(out.numerical.squeeze(-1), scores[:300])
-    expected_scs = SCSThreshold()(scores, x + 10)
-    expected_macs = MACSThreshold()(scores)
+    expected_scs = scs_threshold(scores, x + 10)
+    expected_macs = macs_threshold(scores)
     expected = torch.stack([expected_scs, expected_macs], dim=-1).long()
     torch.testing.assert_close(out.categorical.code, expected[:300])
-    assert not torch.equal(expected_scs, SCSThreshold()(scores, x))
+    assert not torch.equal(expected_scs, scs_threshold(scores, x))

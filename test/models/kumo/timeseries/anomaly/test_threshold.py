@@ -6,7 +6,10 @@ import torch
 from torch import Tensor
 
 from sdm import TableTensor
-from sdm.models.kumo.timeseries.anomaly import MACSThreshold, SCSThreshold
+from sdm.models.kumo.timeseries.anomaly.threshold import (
+    macs_threshold,
+    scs_threshold,
+)
 from sdm.testing import withCUDA
 
 KINDS = ("flat", "regimes", "oscillating", "offset_regimes")
@@ -65,10 +68,10 @@ def test_upstream_decisions(
     device: torch.device, dtype: torch.dtype, kind: str, as_table: bool
 ) -> None:
     scores, target = _series(kind, device, dtype)
-    scs = SCSThreshold()(
+    scs = scs_threshold(
         scores, TableTensor.from_tensor(target) if as_table else target
     )
-    macs = MACSThreshold()(scores)
+    macs = macs_threshold(scores)
     for actual, indices in (
         (scs, SCS_INDICES[KINDS.index(kind)]),
         (macs, SPIKES[1:]),
@@ -86,14 +89,14 @@ def test_batched_decisions(device: torch.device) -> None:
     target = torch.stack([target for _, target in series]).reshape(
         2, 2, 600, 2
     )
-    scs = SCSThreshold()(scores, target)
-    macs = MACSThreshold()(scores)
+    scs = scs_threshold(scores, target)
+    macs = macs_threshold(scores)
     for index, (score, data) in enumerate(series):
         torch.testing.assert_close(
-            scs[index // 2, index % 2], SCSThreshold()(score, data)
+            scs[index // 2, index % 2], scs_threshold(score, data)
         )
         torch.testing.assert_close(
-            macs[index // 2, index % 2], MACSThreshold()(score)
+            macs[index // 2, index % 2], macs_threshold(score)
         )
 
 
@@ -105,7 +108,7 @@ def test_constant_scores(
 ) -> None:
     scores = torch.full((2, length), value, device=device)
     target = torch.ones(2, length, 2, device=device)
-    for flags in (SCSThreshold()(scores, target), MACSThreshold()(scores)):
+    for flags in (scs_threshold(scores, target), macs_threshold(scores)):
         assert flags.shape == scores.shape
         assert flags.dtype == torch.bool
         assert not flags.any()
@@ -120,12 +123,19 @@ def test_confidence_width(
 ) -> None:
     scores = torch.arange(20, device=device, dtype=torch.float64)
     expected = scores >= first
-    scs = SCSThreshold(confidence_level=confidence, percentile_filter=0)
-    macs = MACSThreshold(confidence_level=confidence, percentile_filter=0)
-    torch.testing.assert_close(
-        scs(scores, torch.ones(20, 1, device=device)), expected
+    scs = scs_threshold(
+        scores=scores,
+        target=torch.ones(20, 1, device=device),
+        confidence_level=confidence,
+        percentile_filter=0,
     )
-    torch.testing.assert_close(macs(scores), expected)
+    macs = macs_threshold(
+        scores=scores,
+        confidence_level=confidence,
+        percentile_filter=0,
+    )
+    torch.testing.assert_close(scs, expected)
+    torch.testing.assert_close(macs, expected)
 
 
 @withCUDA
@@ -133,7 +143,7 @@ def test_percentile_ties(device: torch.device) -> None:
     scores = torch.ones(100, device=device)
     scores[20:40] = 10
     target = torch.ones(100, 2, device=device)
-    assert not SCSThreshold()(scores, target).any()
-    assert not MACSThreshold()(scores).any()
-    assert SCSThreshold(percentile_filter=70)(scores, target).any()
-    assert MACSThreshold(percentile_filter=70)(scores).any()
+    assert not scs_threshold(scores, target).any()
+    assert not macs_threshold(scores).any()
+    assert scs_threshold(scores, target, percentile_filter=70).any()
+    assert macs_threshold(scores, percentile_filter=70).any()
