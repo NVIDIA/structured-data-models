@@ -6,7 +6,7 @@ Thus, an application can call the model without loading its weights or managing 
 
 ## From SDM to NIM
 
-NIMs for structured data models follow SDM's unified prediction interface, making it straightforward to expose local PyTorch models through a NIM API.
+NIMs for structured data models follow SDM's unified prediction interface.
 We have published the following NIMs:
 
 | Model ID          | Model                                  | Deployment Instructions                                                            |
@@ -41,6 +41,7 @@ The main request fields are:
 | `output`  | Requested results, such as predictions, class probabilities, or quantiles. |
 
 NIM sessions support workflows similar to {py:meth}`~sdm.models.ICLModel.fit` and {py:meth}`~sdm.models.ICLModel.predict`, caching context examples and model state for repeated prediction calls.
+Separate sessions allow multiple tenants to reuse the same deployment while maintaining their own prediction contexts.
 See the [Kumo Tabular NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-tabular) and [Kumo Relational NIM reference](https://docs.api.nvidia.com/nim/reference/nvidia-kumo-relational) for the full request and response schemas.
 
 ## Python Client
