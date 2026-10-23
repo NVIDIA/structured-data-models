@@ -9,10 +9,10 @@ Thus, an application can call the model without loading its weights or managing 
 NIMs for structured data models follow SDM's unified prediction interface, making it straightforward to expose local PyTorch models through a NIM API.
 We have published the following NIMs:
 
-| Model ID          | Model                                  | Taska and Inputs                                             | Deployment instructions                                                            |
-| ----------------- | -------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `kumo-tabular`    | {py:class}`~sdm.models.KumoTabular`    | One table; classification and regression                     | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
-| `kumo-relational` | {py:class}`~sdm.models.KumoRelational` | Task table and related tables; classification and regression | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
+| Model ID          | Model                                  | Deployment Instructions                                                            |
+| ----------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `kumo-tabular`    | {py:class}`~sdm.models.KumoTabular`    | [Kumo Tabular on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-tabular)       |
+| `kumo-relational` | {py:class}`~sdm.models.KumoRelational` | [Kumo Relational on NVIDIA Build](https://build.nvidia.com/nvidia/kumo-relational) |
 
 ## The NIM API
 
