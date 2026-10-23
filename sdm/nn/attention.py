@@ -186,7 +186,6 @@ class SDPA(torch.nn.Module):
                 scale=self.scale,
             ).transpose(-3, -2)  # [B, Q, Hq, C]
             for i in (
-                # Avoid range() needing the batch size during compilation.
                 (0,)
                 if query.size(0) <= 65_535
                 else range(0, query.size(0), 65_535)
