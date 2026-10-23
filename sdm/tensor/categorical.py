@@ -14,7 +14,7 @@ from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import override
 
-from sdm.tensor import StringTensor, VarLenTensor
+from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import (
     arrow_as_tensor,
     combine_arrow_chunks,
@@ -329,6 +329,10 @@ class CategoricalTensor(Tensor):
                 for column in tensor.unbind(dim=-1)
             ]
         )
+        # Tell torch.compile that nonempty columns have at least one category.
+        if tensor.numel() > 0:
+            for category in categories:
+                torch._check(category.numel() > 0)
         return cls(
             code=torch.stack(values, dim=-1),
             categories=categories,
@@ -345,6 +349,43 @@ class CategoricalTensor(Tensor):
     def categories(self) -> tuple[Tensor, ...]:
         r"""Return category vector for each categorical column."""
         return self._categories
+
+    # Methods #################################################################
+
+    def decode(self) -> Tensor:
+        r"""Decode this tensor to its category values."""
+        from sdm.tensor import ColumnarTensor  # noqa: PLC0415
+
+        if self.size(-1) == 0:
+            raise ValueError("Decoding requires at least one column")
+
+        tensors = []
+        for tensor in self.split(1, dim=-1):
+            code = tensor.code.squeeze(-1)
+            valid = code >= 0
+            if not valid.all():
+                tensor = tensor.categories[0][code.clamp(min=0)]
+                if isinstance(tensor, VarLenTensor):
+                    data, offset = tensor.contiguous().data_offset
+                    tensor = tensor.__class__(
+                        data=data,
+                        offset=offset,
+                        valid=valid.reshape(-1),
+                        size=tensor.size(),
+                    )
+                elif tensor.is_floating_point():
+                    tensor[~valid] = torch.nan
+                else:
+                    tensor = NullableTensor(tensor, valid)
+            else:
+                tensor = tensor.categories[0][code]
+
+            tensors.append(tensor)
+
+        if len(tensors) == 1:
+            return tensors[0].unsqueeze(-1)
+
+        return ColumnarTensor(tensors)
 
     # Decorators ##############################################################
 
