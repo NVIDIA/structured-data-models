@@ -50,6 +50,7 @@ from sdm.processing.categorical import (
     ImputeMode,
     AddCategoryCounts,
 )
+from sdm.processing.missing import MaskRandom
 from sdm.processing.datetime import AddCalendarFields
 from sdm.processing.output import AverageEstimators, Softmax, SortQuantiles
 from sdm.processing.recipe import Recipe
@@ -96,6 +97,7 @@ __all__ = [
     "ShuffleCategories",
     "ImputeMode",
     "AddCategoryCounts",
+    "MaskRandom",
     "AddCalendarFields",
     "AverageEstimators",
     "Softmax",

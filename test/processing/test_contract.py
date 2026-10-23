@@ -139,6 +139,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCategoryCounts()),
+    ProcessorCase(sp.MaskRandom(rate=(0.5, 0.5))),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
@@ -187,6 +188,11 @@ INVERTIBLE_PROCESSOR_CASES = tuple(
 )
 
 
+def _assert_equal(actual: TableTensor, expected: TableTensor) -> None:
+    # Processors can emit NaN for missing values.
+    assert actual.allclose(expected, rtol=0.0, atol=0.0, equal_nan=True)
+
+
 def test_all_public_processors_have_contract_cases() -> None:
     public_processors = set()
     for name in sp.__all__:
@@ -231,7 +237,7 @@ def test_fit_transform_matches_fit_then_transform(
     )
     assert len(actual) == len(expected)
     for member_id in range(len(actual)):
-        assert actual[member_id].equal(expected[member_id])
+        _assert_equal(actual[member_id], expected[member_id])
 
 
 @pytest.mark.parametrize(
@@ -245,12 +251,12 @@ def test_save_and_load_preserves_fitted_processor_behavior(
     table = case.make_table()
     processor_a, processor_b = _make_processor_pair(case.processor)
     processor_a.fit_ensemble(table)
-    expected = processor_a.transform_ensemble(table)
     processor_b.load_state_dict(processor_a.state_dict())
+    expected = processor_a.transform_ensemble(table)
     actual = processor_b.transform_ensemble(table)
     assert len(actual) == len(expected)
     for member_id in range(len(actual)):
-        assert actual[member_id].equal(expected[member_id])
+        _assert_equal(actual[member_id], expected[member_id])
 
 
 @pytest.mark.parametrize(
@@ -316,7 +322,7 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
     )
     processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
     processor.fit_ensemble(source)
-    expected = processor.transform_ensemble(source)
+    expected = deepcopy(processor).transform_ensemble(source)
     processor.to(dtype=dtype)
     actual = processor.transform_ensemble(target)
     assert all(
@@ -358,8 +364,8 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
     )
     processor_a, processor_b = _make_processor_pair(case.processor)
     processor_a.fit_ensemble(source)
-    expected = processor_a.transform_ensemble(source)
     processor_b.load_state_dict(processor_a.state_dict())
+    expected = processor_a.transform_ensemble(source)
     processor_b.to(device=device)
     actual = processor_b.transform_ensemble(target)
     assert all(

@@ -51,6 +51,18 @@ Categorical Processors
    ~sdm.processing.categorical.{{ name }}
 {% endfor %}
 
+Missingness Processors
+----------------------
+
+.. autosummary::
+   :toctree: generated
+   :template: processor_class
+   :nosignatures:
+
+{% for name in api_names("sdm.processing.missing") %}
+   ~sdm.processing.missing.{{ name }}
+{% endfor %}
+
 Text Processors
 ---------------
 
