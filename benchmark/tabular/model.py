@@ -96,7 +96,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
-        self._set_default_param_value("kv_cache", False)
+        self._set_default_param_value("kv_cache", True)
         self._set_default_param_value("estimator_batch_size", "auto")
         self._set_default_param_value("finetune", False)
         self._set_default_param_value("finetune_epochs", None)
