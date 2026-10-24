@@ -33,7 +33,6 @@ icl
 processing
 nanotabicl
 nim
-nanotabicl
 ```
 
 ```{toctree}
