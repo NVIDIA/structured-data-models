@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import partial
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -209,7 +210,8 @@ class KumoTabular(ICLModel):
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         if classes is None:
-            out = self.models[Task.regression](
+            out = self._call_core(
+                Task.regression,
                 x=x,
                 y=y,
                 categorical_mask=categorical_mask,
@@ -223,7 +225,9 @@ class KumoTabular(ICLModel):
             )
 
         out = self.ecoc(
-            model=self.models[Task.classification],
+            model=self.models[Task.classification]
+            if self._execution is None
+            else partial(self._call_core, Task.classification),
             x=x,
             y=y,
             num_classes=len(classes),
@@ -244,6 +248,12 @@ class KumoTabular(ICLModel):
             columns={"numerical": columns},
             numerical=out,
         )
+
+    def _call_core(self, task: Task, *args: Any, **kwargs: Any) -> Tensor:
+        model = self.models[task]
+        if self._execution is not None:
+            return self._execution._run_core(task, model, *args, **kwargs)
+        return model(*args, **kwargs)
 
 
 class _KumoTabular(torch.nn.Module):

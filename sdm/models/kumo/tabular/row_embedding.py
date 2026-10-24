@@ -3,6 +3,8 @@
 
 # ruff: noqa: D101, D102
 
+from collections.abc import Callable
+from functools import partial
 from typing import Any, cast
 
 import torch
@@ -114,7 +116,12 @@ class RowEmbedding(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_columns: Tensor | None = None,
+        _runner: Callable[..., Any] | None = None,
     ) -> Tensor:  # [..., R, K * D]
+        if _runner is not None and num_columns is not None:
+            raise ValueError(
+                "Context-sharded row embedding does not support padded columns"
+            )
 
         *B, R, C = x.size()
         R_train = y.size(-1)
@@ -125,10 +132,13 @@ class RowEmbedding(torch.nn.Module):
             if num_columns is None
             else (K + num_columns).unsqueeze(-1).to(torch.int32)
         )
+        cell = self.cell_embedding
+        if _runner is not None:
+            cell = partial(_runner, cell)
 
         buffer: Tensor | None = None
         if torch.is_grad_enabled():
-            x = self.cell_embedding(
+            x = cell(
                 x=x,
                 categorical_mask=categorical_mask,
                 train_size=R_train,
@@ -144,7 +154,7 @@ class RowEmbedding(torch.nn.Module):
                 else x.dtype,
             )
             buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
-            x = self.cell_embedding(
+            x = cell(
                 x=x,
                 categorical_mask=categorical_mask,
                 train_size=R_train,
@@ -156,10 +166,16 @@ class RowEmbedding(torch.nn.Module):
 
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
+                target = self.y_emb
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
+                target = self.y_lin
+            target_call = (
+                target if _runner is None else partial(_runner, target)
+            )
+            y_emb = target_call(
+                y if self.y_emb is not None else y.unsqueeze(-1)
+            ).unsqueeze(-2)  # [..., R_train, 1, D]
             x[..., :R_train, :, :] += y_emb.to(x.dtype)
 
         if buffer is not None:
@@ -179,7 +195,13 @@ class RowEmbedding(torch.nn.Module):
                 x = x.transpose(-2, -3)  # [..., C, R, D]
 
             key = f"row_embedding.col_block{i}"
-            result = col_block(
+            col_call = (
+                col_block if _runner is None else partial(_runner, col_block)
+            )
+            row_call = (
+                row_block if _runner is None else partial(_runner, row_block)
+            )
+            result = col_call(
                 query=x,
                 key_value=cast(KVCacheEntry, cache[key])
                 if cache is not None and cache.is_replaying
@@ -200,7 +222,7 @@ class RowEmbedding(torch.nn.Module):
                     [readout_token.to(x.dtype), x.transpose(-2, -3)],
                     dim=-2,
                 )
-                x = row_block(
+                x = row_call(
                     query=x[..., :K, :]
                     if i == len(self.row_blocks) - 1
                     else x,
@@ -209,7 +231,7 @@ class RowEmbedding(torch.nn.Module):
                     batch_size_limit="auto",
                 )
             else:
-                buffer = row_block(
+                buffer = row_call(
                     query=buffer[..., :K, :]
                     if i == len(self.row_blocks) - 1
                     else buffer,
@@ -221,4 +243,5 @@ class RowEmbedding(torch.nn.Module):
                     else buffer,
                 )
 
-        return self.norm(buffer if buffer is not None else x).flatten(-2)
+        norm = self.norm if _runner is None else partial(_runner, self.norm)
+        return norm(buffer if buffer is not None else x).flatten(-2)

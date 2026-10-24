@@ -111,6 +111,8 @@ markers = [
     "cuda: tests that require a NVIDIA GPU",
 ]
 testpaths = ["test"]
+# Spawned distributed-test workers must be able to import their test modules.
+pythonpath = ["."]
 xfail_strict = true
 
 [tool.coverage.run]

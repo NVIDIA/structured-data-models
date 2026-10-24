@@ -3,6 +3,8 @@
 
 # ruff: noqa: D101, D102
 
+from collections.abc import Callable
+from functools import partial
 from typing import Any, cast
 
 import torch
@@ -63,6 +65,7 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
+        _attention: Callable[..., Tensor] | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -77,11 +80,16 @@ class ICLBlock(torch.nn.Module):
             del y_emb
 
         for i, layer in enumerate(self.layers):
+            call = (
+                layer
+                if _attention is None
+                else partial(layer, _attention=_attention)
+            )
             cache_key = f"icl_block.layer{i}"
             last_layer = i == len(self.layers) - 1
 
             if self.kv_heads is None or cache is not None:
-                result = layer(
+                result = call(
                     query=x[..., R_train:, :] if last_layer else x,
                     key_value=(
                         cast(KVCacheEntry, cache[cache_key])
@@ -111,7 +119,7 @@ class ICLBlock(torch.nn.Module):
                 del result
                 continue
 
-            x_context, (key, value) = layer(
+            x_context, (key, value) = call(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
@@ -126,7 +134,7 @@ class ICLBlock(torch.nn.Module):
                 value=value[..., : self.kv_heads, :].contiguous(),
             )
             del key, value
-            x_query = layer(
+            x_query = call(
                 query=x[..., R_train:, :],
                 key_value=key_value,
                 out=None if torch.is_grad_enabled() else x[..., R_train:, :],
