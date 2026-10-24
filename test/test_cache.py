@@ -151,9 +151,12 @@ def test_quantized_cache_head_selection_and_transfer(
     assert Cache(entry=selected).size() == 288
 
 
-def test_cache_head_selection_preserves_contiguous_storage() -> None:
+def test_cache_head_selection_releases_unused_heads() -> None:
     entry = KVCacheEntry(torch.ones(1, 1, 4, 8), torch.zeros(1, 1, 4, 8))
     selected = entry.select_heads(2)
     assert selected.key.shape == selected.value.shape == (1, 1, 2, 8)
-    assert selected.key.data_ptr() == entry.key.data_ptr()
-    assert selected.value.data_ptr() == entry.value.data_ptr()
+    assert selected.key.data_ptr() != entry.key.data_ptr()
+    assert selected.value.data_ptr() != entry.value.data_ptr()
+    assert selected.key.is_contiguous()
+    assert selected.value.is_contiguous()
+    assert entry.select_heads(4) is entry
