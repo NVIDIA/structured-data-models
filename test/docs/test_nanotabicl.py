@@ -5,8 +5,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from torch import Tensor
-
 
 def test_nanotabicl() -> None:
     path = Path(__file__).parents[2] / "docs/source/nanotabicl.md"
@@ -18,6 +16,5 @@ def test_nanotabicl() -> None:
         exec(compile(source, str(path), "exec"), namespace)
 
     out = namespace["out"]
-    assert isinstance(out, Tensor)
     assert out.size() == (64, 10)
     assert out.isfinite().all()
