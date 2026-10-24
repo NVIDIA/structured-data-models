@@ -4,7 +4,7 @@ The [`sdm.nn`](api/nn) package provides reusable, GPU-accelerated building block
 In this guide, we show how to build a minimal [TabICLv2](https://arxiv.org/abs/2602.11139)-inspired Tabular Foundation Model (TFM) with it.
 Like other [in-context learning (ICL)](icl) models, it receives labeled context rows together with unlabeled query rows, and predicts the query targets in a single forward pass.
 
-TabICL pioneered the **"Compress-then-ICL"** approach which has since been adopted by other TFMs such as [TabPFN-3](https://arxiv.org/abs/2605.13986), [TabFM](https://arxiv.org/abs/2609.37959), and [KumoTabular](https://huggingface.co/blog/nvidia/kumo-tabular).
+[TabICL](https://arxiv.org/abs/2502.05564) pioneered the **"Compress-then-ICL"** approach which has since been adopted by other TFMs such as [TabPFN-3](https://arxiv.org/abs/2605.13986), [TabFM](https://arxiv.org/abs/2609.37959), and [KumoTabular](https://huggingface.co/blog/nvidia/kumo-tabular).
 Its main advantage is its efficient ICL stage that operates on compressed row representations rather than individual cells.
 It consists of three stages:
 
