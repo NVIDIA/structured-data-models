@@ -89,7 +89,8 @@ class ICLBlock(torch.nn.Module):
                 device=x.device,
                 dtype=torch.bool,
             ).tril() & ~patch_mask.unsqueeze(-2)
-            var_attn_mask = ~patch_mask.transpose(-2, -1).unsqueeze(-2)
+            time_attn_mask = time_attn_mask.unsqueeze(-3)
+            var_attn_mask = ~patch_mask.transpose(-2, -1)[..., None, None, :]
 
         for time_block, var_block in zip(self.time_blocks, self.var_blocks):
             x = time_block(

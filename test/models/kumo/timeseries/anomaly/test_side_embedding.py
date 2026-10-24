@@ -35,9 +35,9 @@ def test_side_embedding(
         and not torch.cuda.is_bf16_supported()
     ):
         pytest.skip("CUDA bfloat16 not supported")
-    batch, features, length = shape
+    B, D, R = shape
     module = SideEmbedding(
-        num_features=features,
+        in_channels=D,
         time_channels=time_channels,
         feature_channels=4,
         is_unconditional=is_unconditional,
@@ -46,10 +46,10 @@ def test_side_embedding(
     )
     if dtype == torch.float64:
         module = module.to(dtype=dtype)
-    time = torch.arange(batch * length, device=device).reshape(batch, length)
+    time = torch.arange(B * R, device=device).reshape(B, R)
     time = time.float().square() * 0.25 - 2.5
     time[:, -1] = 100000
-    mask = torch.arange(batch * features * length, device=device)
+    mask = torch.arange(B * D * R, device=device)
     mask = mask.reshape(shape).remainder(2).bool()
     actual = module(time, mask)
 
@@ -60,7 +60,7 @@ def test_side_embedding(
         / time_channels,
     )
     phase = time.unsqueeze(-1) * frequencies
-    time_embed = torch.empty(batch, length, time_channels, device=device)
+    time_embed = torch.empty(B, R, time_channels, device=device)
     time_embed[..., 0::2] = phase.sin()
     time_embed[..., 1::2] = phase.cos()
     time_embed = F.layer_norm(
@@ -71,7 +71,7 @@ def test_side_embedding(
         eps=module.time_embed_norm.eps,
     )
     feature_embed = F.embedding(
-        input=torch.arange(features, device=device),
+        input=torch.arange(D, device=device),
         weight=module.embed_layer.weight,
     )
     feature_embed = F.layer_norm(
@@ -83,19 +83,14 @@ def test_side_embedding(
     )
     expected = torch.cat(
         [
-            time_embed[:, :, None].expand(-1, -1, features, -1),
-            feature_embed[None, None].expand(batch, length, -1, -1),
+            time_embed[:, :, None].expand(-1, -1, D, -1),
+            feature_embed[None, None].expand(B, R, -1, -1),
         ],
         dim=-1,
     ).permute(0, 3, 2, 1)
     if is_unconditional:
         expected = torch.cat([expected, mask[:, None].to(dtype)], dim=1)
-    assert actual.shape == (
-        batch,
-        time_channels + 4 + int(is_unconditional),
-        features,
-        length,
-    )
+    assert actual.shape == (B, time_channels + 4 + int(is_unconditional), D, R)
     assert actual.dtype == dtype
     assert actual.device == device
     torch.testing.assert_close(actual, expected)

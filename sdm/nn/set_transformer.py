@@ -145,12 +145,12 @@ class InducedTransformerBlock(torch.nn.Module):
             if key_value is None:
                 key_value = query
             if attn_mask is not None:
-                attn_mask = attn_mask.unsqueeze(-2)  # [..., 1, KV]
+                attn_mask = attn_mask[..., None, None, :]  # [..., 1, 1, KV]
             key_value = self.inducing_block(
                 query=self.inducing_points,  # [M, C]
                 key_value=key_value,  # [..., KV, C]
                 seqused_key_value=seqused_key_value,  # [...]
-                attn_mask=attn_mask,  # [..., 1, KV]
+                attn_mask=attn_mask,  # [..., 1, 1, KV]
                 batch_size_limit=batch_size_limit,
             )  # [..., M, C]
         return self.output_block(

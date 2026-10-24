@@ -24,7 +24,7 @@ def embed_entity_text(
     device: torch.device,
 ) -> tuple[torch.Tensor, tuple[str, ...], torch.Tensor] | None:
     """Embed task entities and return CPU embeddings."""
-    if len(entity.columns[sdm.Stype.text]) == 0:
+    if len(entity.text_columns) == 0:
         return None
     entity_ids = entity.select_columns(pkey).to_pandas()[pkey]
     in_task = torch.from_numpy(
@@ -44,7 +44,7 @@ def embed_entity_text(
     with torch.inference_mode():
         for start in range(0, text.size(0), row_chunk):
             embedded = encoder(text[start : start + row_chunk].to(device))
-            columns = embedded.columns[sdm.Stype.numerical]
+            columns = embedded.numerical_columns
             parts.append(embedded.numerical.cpu())
     del encoder, embedded, text
     if device.type == "cuda":
@@ -92,7 +92,7 @@ def attach_text(
                 entity.drop_stypes(sdm.Stype.text),
                 sdm.TableTensor(
                     columns={
-                        "numerical": reduced.columns[sdm.Stype.numerical],
+                        "numerical": reduced.numerical_columns,
                     },
                     numerical=values,
                 ),

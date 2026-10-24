@@ -18,7 +18,9 @@ class DropStypes(Processor):
     def __init__(self, *stypes: StypeLike) -> None:
         super().__init__()
         self._stypes = stypes
-        self.handles_stypes = frozenset(Stype(stype) for stype in stypes)
+        self.handles_stypes = tuple(
+            dict.fromkeys(Stype(stype) for stype in stypes)
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         return table.drop_stypes(self.handles_stypes)

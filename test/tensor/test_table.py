@@ -55,6 +55,12 @@ def test_init() -> None:
         Stype.text: (),
         Stype.id: (),
     }
+    assert tensor.numerical_columns == ("age", "income")
+    assert tensor.categorical_columns == ("country", "segment")
+    assert tensor.datetime_columns == ()
+    assert tensor.text_columns == ()
+    assert tensor.id_columns == ()
+
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
         "income": (Stype.numerical, 1),
@@ -87,6 +93,20 @@ def test_empty() -> None:
         Stype.id: (),
     }
     assert tensor._column_to_loc == {}
+
+
+def test_column_groups() -> None:
+    tensor = TableTensor(
+        columns={"text": (), "numerical": ("age",)},
+        numerical=torch.zeros(2, 1),
+    )
+    assert tensor.column_groups == (
+        (Stype.text, ()),
+        (Stype.numerical, ("age",)),
+        (Stype.categorical, ()),
+        (Stype.datetime, ()),
+        (Stype.id, ()),
+    )
 
 
 def test_column_names() -> None:
@@ -991,6 +1011,39 @@ def test_cat_all_column_empty(device: torch.device) -> None:
     assert out.columns == tensor1.columns
 
 
+@withCUDA
+@pytest.mark.parametrize("dim", [0, -1])
+def test_cat_keeps_empty_block_dtype(device: torch.device, dim: int) -> None:
+    tensor = TableTensor(
+        numerical=torch.empty(2, 0, dtype=torch.float64, device=device),
+        categorical=CategoricalTensor(
+            code=torch.empty(2, 0, dtype=torch.int64, device=device),
+            categories=(),
+        ),
+    )
+
+    out = torch.cat([tensor, tensor], dim=dim)
+    assert isinstance(out, TableTensor)
+    assert out.size() == ((4, 0) if dim == 0 else (2, 0))
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.code.dtype == torch.int64
+
+    if dim == -1:
+        values = torch.arange(2, dtype=torch.float32, device=device).view(2, 1)
+        non_empty = TableTensor(numerical=values)
+        for inputs in ((tensor, non_empty), (non_empty, tensor)):
+            out = torch.cat(inputs, dim=dim)
+            assert isinstance(out, TableTensor)
+            torch.testing.assert_close(out.numerical, values)
+
+
+def test_cat_column_size_mismatch() -> None:
+    tensor1 = TableTensor(numerical=torch.randn(2, 1))
+    tensor2 = TableTensor(size=(3,))
+    with pytest.raises(RuntimeError, match="Sizes of tensors must match"):
+        torch.cat([tensor1, tensor2], dim=-1)
+
+
 def test_cat_stack_reorder() -> None:
     tensor1 = TableTensor(
         columns={
@@ -1449,8 +1502,8 @@ def test_from_pandas_nullable_and_categorical_dtypes(
         device=device,
     )
 
-    assert tensor.columns[Stype.numerical] == ("number",)
-    assert tensor.columns[Stype.categorical] == (
+    assert tensor.numerical_columns == ("number",)
+    assert tensor.categorical_columns == (
         "category",
         "string",
         "boolean",
@@ -1563,7 +1616,7 @@ def test_text() -> None:
     )
 
     assert tensor.size() == (3, 3)
-    assert tensor.columns[Stype.text] == ("title", "body")
+    assert tensor.text_columns == ("title", "body")
     assert tensor.text.size() == (3, 2)
 
     assert tensor.to_arrow().to_pydict() == data

@@ -32,6 +32,8 @@ tensor
 icl
 forecasting
 processing
+nanotabicl
+nim
 ```
 
 ```{toctree}

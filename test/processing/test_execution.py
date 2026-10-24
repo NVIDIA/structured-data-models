@@ -379,4 +379,4 @@ def test_member_context_exposes_input_stypes() -> None:
     )
 
     assert context.input_stypes == x.stypes
-    assert context.x.columns[Stype.numerical] == ("n", "c")
+    assert context.x.numerical_columns == ("n", "c")

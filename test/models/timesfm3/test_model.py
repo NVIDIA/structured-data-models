@@ -4,7 +4,7 @@
 import torch
 
 from sdm import TableTensor
-from sdm.models.timesfm3 import TimesFM3
+from sdm.models import TimesFM3
 
 
 def test_forward() -> None:
@@ -29,9 +29,9 @@ def test_forward() -> None:
     out = model(x_context, y_context, x_query)
     assert out.size() == (3, 3 * 9)
     assert out.numerical.isfinite().all()
-    assert "y1__q10" in out.columns["numerical"]
-    assert "y2__q50" in out.columns["numerical"]
-    assert "y3__q90" in out.columns["numerical"]
+    assert "y1__q10" in out.numerical_columns
+    assert "y2__q50" in out.numerical_columns
+    assert "y3__q90" in out.numerical_columns
 
     model.fit(
         x=x_context,
