@@ -1,10 +1,10 @@
 # NanoTabICL
 
 The [`sdm.nn`](api/nn) package provides reusable, GPU-accelerated building blocks for developing foundation models for structured data from scratch.
-In this guide, we show how to build a minimal [TabICLv2](https://arxiv.org/abs/2602.11139)-inspired Tabular Foundation Model (TFM) with it.
-Like other [in-context learning (ICL)](icl) models, it receives labeled context rows together with unlabeled query rows, and predicts the query targets in a single forward pass.
+In this guide, we show how to build a minimal [TabICLv2](https://arxiv.org/abs/2602.11139)-inspired tabular foundation model (TFM) with it.
+Like other [in-context learning (ICL)](icl) models, it receives labeled context rows together with unlabeled query rows and predicts the query targets in a single forward pass.
 
-[TabICL](https://arxiv.org/abs/2502.05564) pioneered the **"Compress-then-ICL"** approach which has since been adopted by other TFMs such as [TabPFN-3](https://arxiv.org/abs/2605.13986), [TabFM](https://arxiv.org/abs/2609.37959), and [KumoTabular](https://huggingface.co/blog/nvidia/kumo-tabular).
+[TabICL](https://arxiv.org/abs/2502.05564) pioneered the **"Compress-then-ICL"** approach, which has since been adopted by other TFMs such as [TabPFN-3](https://arxiv.org/abs/2605.13986), [TabFM](https://arxiv.org/abs/2609.37959), and [KumoTabular](https://huggingface.co/blog/nvidia/kumo-tabular).
 Its main advantage is its efficient ICL stage that operates on compressed row representations rather than individual cells.
 It consists of three stages:
 
@@ -38,7 +38,7 @@ Then, column entries attend to the induced representation.
 This two-stage mechanism thus replaces direct attention between all pairs of elements.
 The inducing points are learnable parameters.
 During each forward pass, they attend only to context entries; both context and query entries then attend to the resulting representation.
-This prevents queries within a batch from influencing each other, and allows caching across repeated predictions.
+This prevents queries within a batch from influencing each other and allows caching across repeated predictions.
 
 The {py:class}`sdm.nn.InducedTransformerBlock` provides a highly reusable and configurable block for induced self-attention, built from two {py:class}`sdm.nn.TransformerBlock` modules: **(1)** the `inducing_block` that updates the learned inducing points from context entries, and **(2)** the `output_block` that updates all column entries from the induced representation.
 
@@ -59,13 +59,13 @@ def MLP(in_channels: int, out_channels: int) -> torch.nn.Sequential:
 
 Next, our `ColumnTransformer` stacks three layers of column-wise induced attention over 128 inducing points.
 Its input is a `D`-dimensional cell embedding `x` for each row `R` and each column `C`.
-The first number of rows in `x` are context rows with corresponding labels in `y`; the remaining rows are query rows.
+The first `y.size(0)` rows of `x` are context rows with corresponding labels in `y`; the remaining rows are query rows.
 
 TabICLv2 uses a pre-norm {py:class}`~sdm.nn.TransformerBlock`, applying {py:class}`~torch.nn.LayerNorm` before each attention and feed-forward sublayer.
 When attending over context rows, TabICLv2 uses {py:class}`sdm.nn.QASSMax` to scale queries based on the number of context rows, adapting attention to varying context sizes.
 The {py:class}`~sdm.nn.TransformerBlock` supports these attention patterns through configurable normalization, query scaling, and separate query and key/value inputs.
 
-Lastly, to produce task-conditioned compressed representations (*e.g.* to filter out task-irrelevant columns), TabICLv2 injects target information from context examples before entering the Transformer.
+Lastly, to produce task-conditioned compressed representations (*e.g.*, to filter out task-irrelevant columns), TabICLv2 injects target information from context examples before passing the cell representations into the Transformer.
 This is done by adding a learnable class embedding to each cell in the context rows, supporting up to 10 classes.
 
 ```{note}
@@ -117,7 +117,7 @@ class ColumnTransformer(torch.nn.Module):
         y: Tensor,  # [R_context]
     ) -> Tensor:  # [R, C, D]
 
-        # Inject task labels to context cell representations:
+        # Inject task labels into context cell representations:
         x = torch.cat([
             x[:y.size(0)] + self.class_emb(y)[:, None, :],
             x[y.size(0):],
@@ -140,7 +140,7 @@ TabICLv2 prepends four learnable `[CLS]` tokens to each row and uses their outpu
 This maps rows with varying numbers of columns to fixed-size embeddings.
 The `[CLS]` tokens are initialized from a truncated normal distribution and refined via repeated row-wise attention.
 Using multiple `[CLS]` tokens allows more information to pass through this bottleneck.
-Their four output vectors are flattened into one 4 * D dimensional row embedding, which becomes a single token in the ICL stage.
+Their four output vectors are flattened into one row embedding of dimension `4 * D`, which becomes a single token in the ICL stage.
 
 Furthermore, TabICLv2 applies {py:class}`sdm.nn.RotaryEmbedding` (RoPE) in row-wise attention to distinguish features by their column positions.
 This helps resolve ambiguity between features with similar representations.
@@ -230,7 +230,7 @@ class ICLTransformer(torch.nn.Module):
         y: Tensor,  # [R_context]
     ) -> Tensor:  # [R_query, 4*D]
 
-        # Reinject task labels to context row representations:
+        # Reinject task labels into context row representations:
         x = torch.cat(
               [x[:y.size(0)] + self.class_emb(y),
               x[y.size(0):]],
@@ -275,7 +275,7 @@ class NanoTabICL(torch.nn.Module):
 
 The model takes numerical floating-point features `x` of a table with shape `[R, C]` and integer labels `y` for the first `y.size(0)` context rows.
 The remaining rows are treated as query rows whose labels the model predicts.
-Categorical encoding, missing-value handling, and feature scaling are typically performed in a pre-processing stage before the model's {py:meth}`~torch.nn.Module.forward` call.
+Categorical encoding, missing-value handling, and feature scaling are typically performed in a preprocessing stage before the model's {py:meth}`~torch.nn.Module.forward` call.
 
 ```python
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
