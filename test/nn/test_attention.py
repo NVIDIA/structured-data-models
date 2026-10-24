@@ -515,6 +515,7 @@ def test_attention_batch_size_limit_propagation() -> None:
     torch.testing.assert_close(out, expected)
 
 
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize(
     ("requires_grad", "compiling"),
     [
@@ -522,7 +523,7 @@ def test_attention_batch_size_limit_propagation() -> None:
         pytest.param(False, True, id="compiling"),
     ],
 )
-def test_transformer_block_batch_size_limit_bypass(
+def test_transformer_block_batch_size_limit(
     requires_grad: bool,
     compiling: bool,
 ) -> None:
@@ -539,18 +540,13 @@ def test_transformer_block_batch_size_limit_bypass(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
-    with (
-        torch.set_grad_enabled(requires_grad),
-        patch.object(
-            torch.compiler,
-            "is_compiling",
-            return_value=compiling,
-        ),
-    ):
+    if compiling:
+        module = torch.compile(module, backend="eager", fullgraph=True)
+    with torch.set_grad_enabled(requires_grad):
         module(query=query, batch_size_limit=2)
     handle.remove()
 
-    assert batch_sizes == [5]
+    assert batch_sizes == ([5] if requires_grad else [2, 2, 1])
 
 
 def test_return_key_value_positional_compatibility() -> None:
