@@ -1,4 +1,4 @@
-# NanoTabICL in SDM
+# NanoTabICL
 
 The [`sdm.nn`](api/nn) package provides reusable, GPU-accelerated building blocks for developing foundation models for structured data from scratch.
 In this guide, we show how to build a minimal [TabICLv2](https://arxiv.org/abs/2602.11139)-inspired Tabular Foundation Model (TFM) with it.
