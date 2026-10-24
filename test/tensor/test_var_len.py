@@ -484,6 +484,16 @@ def test_equal_allclose() -> None:
     assert torch.allclose(tensor, other[:, ::2])
 
 
+def test_compiled_equal_independent_views(compilation: None) -> None:
+    values = [[1], [2, 3]]
+    tensor = VarLenTensor.from_list(values)
+    other = VarLenTensor.from_list([[0], *values, [0]])[1:-1]
+    equal = torch.compile(torch.equal, backend="eager", fullgraph=False)
+
+    assert equal(tensor, other)
+    assert not equal(tensor, VarLenTensor.from_list([[99], [2, 3]]))
+
+
 def test_isnan_isfinite() -> None:
     tensor = VarLenTensor.from_list([[1, 2], None, [3]])
     assert tensor.is_nullable

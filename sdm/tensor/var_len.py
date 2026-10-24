@@ -500,27 +500,20 @@ class VarLenTensor(Tensor):
     # Properties ##############################################################
 
     @property
+    def _logical_storage_offset(self) -> int:
+        """Expose the logical view offset as traceable Python metadata."""
+        # torch.compile can read this integer as an attribute, but rejects
+        # the direct storage_offset() call on this tensor subclass.
+        return cast(int, self.storage_offset())
+
+    @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
         r"""Return contiguous data and normalized offsets.
 
         Returns:
             ``(data, offset)`` tuple.
         """
-        if not self.is_contiguous():
-            raise RuntimeError(
-                f"Can't access 'data_offset' for non-contiguous "
-                f"{self.__class__.__name__!r}"
-            )
-
-        start = int(self.storage_offset())
-        offset = self._offset[start : start + self.numel() + 1]
-        if self._data.numel() == 0:
-            # An empty payload has only zero offsets, already normalized.
-            return self._data, offset
-        data = self._data[offset[0] : offset[-1]]
-        if offset.is_cpu and int(offset[0]) == 0:
-            return data, offset
-        return data, offset - offset[0]
+        return _data_offset(self)
 
     @property
     def valid(self) -> Tensor | None:
@@ -530,15 +523,7 @@ class VarLenTensor(Tensor):
             Boolean mask with shape ``self.size()`` indicating valid,
             non-null tensor elements, or ``None`` when all elements are valid.
         """
-        if self._valid is None:
-            return None
-
-        return torch.as_strided(
-            self._valid,
-            size=self.size(),
-            stride=self.stride(),
-            storage_offset=int(self.storage_offset()),
-        )
+        return _valid(self)
 
     @property
     def is_nullable(self) -> bool:
@@ -569,10 +554,16 @@ class VarLenTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_data", "_offset"]
+        # Offsets first avoid a torch.compile symbolic-shape check failure.
+        attrs = ["_offset", "_data"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
+        ctx = (
+            self.__class__,
+            self.storage_offset(),
+            tuple(self.size()),
+            tuple(self.stride()),
+        )
         return attrs, ctx
 
     @staticmethod
@@ -582,7 +573,7 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
-        cls, storage_offset = ctx
+        cls, storage_offset, _, _ = ctx
         return cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
@@ -611,6 +602,13 @@ class VarLenTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        if (
+            (func is torch.equal or func is Tensor.equal)
+            and not kwargs
+            and len(args) == 2
+            and type(args[0]) is type(args[1])
+        ):
+            return cls.HANDLED_FUNCTIONS[aten.equal.default](*args)
         if func is torch.isfinite or func is Tensor.isfinite:
             assert isinstance(args[0], VarLenTensor)
             return _isfinite(args[0])
@@ -687,7 +685,7 @@ class VarLenTensor(Tensor):
                 for i in range(size[0])
             ]
 
-        values = self.to_arrow().to_pylist()
+        values = type(self).to_arrow(self).to_pylist()
         return reshape(values, tuple(self.size()))
 
     @override
@@ -1007,6 +1005,36 @@ def _isfinite(inp: VarLenTensor) -> Tensor:
     return valid.clone()
 
 
+def _valid(inp: VarLenTensor) -> Tensor | None:
+    if inp._valid is None:
+        return None
+
+    return torch.as_strided(
+        inp._valid,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
+    )
+
+
+def _data_offset(inp: VarLenTensor) -> tuple[Tensor, Tensor]:
+    if not inp.is_contiguous():
+        raise RuntimeError(
+            f"Can't access 'data_offset' for non-contiguous "
+            f"{inp.__class__.__name__!r}"
+        )
+
+    start = int(inp.storage_offset())
+    offset = inp._offset[start : start + inp.numel() + 1]
+    if inp._data.numel() == 0:
+        # An empty payload has only zero offsets, already normalized.
+        return inp._data, offset
+    data = inp._data[offset[0] : offset[-1]]
+    if offset.is_cpu and int(offset[0]) == 0:
+        return data, offset
+    return data, offset - offset[0]
+
+
 @VarLenTensor.implements(aten.equal.default)
 def _equal(inp: VarLenTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
@@ -1014,7 +1042,7 @@ def _equal(inp: VarLenTensor, other: Tensor) -> bool:
     if inp.size() != other.size():
         return False
 
-    valid1, valid2 = inp.valid, other.valid
+    valid1, valid2 = _valid(inp), _valid(other)
     if valid1 is not None and valid2 is not None:
         if not valid1.equal(valid2):
             return False
@@ -1032,8 +1060,8 @@ def _equal(inp: VarLenTensor, other: Tensor) -> bool:
         other.contiguous() if valid2 is None else other[valid2],
     )
 
-    data1, offset1 = inp.data_offset
-    data2, offset2 = other.data_offset
+    data1, offset1 = _data_offset(inp)
+    data2, offset2 = _data_offset(other)
 
     if not offset1.equal(offset2):
         return False
@@ -1332,7 +1360,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     tensors = tuple(
         cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
     )
-    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
+    data_list, offsets = zip(*(_data_offset(tensor) for tensor in tensors))
     valid: Tensor | None = None
     if any(tensor._valid is not None for tensor in tensors):
         valid_views = tuple(

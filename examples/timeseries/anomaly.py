@@ -9,10 +9,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 time = torch.arange(200, device=device, dtype=torch.float32)
 x = torch.stack([torch.sin(time / 12), torch.cos(time / 20)], dim=-1)
-x[140:149] += 3  # Add anomalies.
+x[140:150] += 3  # Add anomalies.
 
 model = sdm.models.KumoAnomaly(device=device)
+out = model(x)
 
-# Higher reconstruction error scores indicate more likely anomalies:
-score = model(x).numerical.squeeze(-1)
-print(score[131:158])
+# Higher MAE scores indicate more likely anomalies:
+print("Reconstruction Error (MAE):")
+print(out["mae"].numerical[130:160, 0])
+
+# SCS flags anomalies using adaptive segments of the preprocessed series:
+print("Anomaly Labels (SCS):")
+print(out["scs"].categorical.decode()[130:160, 0])
+
+# MACS flags anomalies using variance-weighted score bounds:
+print("Anomaly Labels (MACS):")
+print(out["macs"].categorical.decode()[130:160, 0])
