@@ -30,6 +30,7 @@ overview
 
 tensor
 icl
+forecasting
 processing
 nanotabicl
 nim
