@@ -12,6 +12,7 @@ __lazy_modules__ = {
 from importlib.metadata import PackageNotFoundError, version
 
 from sdm._constants import NaT
+from sdm.optimization import optimize
 from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.task import Task, TaskLike
 from sdm.tensor import (
@@ -41,6 +42,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "NaT",
+    "optimize",
     "Stype",
     "StypeLike",
     "Task",
