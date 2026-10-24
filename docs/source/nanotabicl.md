@@ -8,6 +8,16 @@ TabICL pioneered the **"Compress-then-ICL"** approach which has since been adopt
 Its main advantage is its efficient ICL stage that operates on compressed row representations rather than individual cells.
 It consists of three stages:
 
+```{figure} images/nanotabicl_light.svg
+:figclass: light-only
+:width: 100%
+```
+
+```{figure} images/nanotabicl_dark.svg
+:figclass: dark-only
+:width: 100%
+```
+
 1. A **row-wise compression block** that maps each table row to a fixed-size embedding.
 2. An **in-context learning block** that models interactions among labeled context rows and uses that context to update query representations.
 3. A final **prediction head**.
