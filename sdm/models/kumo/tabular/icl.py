@@ -154,16 +154,3 @@ class ICLBlock(torch.nn.Module):
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
-
-
-def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
-    return (
-        key.clone(memory_format=torch.contiguous_format),
-        value.clone(memory_format=torch.contiguous_format),
-    )
-
-
-# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
-if hasattr(torch.compiler, "nested_compile_region"):
-    # Compile cache copies separately to free each layer's full K/V tensors.
-    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)

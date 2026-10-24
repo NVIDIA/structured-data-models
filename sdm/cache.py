@@ -39,13 +39,15 @@ class KVCacheEntry(DeviceMixin):
             num_heads: Number of leading K/V heads to retain.
 
         Returns:
-            An entry with contiguous K/V slices, reusing storage when possible.
+            An entry with contiguous K/V copies when reducing the head count.
         """
-        return replace(
-            self,
-            key=self.key[..., :num_heads, :].contiguous(),
-            value=self.value[..., :num_heads, :].contiguous(),
+        if num_heads >= self.key.size(-2):
+            return self
+        key, value = _copy_key_value(
+            key=self.key[..., :num_heads, :],
+            value=self.value[..., :num_heads, :],
         )
+        return replace(self, key=key, value=value)
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
@@ -266,3 +268,16 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._mode = self._mode
         return out
+
+
+def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
+    return (
+        key.clone(memory_format=torch.contiguous_format),
+        value.clone(memory_format=torch.contiguous_format),
+    )
+
+
+# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
+if hasattr(torch.compiler, "nested_compile_region"):
+    # Compile cache copies separately to free each layer's full K/V tensors.
+    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)
