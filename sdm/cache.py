@@ -9,8 +9,9 @@ from collections.abc import (
     Mapping,
     MutableMapping,
 )
+from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import NamedTuple, Self, cast
+from typing import Self, cast
 
 import torch
 from torch import Tensor
@@ -19,12 +20,8 @@ from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
 
 
-class _KVCacheEntry(NamedTuple):
-    key: Tensor
-    value: Tensor
-
-
-class KVCacheEntry(_KVCacheEntry, DeviceMixin):
+@dataclass
+class KVCacheEntry(DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
     Args:
@@ -32,12 +29,85 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
+    key: Tensor
+    value: Tensor
+
+    def select_heads(self, num_heads: int) -> Self:
+        """Retain the leading key/value heads for grouped-query attention.
+
+        Args:
+            num_heads: Number of leading K/V heads to retain.
+
+        Returns:
+            An entry with contiguous K/V copies when reducing the head count.
+        """
+        if num_heads >= self.key.size(-2):
+            return self
+        key, value = _copy_key_value(
+            key=self.key[..., :num_heads, :],
+            value=self.value[..., :num_heads, :],
+        )
+        return replace(self, key=key, value=value)
+
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
         yield self.value
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        return self.__class__(key=fn(self.key), value=fn(self.value))
+        return replace(self, key=fn(self.key), value=fn(self.value))
+
+
+@dataclass
+class QuantizedKVCacheEntry(KVCacheEntry):
+    """Quantized attention projections with per-head scaling metadata.
+
+    Keys and values have shape ``[..., rows, heads, channels]``. Scales have
+    shape ``[..., 1, heads, 1]``. The query scale is learned from context
+    queries and reused for prediction. The key/value tensor dtypes identify
+    their storage formats; ``dtype`` is the attention output dtype.
+
+    Args:
+        key: Quantized key projections.
+        value: Quantized value projections.
+        key_scale: Per-head key dequantization scales.
+        value_scale: Per-head value dequantization scales.
+        query_scale: Per-query-head scales derived from the context.
+        dtype: Attention output dtype.
+    """
+
+    key_scale: Tensor
+    value_scale: Tensor
+    query_scale: Tensor
+    dtype: torch.dtype
+
+    def select_heads(self, num_heads: int) -> Self:
+        """Retain leading K/V heads and scales, keeping all query scales.
+
+        Args:
+            num_heads: Number of leading K/V heads to retain.
+
+        Returns:
+            A quantized entry with selected K/V heads and matching scales.
+        """
+        return replace(
+            super().select_heads(num_heads),
+            key_scale=self.key_scale[..., :num_heads, :].contiguous(),
+            value_scale=self.value_scale[..., :num_heads, :].contiguous(),
+        )
+
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from super()._tensors()
+        yield self.key_scale
+        yield self.value_scale
+        yield self.query_scale
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return replace(
+            super()._apply_tensor(fn),
+            key_scale=fn(self.key_scale),
+            value_scale=fn(self.value_scale),
+            query_scale=fn(self.query_scale),
+        )
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
@@ -198,3 +268,16 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._mode = self._mode
         return out
+
+
+def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
+    return (
+        key.clone(memory_format=torch.contiguous_format),
+        value.clone(memory_format=torch.contiguous_format),
+    )
+
+
+# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
+if hasattr(torch.compiler, "nested_compile_region"):
+    # Compile cache copies separately to free each layer's full K/V tensors.
+    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)
