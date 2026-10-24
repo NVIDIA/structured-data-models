@@ -25,7 +25,7 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 - {py:class}`~sdm.tensor.StringTensor`: A specialized {py:class}`~sdm.tensor.VarLenTensor` for representing UTF-8 strings.
 - {py:class}`~sdm.tensor.NullableTensor`: A tensor for nullable integer or boolean values.
 - {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.
-  Category mappings can be instances of {py:class}`torch.Tensor` or its subclasses, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
+  Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
 - {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless table representation whose columns are grouped by semantic type.
   It is the main user-facing interface for model inputs and outputs.
 

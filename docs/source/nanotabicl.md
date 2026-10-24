@@ -65,7 +65,7 @@ TabICLv2 uses a pre-norm {py:class}`~sdm.nn.TransformerBlock`, applying {py:clas
 When attending over context rows, TabICLv2 uses {py:class}`sdm.nn.QASSMax` to scale queries based on the number of context rows, adapting attention to varying context sizes.
 The {py:class}`~sdm.nn.TransformerBlock` supports these attention patterns through configurable normalization, query scaling, and separate query and key/value inputs.
 
-Lastly, to produce task-conditioned compressed representations (*e.g.*, to filter out task-irrelevant columns), TabICLv2 injects target information from context examples before passing the cell representations into the Transformer.
+Lastly, to produce task-conditioned compressed representations (*e.g.*, to filter out task-irrelevant columns), TabICLv2 injects target information from context examples before entering the Transformer.
 This is done by adding a learnable class embedding to each cell in the context rows, supporting up to 10 classes.
 
 ```{note}
@@ -140,7 +140,7 @@ TabICLv2 prepends four learnable `[CLS]` tokens to each row and uses their outpu
 This maps rows with varying numbers of columns to fixed-size embeddings.
 The `[CLS]` tokens are initialized from a truncated normal distribution and refined via repeated row-wise attention.
 Using multiple `[CLS]` tokens allows more information to pass through this bottleneck.
-Their four output vectors are flattened into one row embedding of dimension `4 * D`, which becomes a single token in the ICL stage.
+Their four output vectors are flattened into a `4*D`-dimensional row embedding, which becomes a single token in the ICL stage.
 
 Furthermore, TabICLv2 applies {py:class}`sdm.nn.RotaryEmbedding` (RoPE) in row-wise attention to distinguish features by their column positions.
 This helps resolve ambiguity between features with similar representations.

@@ -174,7 +174,7 @@ The model can use this relational neighborhood as context for the prediction tas
 :width: 100%
 ```
 
-Specifically, a {py:class}`~sdm.relational.RelatedTables` object consists of three components:
+Specifically, {py:class}`~sdm.relational.RelatedTables` consist of three components:
 
 - `tables`: mapping from table names to {py:class}`~sdm.tensor.TableTensor` objects containing the tabular data of related tables.
 - `relationships`: (\[{py:class}`~sdm.relational.Relationship`\]): join relationships among the related tables.
@@ -182,7 +182,7 @@ Specifically, a {py:class}`~sdm.relational.RelatedTables` object consists of thr
 - `task_links` (\[{py:class}`~sdm.relational.TaskLink`\]): entry points from rows in `x_context` and `x_query` into the related tables.
   Supports single columns or composite keys.
 
-A {py:class}`~sdm.relational.Relationship` is defined by columns with the {py:attr}`~sdm.Stype.id` semantic type.
+A {py:class}`~sdm.relational.Relationship` is defined by columns marked as {py:attr}`~sdm.Stype.id` semantic type.
 An {py:attr}`~sdm.Stype.id` column can represent a primary key, a foreign key, or another identifier used to match rows.
 Importantly, {py:attr}`~sdm.Stype.id` columns are used only to establish relationships among tables and are **not** used as input features during model processing:
 
@@ -225,7 +225,7 @@ related_context_tables = sdm.RelatedTables(
 In some tasks, each row in `x_context` or `x_query` should receive its own disjoint relational context.
 For example, two prediction rows may refer to the same user but different prediction times.
 As such, each row should only be linked to the related records available at its prediction time, preventing temporal leakage.
-{py:class}`~sdm.relational.RelatedTables` supports this by allowing {py:class}`~sdm.relational.Relationship` and {py:class}`~sdm.relational.TaskLink` objects to be defined with composite keys.
+{py:class}`~sdm.relational.RelatedTables` support this by allowing {py:class}`~sdm.relational.Relationship` and {py:class}`~sdm.relational.TaskLink` objects to be defined with composite keys.
 
 For this, we add a primary-key column to `x_context` and `x_query`, and add the same value as a foreign key to every row in the {py:class}`~sdm.relational.RelatedTables` that belongs to that specific example.
 This makes it possible to represent disjoint relational neighborhoods for different rows in `x_context` and `x_query` even when they refer to the same entity or share parts of the same local neighborhood.
@@ -247,7 +247,7 @@ sdm.RelatedTables(
 )
 ```
 
-The {py:class}`~sdm.relational.RelatedTables` object is then passed through the same ICL interface of the {py:class}`~sdm.models.ICLModel`:
+{py:class}`~sdm.relational.RelatedTables` are then passed through the same ICL interface of the {py:class}`~sdm.models.ICLModel`:
 
 ```python
 # Default in-context learning forward pass:
