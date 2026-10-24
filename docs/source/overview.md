@@ -105,5 +105,5 @@ Recipes give foundation models a unified way to handle a wide range of semantic 
 For example, datetime columns can be expanded into calendar features, and text columns can be embedded via an LLM.
 These components are reusable across model families rather than tied to a single model implementation, and are designed for ensemble-aware, GPU-accelerated execution across the entire processing stack.
 
-For relational tasks, {py:class}`~sdm.relational.RelatedTables` allows foundation models to attach to surrounding tables and relationships.
+For relational tasks, {py:class}`~sdm.relational.RelatedTables` allow foundation models to attach to surrounding tables and relationships.
 Models that support relational context, such as {py:class}`~sdm.models.KumoRelational`, can process these {py:class}`~sdm.relational.RelatedTables` through the same {py:meth}`~sdm.models.ICLModel.fit`, {py:meth}`~sdm.models.ICLModel.predict`, {py:class}`~sdm.processing.recipe.Recipe`, and {py:class}`~sdm.tensor.TableTensor` interfaces.
