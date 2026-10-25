@@ -136,6 +136,10 @@ def test_sdpa(
         value=value.expand(2, -1, -1, -1),
     )
     torch.testing.assert_close(out, expected)
+    with torch.no_grad():
+        inference_out = module(query=query, key=key, value=value)
+        torch.testing.assert_close(inference_out, expected)
+
     grads = torch.autograd.grad(out.sum(), (query, key, value))
     expected_grads = torch.autograd.grad(expected.sum(), (query, key, value))
     for grad, expected_grad in zip(grads, expected_grads, strict=True):
