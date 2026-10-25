@@ -137,8 +137,7 @@ class SDPA(torch.nn.Module):
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
-        # Softmax over a single key is one, so attention returns its value:
-        if (
+        if (  # Softmax over a single key is one, so skip SDPA:
             key_size[0] == 1
             and attn_mask is None
             and seqused_key_value is None

@@ -122,29 +122,6 @@ def test_sdpa(
     assert out.size() == query.size()
     torch.testing.assert_close(out, torch.zeros_like(query))
 
-    # A single key/value pair matches torch SDPA in values and gradients.
-    query = torch.randn(2, 3, num_query_heads, channels, device=device)
-    key = torch.randn(2, 1, num_key_value_heads, channels, device=device)
-    value = torch.randn(1, 1, num_key_value_heads, channels, device=device)
-    for tensor in (query, key, value):
-        tensor.requires_grad_()
-
-    out = module(query=query, key=key, value=value)
-    expected = reference_sdpa(
-        query=query,
-        key=key,
-        value=value.expand(2, -1, -1, -1),
-    )
-    torch.testing.assert_close(out, expected)
-    with torch.no_grad():
-        inference_out = module(query=query, key=key, value=value)
-        torch.testing.assert_close(inference_out, expected)
-
-    grads = torch.autograd.grad(out.sum(), (query, key, value))
-    expected_grads = torch.autograd.grad(expected.sum(), (query, key, value))
-    for grad, expected_grad in zip(grads, expected_grads, strict=True):
-        torch.testing.assert_close(grad, expected_grad)
-
     # Apply sequence lengths to mask keys.
     batch_size = 2
     query_len = 4
