@@ -10,7 +10,6 @@ from sdm import (
     CategoricalTensor,
     EnsembleTable,
     StringTensor,
-    Stype,
     TableTensor,
 )
 from sdm.processing import ShuffleCategories
@@ -46,7 +45,7 @@ def test_shuffle_categories_shift_maps_single_target() -> None:
 
     output = processor.fit_transform(target)
 
-    assert output.columns[Stype.categorical] == ("cat_0",)
+    assert output.categorical_columns == ("cat_0",)
     assert torch.equal(
         output.categorical.code[:3, 0].sort().values,
         torch.arange(3, dtype=torch.int32),
@@ -117,6 +116,17 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.categories[0].numel() == 4
     assert output.categorical.code[-1].item() == -1
     assert output.categorical.tolist() == target.categorical.tolist()
+
+
+@pytest.mark.parametrize("categories", [(), ("a", "b")])
+def test_shuffle_categories_preserves_all_missing(
+    categories: tuple[str, ...],
+) -> None:
+    target = _table([[-1], [-2], [-3]], (categories,))
+
+    output = ShuffleCategories(method="shift").fit_transform(target)
+
+    assert output.categorical.code.equal(target.categorical.code)
 
 
 def test_shuffle_categories_random_matches_independent_processors() -> None:

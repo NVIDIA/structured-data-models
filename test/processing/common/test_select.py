@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import SelectColumns
 
 
@@ -40,9 +40,7 @@ def test_select_columns_round_robin_routes_members() -> None:
         ("num_1", "num_2"),
     )
     for member_id, columns in enumerate(expected_columns):
-        indices = [
-            table.columns[Stype.numerical].index(column) for column in columns
-        ]
+        indices = [table.numerical_columns.index(column) for column in columns]
         expected = TableTensor.from_tensor(
             table.numerical[..., indices],
             columns=columns,

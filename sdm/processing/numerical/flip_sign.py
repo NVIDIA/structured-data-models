@@ -16,7 +16,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         probability: Probability of negating each numerical column.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(

@@ -24,14 +24,14 @@ class ToNumerical(Processor):
     """
 
     requires_fit = False
-    handles_stypes = frozenset({Stype.numerical, Stype.categorical})
+    handles_stypes = (Stype.numerical, Stype.categorical)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Return ``table`` with categorical columns moved to ``numerical``."""
         # Already numerical-only: nothing to move.
         if all(
             stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in table.items()
+            for stype, block in TableTensor.items(table)
         ):
             return table
 
@@ -39,8 +39,8 @@ class ToNumerical(Processor):
         # CategoricalTensor to its raw ordinal ids as a plain tensor.
         categorical = table.categorical.to(table.numerical.dtype)
         columns = (
-            *table.columns[Stype.numerical],
-            *table.columns[Stype.categorical],
+            *table.numerical_columns,
+            *table.categorical_columns,
         )
         numerical = (
             categorical
