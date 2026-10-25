@@ -32,7 +32,7 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     #: Semantic types this processor operates on.
-    handles_stypes: frozenset[Stype]
+    handles_stypes: tuple[Stype, ...]
 
     #: Whether this processor requires fitting.
     requires_fit: bool
@@ -50,6 +50,10 @@ class Processor(torch.nn.Module, abc.ABC):
 
     @_fitted.setter
     def _fitted(self, value: bool) -> None:
+        self._update_fitted(value)
+
+    def _update_fitted(self, value: bool) -> None:
+        # Internal callers avoid deferring the property setter until replay.
         self.__fitted = value
         self._fitted_state.fill_(value)
 
@@ -129,7 +133,7 @@ class Processor(torch.nn.Module, abc.ABC):
         self._set_buffer(
             "_fitted_state", torch.ones_like(self._fitted_state, device=device)
         )
-        self._fitted = True
+        self._update_fitted(True)
 
     def _check_is_fitted(self) -> None:
         if not self.is_fitted:
@@ -161,7 +165,12 @@ class Processor(torch.nn.Module, abc.ABC):
         return self._transform(table)
 
     def _handles_table(self, table: TableTensor) -> bool:
-        return bool(table.active_stypes & self.handles_stypes)
+        # Check column counts directly so torch.compile can trace this without
+        # constructing or intersecting sets of column types.
+        for stype in self.handles_stypes:
+            if getattr(table, stype.value).size(-1) > 0:
+                return True
+        return False
 
     def fit(
         self,

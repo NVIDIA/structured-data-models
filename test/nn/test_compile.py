@@ -115,9 +115,9 @@ def test_sdpa_compile(
     value = torch.randn(2, 5, kv_heads, channels, device=device)
     attn_mask = seqused = None
     if masking == "attn_mask":
-        attn_mask = torch.ones(2, 3, 5, dtype=torch.bool, device=device)
+        attn_mask = torch.ones(2, 1, 3, 5, dtype=torch.bool, device=device)
         attn_mask[..., 1:] = torch.randint(
-            0, 2, (2, 3, 4), dtype=torch.bool, device=device
+            0, 2, (2, 1, 3, 4), dtype=torch.bool, device=device
         )
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
@@ -258,9 +258,9 @@ def test_transformer_block_compile(
     key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = seqused = None
     if masking == "attn_mask":
-        attn_mask = torch.ones(2, 3, 5, dtype=torch.bool, device=device)
+        attn_mask = torch.ones(2, 1, 3, 5, dtype=torch.bool, device=device)
         attn_mask[..., 1:] = torch.randint(
-            0, 2, (2, 3, 4), dtype=torch.bool, device=device
+            0, 2, (2, 1, 3, 4), dtype=torch.bool, device=device
         )
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)

@@ -20,7 +20,9 @@ def test_clip_sigma_two_stage_outlier_behavior(
         device=device,
     )
 
-    processor = ClipSigma(threshold=1.0).fit(TableTensor.from_tensor(inp))
+    processor = ClipSigma(threshold=1.0, method="log").fit(
+        TableTensor.from_tensor(inp)
+    )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
@@ -38,6 +40,32 @@ def test_clip_sigma_two_stage_outlier_behavior(
     )
 
 
+def test_clip_sigma_hard_clamps_to_bounds() -> None:
+    inp = torch.tensor([[0.0], [1.0], [2.0], [100.0]], dtype=torch.float64)
+    table = TableTensor.from_tensor(inp)
+
+    processor = ClipSigma(threshold=1.0).fit(table)
+    transformed = processor.transform(table).numerical
+
+    expected = torch.tensor([[0.0], [1.0], [2.0], [2.0]], dtype=torch.float64)
+    assert torch.equal(transformed, expected)
+
+    query = TableTensor.from_tensor(
+        torch.tensor(
+            [[-torch.inf], [-100.0], [1.0], [100.0], [torch.inf], [torch.nan]],
+            dtype=torch.float64,
+        )
+    )
+    torch.testing.assert_close(
+        processor.transform(query).numerical,
+        torch.tensor(
+            [[0.0], [0.0], [1.0], [2.0], [2.0], [torch.nan]],
+            dtype=torch.float64,
+        ),
+        equal_nan=True,
+    )
+
+
 def test_clip_sigma_matches_tabicl_reference_values() -> None:
     dtype = torch.float64
     inp = torch.tensor(
@@ -51,7 +79,9 @@ def test_clip_sigma_matches_tabicl_reference_values() -> None:
         dtype=dtype,
     )
 
-    processor = ClipSigma(threshold=1.5).fit(TableTensor.from_tensor(inp))
+    processor = ClipSigma(threshold=1.5, method="log").fit(
+        TableTensor.from_tensor(inp)
+    )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
@@ -95,7 +125,9 @@ def test_clip_sigma_fits_leading_batches_independently(
         device=device,
     )
 
-    processor = ClipSigma(threshold=1.0).fit(TableTensor.from_tensor(context))
+    processor = ClipSigma(threshold=1.0, method="log").fit(
+        TableTensor.from_tensor(context)
+    )
     transformed = processor.transform(
         TableTensor.from_tensor(
             torch.tensor(
@@ -137,7 +169,7 @@ def test_clip_sigma_preserves_nonfinite(
         device=device,
     )
 
-    processor = ClipSigma(threshold=1.0)
+    processor = ClipSigma(threshold=1.0, method="log")
     out = processor.fit_transform(TableTensor.from_tensor(inp))
 
     torch.testing.assert_close(
@@ -162,7 +194,7 @@ def test_clip_sigma_row_chunks_match_single_chunk(
     inp = torch.randn(2, 50, 3, device="cuda", dtype=torch.float64)
     inp[:, ::7, 0] = float("nan")
     inp[:, 3, 1] = float("inf")
-    processor = ClipSigma(threshold=1.0)
+    processor = ClipSigma(threshold=1.0, method="log")
     processor.fit(TableTensor.from_tensor(inp))
     query = TableTensor.from_tensor(inp.float() * 3)
 

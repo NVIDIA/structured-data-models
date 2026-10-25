@@ -34,7 +34,7 @@ into three categories:
    - For C++ developers it is available here [DEVELOPER_GUIDE.md](https://github.com/jarmak-nv/rapids-repo-template/blob/main/Maintainers/DEVELOPER_GUIDE.md)
    - For Python developers, a [cuDF SAMPLE Python DEVELOPER_GUIDE.md](https://docs.rapids.ai/api/cudf/stable/developer_guide/index.html) is available as well.
 5. Code! Make sure to update unit tests!
-6. When done, [create your pull request](https://github.com/NVIDIA/structured-data-models/compare).
+6. When done, [create your pull request](https://github.com/NVIDIA/structured-data-models/compare?template=default.md) and fill in the template it loads.
 7. Verify that CI passes all [status checks](https://help.github.com/articles/about-status-checks/), or fix if needed.
 8. Wait for other developers to review your code and update code as needed.
 9. Once reviewed and approved, a RAPIDS developer will merge your pull request.

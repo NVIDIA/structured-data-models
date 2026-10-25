@@ -31,6 +31,7 @@ overview
 tensor
 icl
 processing
+nanotabicl
 nim
 ```
 

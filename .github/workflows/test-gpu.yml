@@ -133,7 +133,13 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: /home/runner/.cache/data_foundry
-          key: beyondarena-1-${{ runner.os }}-${{ runner.arch }}-parkinsons-biomedical-voice-measurements
+          key: beyondarena-parkinsons-biomedical-voice-measurements
+
+      - name: Cache TabArena dataset
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: /home/runner/.cache/openml
+          key: tabarena-blood-transfusion-service-center
 
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
@@ -200,6 +206,20 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python examples/relational/relbench/main.py --dataset rel-f1 --task driver-position
+
+      # Keep slow OpenML downloads outside the benchmark's timeout limit.
+      - name: Download TabArena dataset
+        timeout-minutes: 2
+        run: |
+          python - <<'PY'
+          from tabarena.contexts import TabArenaContext
+
+          context = TabArenaContext()
+          tasks = context.task_metadata_collection.subset_tasks(
+              dataset_names=["blood-transfusion-service-center"],
+          )
+          tasks.materialize()
+          PY
 
       - name: Test TabArena benchmark
         timeout-minutes: 5
