@@ -13,8 +13,7 @@ def test_clip_nonnegative(device: torch.device) -> None:
     target = torch.tensor(
         [[[0.0, -1.0], [1.0, 1.0]], [[1.0, 0.0], [2.0, 2.0]]],
         device=device,
-    )
-    target = target.unsqueeze(0).repeat(2, 1, 1, 1)
+    ).repeat(2, 1, 1, 1)
     target[1, 1, 0, 0] = -1.0
 
     processor = ClipNonnegative()
