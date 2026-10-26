@@ -3,7 +3,6 @@
 
 from collections.abc import Iterator
 
-import numpy as np
 import torch
 from gluonts.dataset import Dataset
 from gluonts.itertools import batcher
@@ -37,12 +36,13 @@ class SDMPredictor(Predictor):
     ) -> Iterator[QuantileForecast]:
 
         for batch in batcher(dataset, batch_size=self.batch_size):
+            cpu_generator = torch.Generator().manual_seed(42)
+
             ys = [torch.from_numpy(entry["target"]) for entry in batch]
             ys = [torch.atleast_2d(y) for y in ys]
             xs = []
             if (
                 self.model.supports_context_only_columns
-                and sdm.Stype.numerical in self.model.supported_feature_stypes
                 and "past_feat_dynamic_real" in batch[0]
             ):
                 xs = [
@@ -69,18 +69,12 @@ class SDMPredictor(Predictor):
             for i, x_i in enumerate(xs):
                 x[i, :, -x_i.size(-1) :] = x_i
 
-            size = y.size(1)
-            if self.config.max_variates is not None:
-                # Keep room for at least one target, matching upstream's
-                # fixed-seed selection of past covariates.
-                count = min(x.size(1), self.config.max_variates - 1)
-                if count < x.size(1):
-                    rng = np.random.default_rng(42)
-                    index = np.sort(
-                        rng.choice(x.size(1), count, replace=False)
-                    )
-                    x = x[:, index]
-                size = min(size, self.config.max_variates - count)
+            if (
+                self.config.max_variates is not None
+                and x.size(1) > self.config.max_variates - 1
+            ):  # Keep room for at least one target:
+                perm = torch.randperm(x.size(1), generator=cpu_generator)
+                x = x[:, perm[: self.config.max_variates - 1]]
 
             y = y.transpose(-1, -2).to(
                 self.device,
@@ -91,33 +85,30 @@ class SDMPredictor(Predictor):
                 memory_format=torch.contiguous_format,
             )
 
-            x_query = x.new_empty(
-                (x.size(0), self.prediction_length, 0),
-            )
-            predictions = []
+            size = y.size(-1)
+            if self.config.max_variates is not None:
+                size = min(size, self.config.max_variates - x.size(-1))
+
+            preds = []
             for start in range(0, y.size(-1), size):
-                chunk = y[..., start : start + size]
-                # Upstream fills the last chunk with leading target channels.
-                if chunk.size(-1) < size:
-                    chunk = torch.cat(
-                        [chunk, y[..., : size - chunk.size(-1)]], dim=-1
-                    )
+                y_i = y[..., start : start + size]
+                if y_i.size(-1) < size:
+                    y_i = torch.cat([y_i, y[..., : size - y_i.size(-1)]], -1)
+
                 out = self.model(
                     x_context=x,
-                    y_context=chunk,
-                    x_query=x_query,
+                    y_context=y_i,
+                    x_query=torch.empty(
+                        (x.size(0), self.prediction_length, 0),
+                        device=self.device,
+                    ),
                     num_estimators=self.config.num_estimators,
                 )
-                predictions.append(
-                    out.numerical.view(
-                        y.size(0), self.prediction_length, size, -1
-                    )
-                )
-            pred = (
-                predictions[0]
-                if len(predictions) == 1
-                else torch.cat(predictions, dim=-2)[..., : y.size(-1), :]
-            )
+                pred = out.numerical
+                pred = pred.view(y.size(0), self.prediction_length, size, -1)
+                preds.append(pred)
+
+            pred = torch.cat(preds, dim=-2)[..., : y.size(-1), :]
             pred = pred.permute(0, 3, 1, 2).cpu().numpy()  # [B, Q, R, C]
             levels = out.numerical_columns[: pred.shape[1]]
             levels = [str(float(f"0.{q.split('q')[-1]}")) for q in levels]
