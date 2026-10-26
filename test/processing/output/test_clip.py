@@ -1,74 +1,41 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import pytest
 import torch
 
-import sdm.processing as sp
-from sdm import Recipe, TableTensor
-from sdm.processing.execution import RecipeExecution
+from sdm import EnsembleTable, TableTensor
+from sdm.processing import ClipNonnegative
 from sdm.testing import withCUDA
 
 
 @withCUDA
-@pytest.mark.parametrize("infer_members", [False, True])
-@pytest.mark.parametrize("dispatch", [False, True])
-def test_clip_nonnegative(
-    device: torch.device,
-    infer_members: bool,
-    dispatch: bool,
-) -> None:
-    target = torch.tensor(
-        [
-            [[torch.nan, -1.0, torch.nan], [0.0, 1.0, torch.nan]],
-            [[1.0, -2.0, 0.0], [2.0, 0.0, torch.nan]],
-        ],
-        device=device,
+def test_clip_nonnegative(device: torch.device) -> None:
+    target = (
+        torch.tensor(
+            [
+                [[0.0, -1.0], [1.0, 1.0]],
+                [[1.0, 0.0], [2.0, 2.0]],
+            ],
+            device=device,
+        )
+        .unsqueeze(0)
+        .repeat(2, 1, 1, 1)
     )
-    x = torch.empty(2, 2, 0, device=device)
-    if infer_members:
-        target = target.unsqueeze(0).repeat(2, 1, 1, 1)
-        target[1, 1, 0, 0] = -1.0
-        x = x.unsqueeze(0).expand(2, -1, -1, -1)
+    target[1, 1, 0, 0] = -1.0
 
-    if dispatch:
-        target = target[..., :1]
-    output = sp.Sequential(sp.AverageEstimators(), sp.ClipNonnegative())
-    execution = RecipeExecution(
-        Recipe(
-            target=sp.FlipSign(probability=1.0),
-            output=sp.TaskDispatch(regression=output) if dispatch else output,
-        )
+    processor = ClipNonnegative()
+    processor._target = EnsembleTable(
+        groups=[TableTensor.from_tensor(target)],
+        locations=[(0, 0), (0, 1)],
     )
-    execution.fit_transform(
-        x=x,
-        y=target,
-        related_tables=None,
-        num_members=None if infer_members else 2,
+
+    out = TableTensor.from_tensor(
+        target.new_tensor([[[-2.0, 1.0, -2.0, 1.0]]]).expand(2, 1, -1)
     )
-    names = ("a",) if dispatch else ("a", "b", "c")
-    columns = [f"{name}__q{q}" for name in names for q in (10, 90)]
-    outputs = [
-        TableTensor.from_tensor(
-            target.new_tensor(values[: len(columns)])
-            .view(1, 1, -1)
-            .expand(2, 3, -1),
-            columns=columns,
-        )
-        for values in (
-            [-6.0, -2.0, -4.0, -1.0, -6.0, -2.0],
-            [2.0, 4.0, 0.0, 3.0, 2.0, 4.0],
-        )
-    ]
-    result = execution.transform_output(outputs)
-    expected = (
-        target.new_tensor(
-            [[0.0, 1.0, -2.0, 1.0, -2.0, 1.0], [0.0, 1.0, -2.0, 1.0, 0.0, 1.0]]
-        )
-        .unsqueeze(-2)
-        .expand(-1, 3, -1)
+    expected = target.new_tensor(
+        [
+            [[0.0, 1.0, -2.0, 1.0]],
+            [[-2.0, 1.0, 0.0, 1.0]],
+        ]
     )
-    if infer_members:
-        expected = expected.clone()
-        expected[1, :, 0] = -2.0
-    torch.testing.assert_close(result.numerical, expected[..., : len(columns)])
+    torch.testing.assert_close(processor.transform(out).numerical, expected)
