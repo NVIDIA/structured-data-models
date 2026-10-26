@@ -1615,6 +1615,16 @@ def _select_entries(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
     offset = offset.to(inp._offset.dtype)
     if index.numel() == 0 or inp._data.numel() == 0:
         data = inp._data.new_empty(0)
+    elif inp._data.device.type == "cpu":
+        byte = torch.arange(max_length, device=inp.device, dtype=offset.dtype)
+        used = byte < (end - start)[:, None]
+        source = (start[:, None] + byte).clamp_max(inp._data.numel() - 1)
+        target = torch.where(used, offset[:-1, None] + byte, capacity)
+        values = inp._data[source].where(used, 0)
+        # Padding writes only to the extra byte, outside the logical payload.
+        data = inp._data.new_zeros(capacity + 1).scatter_(
+            0, target.flatten().long(), values.flatten()
+        )[:-1]
     else:
         byte = torch.arange(capacity, device=inp.device, dtype=offset.dtype)
         owner = torch.searchsorted(offset[1:], byte, right=True)
