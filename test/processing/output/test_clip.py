@@ -76,19 +76,23 @@ def test_clip_nonnegative(
 
 @withCUDA
 def test_clip_nonnegative_refit(device: torch.device) -> None:
-    target = TableTensor.from_tensor(
-        torch.tensor([[0.0, -1.0], [1.0, 1.0]], device=device)
+    target = torch.tensor([[0.0, -1.0], [1.0, 1.0]], device=device)
+    x = target.new_empty(2, 0)
+    pred = TableTensor.from_tensor(target.new_tensor([[-2.0, 1.0, -3.0, 2.0]]))
+    execution = RecipeExecution(
+        Recipe(output=[sp.AverageEstimators(), sp.ClipNonnegative()])
     )
-    pred = TableTensor.from_tensor(
-        torch.tensor([[-2.0, 1.0, -3.0, 2.0]], device=device)
+    execution.fit_transform(x=x, y=target, related_tables=None)
+    expected = pred.numerical.new_tensor([[0.0, 1.0, -3.0, 2.0]])
+    for _ in range(2):
+        torch.testing.assert_close(
+            execution.transform_output([pred]).numerical,
+            expected,
+        )
+    execution.fit_transform(
+        x=x, y=-torch.ones_like(target), related_tables=None
     )
-    processor = sp.ClipNonnegative().fit(target)
-    target.numerical.fill_(-1)
     torch.testing.assert_close(
-        processor.transform(pred).numerical,
-        pred.numerical.new_tensor([[0.0, 1.0, -3.0, 2.0]]),
-    )
-    processor.fit(target)
-    torch.testing.assert_close(
-        processor.transform(pred).numerical, pred.numerical
+        execution.transform_output([pred]).numerical,
+        pred.numerical,
     )
