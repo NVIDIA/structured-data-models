@@ -19,9 +19,10 @@ def optimize(
 
     Args:
         attention: ``"fp8"`` enables quantization in eligible ICL attention
-            layers during supported CUDA inference with more than 8192 context
-            rows. ``None`` disables it; ``"inherit"`` preserves the enclosing
-            setting. Weights and the final ICL layer remain unquantized.
+            layers during CUDA inference (compute capability 8.9 or newer)
+            with more than 8192 context rows. ``None`` disables it;
+            ``"inherit"`` preserves the enclosing setting. Weights and the
+            final ICL layer remain unquantized.
 
     Yields:
         None. Previous settings are restored on exit, including on exceptions.

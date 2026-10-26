@@ -32,8 +32,8 @@ def test_fp8_attention_fallback(rows: int, is_causal: bool) -> None:
 
 @onlyCUDA
 def test_fp8_cache_chunking(monkeypatch: pytest.MonkeyPatch) -> None:
-    if torch.cuda.get_device_capability() not in {(8, 9), (9, 0), (12, 0)}:
-        pytest.skip("FP8 integration supports Ada, Hopper, and RTX Blackwell")
+    if not torch.version.cuda or torch.cuda.get_device_capability() < (8, 9):
+        pytest.skip("FP8 requires CUDA compute capability 8.9 or newer")
     monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "0.00001")
     block = TabICLv2TransformerBlock(
         channels=128, num_heads=2, norm_bias=True, qassmax=True, device="cuda"
