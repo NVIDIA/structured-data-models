@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import zlib
 from collections.abc import Iterator
 
 import datasets
@@ -146,7 +147,7 @@ class SDMPredictor(fev.ForecastingModel):
 
                     pred = torch.cat(preds, dim=-2)[..., : y.size(-1), :]
                     pred = pred.cpu().numpy()  # [B, R, C, Q]
-                    levels = out.numerical_columns[: pred.shape[1]]
+                    levels = out.numerical_columns[: pred.shape[-1]]
                     levels = [float(f"0.{q.split('q')[-1]}") for q in levels]
                     wanted = [0.5, *task.quantile_levels]
                     index = [levels.index(q) for q in wanted]
@@ -174,10 +175,26 @@ def _from(
     columns: list[str],
     batch_size: int,
 ) -> Iterator[list[torch.Tensor]]:
+    string_columns = [
+        column
+        for column in columns
+        if dataset.features[column].feature.dtype in ("string", "large_string")
+    ]
     for batch in dataset.with_format("numpy").iter(batch_size):
         if not columns:
             yield []
             continue
+
+        for column in string_columns:
+            batch[column] = [
+                [
+                    zlib.crc32(value.encode()) % 100
+                    if isinstance(value, str)
+                    else 0
+                    for value in values
+                ]
+                for values in batch[column]
+            ]
 
         yield [
             torch.from_numpy(
