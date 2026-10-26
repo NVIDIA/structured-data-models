@@ -36,7 +36,7 @@ class SDMPredictor(Predictor):
     ) -> Iterator[QuantileForecast]:
 
         for batch in batcher(dataset, batch_size=self.batch_size):
-            cpu_generator = torch.Generator().manual_seed(42)
+            generator = torch.Generator().manual_seed(42)
 
             ys = [torch.from_numpy(entry["target"]) for entry in batch]
             ys = [torch.atleast_2d(y) for y in ys]
@@ -69,11 +69,11 @@ class SDMPredictor(Predictor):
             for i, x_i in enumerate(xs):
                 x[i, :, -x_i.size(-1) :] = x_i
 
-            if (
+            if (  # Keep room for at least one target:
                 self.config.max_variates is not None
-                and x.size(1) > self.config.max_variates - 1
-            ):  # Keep room for at least one target:
-                perm = torch.randperm(x.size(1), generator=cpu_generator)
+                and x.size(1) >= self.config.max_variates
+            ):
+                perm = torch.randperm(x.size(1), generator=generator)
                 x = x[:, perm[: self.config.max_variates - 1]]
 
             y = y.transpose(-1, -2).to(
