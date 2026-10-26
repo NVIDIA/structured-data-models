@@ -30,5 +30,6 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
         output=sp.Sequential(
             sp.SortQuantiles(num_quantiles=9),
             sp.AverageEstimators(),
+            sp.TargetClamper(),
         ),
     )

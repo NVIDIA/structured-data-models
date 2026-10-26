@@ -14,6 +14,54 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing.execution import RecipeExecution
+from sdm.testing import withCUDA
+
+
+@withCUDA
+def test_output_encoder_uses_raw_targets(device: torch.device) -> None:
+    class AddTargetMean(sp.TargetAwareEnsembleProcessor):
+        handles_stypes = (Stype.numerical,)
+        requires_fit = False
+
+        def _transform_ensemble(
+            self,
+            ensemble_table: EnsembleTable,
+        ) -> EnsembleTable:
+            assert self._target is not None
+            mean = self._target[0].numerical.mean(dim=-2, keepdim=True)
+            return ensemble_table.replace_groups(
+                [
+                    group.replace_blocks(numerical=group.numerical + mean)
+                    for group in ensemble_table._iter_groups()
+                ]
+            )
+
+    execution = RecipeExecution(
+        Recipe(
+            target=sp.FlipSign(probability=1.0),
+            output=[sp.AverageEstimators(), AddTargetMean()],
+        )
+    )
+    x = torch.zeros(2, 3, 0, device=device)
+    y = torch.tensor(
+        [[[1.0], [3.0], [5.0]], [[10.0], [30.0], [50.0]]], device=device
+    )
+    outputs = [
+        TableTensor.from_tensor(torch.full((2, 1, 1), value, device=device))
+        for value in (1.0, 3.0)
+    ]
+    for target in (y, -y):
+        execution.fit_transform(
+            x=x,
+            y=target,
+            related_tables=None,
+            num_members=2,
+        )
+        result = execution.transform_output(outputs)
+        torch.testing.assert_close(
+            result.numerical,
+            target.mean(dim=-2, keepdim=True) + 2.0,
+        )
 
 
 def test_sequence_uses_batched_fit_states_for_shared_query() -> None:

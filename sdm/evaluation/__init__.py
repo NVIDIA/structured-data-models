@@ -4,10 +4,8 @@
 """Evaluation utilities."""
 
 from sdm.evaluation.classification import to_class_indices, to_binary_class
-from sdm.evaluation.regression import to_quantiles
 
 __all__ = [
     "to_class_indices",
     "to_binary_class",
-    "to_quantiles",
 ]
