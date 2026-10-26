@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 
 from sdm import StringTensor, VarLenTensor
-from sdm.tensor.var_len import _compact
+from sdm.tensor.var_len import _compact, _select_entries
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -1059,3 +1059,69 @@ def test_reshape_inference_mode() -> None:
 
     assert not torch.is_inference(view)
     assert torch.is_inference(copied)
+
+
+@withCUDA
+@pytest.mark.parametrize("offset_dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("indices", [[], [2, 0, 2, 1], [0, 1, 2], [-1, 0]])
+@pytest.mark.parametrize("layout", ["slice", "stride", "broadcast"])
+def test_native_string_selection(
+    device: torch.device,
+    offset_dtype: torch.dtype,
+    indices: list[int],
+    layout: str,
+) -> None:
+    values = StringTensor.from_arrow(
+        pa.array(["unused", "é🙂", None, "", "long尾"])
+    )
+    assert values._valid is not None
+    values = StringTensor(
+        data=values._data.to(device),
+        offset=values._offset.to(device=device, dtype=offset_dtype),
+        valid=values._valid.to(device),
+        size=values.shape,
+    )
+    if layout == "slice":
+        values = cast(StringTensor, values[1:4])
+    elif layout == "stride":
+        values = cast(StringTensor, values[::2])
+    else:
+        values = cast(StringTensor, values[1:2].expand(3))
+    index = torch.tensor(indices, device=device, dtype=torch.int64)
+    expected = cast(StringTensor, values[index])
+    actual = _select_entries(values, index)
+    assert actual.tolist() == expected.tolist()
+    assert actual.device == expected.device
+    assert actual.data_offset[1].dtype == expected.data_offset[1].dtype
+    assert actual.data_offset[1].diff().equal(expected.data_offset[1].diff())
+
+
+def test_native_string_selection_fullgraph() -> None:
+    values = StringTensor.from_arrow(pa.array(["é🙂", None, "", "long尾"]))
+    index = torch.tensor([3, 0, 3, 1, 2])
+    compiled = torch.compile(_select_entries, fullgraph=True)
+    actual = compiled(values, index)
+    assert actual.tolist() == values[index].tolist()
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_native_string_selection_empty_payload(empty: bool) -> None:
+    values = StringTensor.from_arrow(
+        pa.array([], type=pa.string()) if empty else pa.array(["", None, ""])
+    )
+    index = torch.tensor([] if empty else [2, 0, 1, 2], dtype=torch.int64)
+    actual = _select_entries(values, index)
+    assert actual.tolist() == values[index].tolist()
+
+
+def test_native_string_selection_null_payload() -> None:
+    values = StringTensor(
+        data=torch.tensor([97, 255, 98], dtype=torch.uint8),
+        offset=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
+        valid=torch.tensor([True, False, True]),
+        size=(3,),
+    )
+    index = torch.tensor([1, 2, 0, 1])
+    actual = _select_entries(values, index)
+    assert actual.tolist() == values[index].tolist()
+    assert actual.data_offset[1].diff().tolist() == [1, 1, 1, 1]

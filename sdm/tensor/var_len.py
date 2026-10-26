@@ -1595,3 +1595,38 @@ def _materialize(
         storage_offset=0,
         max_length=inp._max_length,
     )
+
+
+def _select_entries(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
+    """Compact selected entries into bounded backing storage.
+
+    The input and index are one-dimensional. Padding after the final offset
+    keeps the output capacity static without truncating selected values.
+    """
+    index = index.where(index >= 0, index + inp.numel())
+    positions = index * inp.stride(0) + inp._logical_storage_offset
+    start = inp._offset[positions]
+    end = inp._offset[positions + 1]
+    max_length = inp._max_length
+    capacity = index.numel() * max_length
+    if capacity > torch.iinfo(inp._offset.dtype).max:
+        return cast(VarLenTensor, inp[index])
+    offset = torch.cat((start.new_zeros(1), (end - start).cumsum(0)))
+    offset = offset.to(inp._offset.dtype)
+    if index.numel() == 0 or inp._data.numel() == 0:
+        data = inp._data.new_empty(0)
+    else:
+        byte = torch.arange(capacity, device=inp.device, dtype=offset.dtype)
+        owner = torch.searchsorted(offset[1:], byte, right=True)
+        owner = owner.clamp_max(index.numel() - 1)
+        source = start[owner] + byte - offset[owner]
+        used = byte < offset[-1]
+        source = source.where(used, 0)
+        data = inp._data[source].where(used, 0)
+    return inp.__class__(
+        data=data,
+        offset=offset,
+        valid=inp._valid[positions] if inp._valid is not None else None,
+        size=index.shape,
+        max_length=max_length,
+    )
