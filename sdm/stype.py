@@ -44,6 +44,9 @@ class Stype(StrEnum):
         return f"{self.__class__.__name__}.{self.name}"
 
 
+# Keep enum iteration outside compiled processor calls.
+_ALL_STYPES = tuple(Stype)
+
 StypeLike: TypeAlias = Stype | str
 
 # Semantic Type Inference #####################################################

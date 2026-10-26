@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D205
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -133,7 +134,7 @@ class KumoTabular(ICLModel):
             )
 
         if pretrained:
-            self.models[task] = self._load_from_pretrained(size, device=device)
+            self._load_from_pretrained(size, device=device)
 
         self.eval()
 
@@ -146,7 +147,7 @@ class KumoTabular(ICLModel):
         self,
         size: Literal["small", "medium", "large"],
         device: torch.device | str | None,
-    ) -> _KumoTabular:
+    ) -> KumoTabular:
         device = torch.get_default_device() if device is None else device
 
         for task, model in self.models.items():
@@ -165,7 +166,7 @@ class KumoTabular(ICLModel):
             ckpt = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(ckpt, assign=True)
 
-        return model
+        return self
 
     def _forward(
         self,
@@ -199,7 +200,7 @@ class KumoTabular(ICLModel):
             y = y_context.numerical.squeeze(-1)
         else:
             assert cache is not None
-            classes = cast(Tensor | None, cache["classes"])
+            classes = cast("Tensor | None", cache["classes"])
             y = x.new_empty(
                 (*x.size()[:-2], 0),
                 dtype=torch.int64 if classes is not None else x.dtype,
@@ -231,8 +232,16 @@ class KumoTabular(ICLModel):
             generator=generator,
             categorical_mask=categorical_mask,
         )
+        if cache is not None and cache.is_replaying:
+            columns = cast(tuple[str, ...], cache["class_columns"])
+        else:
+            columns = tuple(str(i) for i in classes.tolist())
+
+        if cache is not None and cache.is_recording:
+            cache["class_columns"] = columns
+
         return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
+            columns={"numerical": columns},
             numerical=out,
         )
 
@@ -299,3 +308,20 @@ class _KumoTabular(torch.nn.Module):
         x = self.row_embedding(x, y, categorical_mask, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
+
+    def forward_train(
+        self,
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        num_columns: Tensor | None = None,  # [...]
+    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            categorical_mask=categorical_mask,
+            num_columns=num_columns,
+        )
+        x = self.row_project(x)
+        return self.icl_block(x=x, y=y)

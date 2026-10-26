@@ -8,8 +8,24 @@ import pyarrow as pa
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor
+from sdm import CategoricalTensor, ColumnarTensor, NullableTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
+
+
+@pytest.mark.parametrize("device", ["cpu", "meta"])
+def test_repr(device: str) -> None:
+    tensor = CategoricalTensor(
+        code=torch.zeros(2, 1, dtype=torch.int32, device=device),
+        categories=(torch.arange(3, device=device),),
+    )
+
+    text = repr(tensor)
+    assert "CategoricalTensor" in text
+    assert "size=(2, 1)" in text
+    assert "num_categories=(3,)" in text
+    assert "dtype=torch.int32" in text
+    assert str(tensor) == text
+    assert f"{tensor}" == text
 
 
 def test_to_copy_string_categories() -> None:
@@ -56,6 +72,34 @@ def test_to_copy() -> None:
     out = tensor.to(torch.float32)
     assert not isinstance(out, CategoricalTensor)
     assert out.dtype == torch.float32
+
+
+@withCUDA
+def test_decode(device: torch.device) -> None:
+    tensor = CategoricalTensor(
+        code=torch.tensor([[0, 1, 0], [-1, -1, -1], [1, 0, 1]], device=device),
+        categories=(
+            StringTensor.from_list(["a", "b"], device=device),
+            torch.tensor([10, 20], dtype=torch.int64, device=device),
+            torch.tensor([1.5, 2.5], device=device),
+        ),
+    )
+
+    out = tensor.decode()
+
+    assert isinstance(out, ColumnarTensor)
+    assert out.shape == (3, 3)
+    assert out.device == device
+    assert isinstance(out[:, 0], StringTensor)
+    assert out[:, 0].tolist() == ["a", None, "b"]
+    assert isinstance(out[:, 1], NullableTensor)
+    assert out[:, 1].dtype == torch.int64
+    assert out[:, 1].tolist() == [20, None, 10]
+    torch.testing.assert_close(
+        out[:, 2],
+        torch.tensor([1.5, torch.nan, 2.5], device=device),
+        equal_nan=True,
+    )
 
 
 def test_from_arrow_string_values() -> None:

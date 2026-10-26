@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import copy
+import warnings
 from typing import cast
 
 import pytest
@@ -64,7 +65,17 @@ def test_transformer_block_rope(
     query = torch.randn(2, 17, channels, device=device, dtype=dtype)
     key_value = torch.randn(2, 13, channels, device=device, dtype=dtype)
 
-    with torch.inference_mode(), torch.autocast(device.type, dtype=dtype):
+    with (
+        warnings.catch_warnings(),
+        torch.inference_mode(),
+        torch.autocast(device.type, dtype=dtype),
+    ):
+        if device.type == "cpu":
+            warnings.filterwarnings(
+                "ignore",
+                message=".*Cannot dispatch to fused implementation.*",
+                category=UserWarning,
+            )
         actual = block(query=query, key_value=key_value)
         expected = reference(query=query, key_value=key_value)
 

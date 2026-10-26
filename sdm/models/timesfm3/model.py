@@ -38,15 +38,15 @@ from sdm.models.timesfm3.util import (
     crossfade_patches,
     gather_future_patches,
     get_running_stats,
-    revin,
     update_running_stats,
 )
+from sdm.nn import RevIN
 from sdm.tensor.table import TableSchema
 
 
 class TimesFM3(ICLModel):
-    r"""The multivariate forecasting foundation model from `"TimesFM-3: A
-    Zero-shot Foundation Model for Multivariate Forecasting"
+    r"""The time series forecasting foundation model from
+    `"TimesFM-3: A Zero-shot Foundation Model for Multivariate Forecasting"
     <https://research.google/blog/
     timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting>`__.
 
@@ -230,6 +230,7 @@ class _TimesFM3(torch.nn.Module):
         self.output_patch_size = output_patch_size
         self.refinement = refinement
 
+        self.revin = RevIN(eps=0, **factory_kwargs)
         self.patch_embedding = ResidualBlock(
             in_channels=2 * (input_patch_size + output_patch_size),
             out_channels=channels,
@@ -287,18 +288,25 @@ class _TimesFM3(torch.nn.Module):
         # Exclude future information for context only features and targets:
         future_mask[..., C:, :, :] = True
 
-        x = revin(x, mean, std)
-        future_x = revin(future_x, mean, std)
+        scale = std.where(std >= 1e-6, 1.0).unsqueeze(-1)
+        x = self.revin(x, mean.unsqueeze(-1), scale)
+        future_x = self.revin(future_x, mean.unsqueeze(-1), scale)
         x[mask] = 0.0
         future_x[future_mask] = 0.0
+
+        # Mask leading fully padded patches, keeping horizon patches visible.
+        patch_mask = mask.all(dim=-1) & future_mask.all(dim=-1)
+        patch_mask = patch_mask.int().cumprod(dim=-1).bool()
+        if not patch_mask.any():  # Pay for device sync here:
+            patch_mask = None
+
         x = torch.cat(
             [x, future_x, mask.to(x.dtype), future_mask.to(x.dtype)],
             dim=-1,
         )  # [..., C, N, *]
 
-        # Run the model (assume no empty leading patches):
         x = self.patch_embedding(x)  # [..., C, N, D]
-        out = self.icl_block(x)  # [..., C, N, O * Q]
+        out = self.icl_block(x, patch_mask=patch_mask)  # [..., C, N, O * Q]
         out = out.unflatten(-1, (self.output_patch_size, -1))
         first = mid // P - 1
 
@@ -314,11 +322,10 @@ class _TimesFM3(torch.nn.Module):
 
             means, stds = [], []
             for i in range(first, out.size(-3) - 1, O // P):
-                anchor = revin(  # Denormalize entire output patch:
+                anchor = self.revin.inverse(  # Denormalize output patch:
                     median[..., i, :, :],
-                    carry_mean,
-                    carry_std,
-                    reverse=True,
+                    carry_mean[..., None, None],
+                    carry_std[..., None, None],
                 ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
 
                 for j in range(min(O // P, out.size(-3) - i - 1)):
@@ -338,8 +345,11 @@ class _TimesFM3(torch.nn.Module):
             stds = [std[..., : first + 1], torch.stack(stds, dim=-1)]
             std = torch.cat(stds, dim=-1)
 
-        out = revin(out, mean, std, reverse=True)
-        out = out.clamp(-1e20, 1e20)
+        out = self.revin.inverse(
+            out,
+            mean[..., None, None],
+            scale=std[..., None, None],
+        ).clamp(-1e20, 1e20)
 
         # Narrow target output patches:
         overlap = min(2 * P, O) - P

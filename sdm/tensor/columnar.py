@@ -54,6 +54,7 @@ class ColumnarTensor(Tensor):
     ] = {}
 
     _columns: tuple[Tensor, ...]
+    _empty: Tensor
 
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
@@ -117,6 +118,11 @@ class ColumnarTensor(Tensor):
                 "Expected 'size' to be given for zero columnar data"
             )
 
+        if not columns:
+            return cls._from_empty(
+                torch.empty((*size, 0), dtype=torch.uint8, device=device)
+            )
+
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, len(columns)),
@@ -126,8 +132,62 @@ class ColumnarTensor(Tensor):
         )
 
         out._columns = columns
-
+        for i, column in enumerate(columns):
+            setattr(out, f"_column_{i}", column)
         return out
+
+    @classmethod
+    def _from_empty(cls, empty: Tensor) -> Self:
+        r"""Wrap the supplied zero-column tensor without copying it.
+
+        Reusing the tensor lets ``torch.compile`` track it through operations.
+        """
+        return cast(
+            Self,
+            ColumnarTensor._make_empty_columnar_tensor(
+                empty=empty,
+                cls=None if cls is ColumnarTensor else cls,
+            ),
+        )
+
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_empty_columnar_tensor(
+        empty: Tensor, cls: type[ColumnarTensor] | None = None
+    ) -> ColumnarTensor:
+        cls = ColumnarTensor if cls is None else cls
+        out = Tensor._make_wrapper_subclass(
+            cls=cls,
+            size=empty.size(),
+            dtype=torch.uint8,
+            device=empty.device,
+            requires_grad=False,
+        )
+        out._columns = ()
+        out._empty = empty
+        return out
+
+    def _with_columns(self, columns: Sequence[Tensor]) -> Self:
+        r"""Create a tensor from the selected columns.
+
+        Preserve row and batch dimensions. For an empty selection, allocate
+        from an input tensor so ``torch.compile`` can track the result.
+        """
+        if columns:
+            return self.__class__(
+                columns=columns, size=self.size()[:-1], device=self.device
+            )
+        source = self._columns[0] if self._columns else self._empty
+        while hasattr(source, "__tensor_flatten__"):
+            flatten = cast(
+                Callable[[], tuple[list[str], Any]], source.__tensor_flatten__
+            )
+            attrs, _ = flatten()
+            source = getattr(source, attrs[0])
+        return self._from_empty(
+            source.new_empty((*self.size()[:-1], 0), dtype=torch.uint8)
+        )
 
     @classmethod
     def from_arrow(
@@ -262,6 +322,29 @@ class ColumnarTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [f"_column_{i}" for i in range(len(self._columns))]
+        if not attrs:
+            attrs = ["_empty"]
+        ctx = (self.__class__, len(self._columns), self.device)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> ColumnarTensor:
+        cls, count, device = ctx
+        if count == 0:
+            return cls._from_empty(inner_tensors["_empty"])
+        return cls(
+            tuple(inner_tensors[f"_column_{i}"] for i in range(count)),
+            size=outer_size[:-1],
+            device=device,
+        )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._columns, tuple(self.size())[:-1], self.device)
         return (self.__class__, args)
@@ -283,10 +366,15 @@ class ColumnarTensor(Tensor):
 
     @override
     def is_shared(self) -> bool:
+        if not self._columns:
+            return self._empty.is_shared()
         return all(column.is_shared() for column in self._columns)
 
     @override
     def share_memory_(self) -> Self:
+        if not self._columns:
+            self._empty.share_memory_()
+            return self
         for column in self._columns:
             column.share_memory_()
         return self
@@ -342,6 +430,8 @@ class ColumnarTensor(Tensor):
 @ColumnarTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: ColumnarTensor) -> ColumnarTensor:
+    if not inp._columns:
+        return inp._from_empty(aten.alias.default(inp._empty))
     return inp.__class__(
         columns=inp._columns,
         size=inp.size()[:-1],
@@ -389,6 +479,20 @@ def _to_dtype_layout(
         )
     ):
         return inp
+
+    if not inp._columns:
+        return inp._from_empty(
+            aten.to.dtype_layout(
+                inp._empty,
+                dtype=None,
+                layout=layout,
+                device=device,
+                pin_memory=pin_memory,
+                non_blocking=non_blocking,
+                copy=copy,
+                memory_format=memory_format,
+            )
+        )
 
     return inp.__class__(
         columns=[
@@ -502,6 +606,10 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> ColumnarTensor:
+    if not inp._columns:
+        return inp._from_empty(
+            inp._empty.contiguous(memory_format=memory_format)
+        )
     return inp.__class__(
         columns=[
             column.contiguous(memory_format=memory_format)
@@ -514,11 +622,15 @@ def _contiguous(
 
 @ColumnarTensor.implements(aten.is_pinned.default)
 def _is_pinned(inp: ColumnarTensor) -> bool:
+    if not inp._columns:
+        return inp._empty.is_pinned()
     return all(column.is_pinned() for column in inp._columns)
 
 
 @ColumnarTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
+    if not inp._columns:
+        return inp._from_empty(inp._empty.pin_memory())
     return inp.__class__(
         columns=[column.pin_memory() for column in inp._columns],
         size=inp.size()[:-1],
@@ -609,6 +721,9 @@ def _view(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
+    if not inp._columns:
+        return inp._from_empty(inp._empty.view(size))
+
     return inp.__class__(
         columns=[column.view(size[:-1]) for column in inp._columns],
         size=size[:-1],
@@ -645,6 +760,18 @@ def _flatten(
     )
 
 
+@ColumnarTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: ColumnarTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> ColumnarTensor:
+    return cast(
+        ColumnarTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @ColumnarTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: ColumnarTensor) -> ColumnarTensor:
@@ -666,6 +793,9 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
         raise RuntimeError(
             f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
+
+    if not inp._columns:
+        return inp._from_empty(inp._empty.squeeze(dims))
 
     return inp.__class__(
         columns=[column.squeeze(dims) for column in inp._columns],
@@ -693,6 +823,9 @@ def _unsqueeze(inp: ColumnarTensor, dim: int) -> ColumnarTensor:
             f"Can't unsqueeze after the column dimension of "
             f"{inp.__class__.__name__!r}"
         )
+
+    if not inp._columns:
+        return inp._from_empty(inp._empty.unsqueeze(dim))
 
     return inp.__class__(
         columns=[column.unsqueeze(dim) for column in inp._columns],
@@ -726,6 +859,11 @@ def _expand(
         )
 
     old_size = (*(1,) * (len(size) - inp.dim()), *inp.size())
+
+    if not inp._columns:
+        return inp._from_empty(
+            aten.expand.default(inp._empty, size, implicit=implicit)
+        )
 
     return inp.__class__(
         columns=[
@@ -763,6 +901,9 @@ def _transpose(
             f"{inp.__class__.__name__!r}"
         )
 
+    if not inp._columns:
+        return inp._from_empty(inp._empty.transpose(dim0, dim1))
+
     columns = [column.transpose(dim0, dim1) for column in inp._columns]
 
     size = list(inp.size())
@@ -783,6 +924,9 @@ def _permute(inp: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
         raise RuntimeError(
             f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
+
+    if not inp._columns:
+        return inp._from_empty(inp._empty.permute(dims))
 
     return inp.__class__(
         columns=[column.permute(dims[:-1]) for column in inp._columns],
@@ -823,6 +967,9 @@ def _select(inp: ColumnarTensor, dim: int, index: int) -> Tensor:
     if dim == inp.dim() - 1:
         return aten.alias.default(inp._columns[index])
 
+    if not inp._columns:
+        return inp._from_empty(inp._empty.select(dim, index))
+
     return inp.__class__(
         columns=[column.select(dim, index) for column in inp._columns],
         size=(*inp.size()[:dim], *inp.size()[dim + 1 : -1]),
@@ -841,12 +988,13 @@ def _slice(
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
 
-    if dim == inp.dim() - 1:
-        return inp.__class__(
-            columns=inp._columns[slice(start, end, step)],
-            size=inp.size()[:-1],
-            device=inp.device,
+    if not inp._columns:
+        return inp._from_empty(
+            aten.slice.Tensor(inp._empty, dim, start, end, step)
         )
+
+    if dim == inp.dim() - 1:
+        return inp._with_columns(inp._columns[slice(start, end, step)])
 
     return inp.__class__(
         columns=[
@@ -881,17 +1029,10 @@ def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
     if dim == inp.dim() - 1:
         return tuple(aten.alias.default(column) for column in inp._columns)
 
+    if not inp._columns:
+        return tuple(inp._from_empty(part) for part in inp._empty.unbind(dim))
+
     columns_list = [column.unbind(dim) for column in inp._columns]
-    if len(columns_list) == 0:
-        size = (*inp.size()[:dim], *inp.size()[dim + 1 : -1])
-        return tuple(
-            inp.__class__(
-                columns=(),
-                size=size,
-                device=inp.device,
-            )
-            for _ in range(inp.size(dim))
-        )
 
     return tuple(
         inp.__class__(columns=columns, device=inp.device)
@@ -925,6 +1066,12 @@ def _split_with_sizes(
     dim = _normalize_dim(inp, dim)
     split_sizes = tuple(split_sizes)
 
+    if not inp._columns:
+        return tuple(
+            inp._from_empty(part)
+            for part in inp._empty.split(split_sizes, dim=dim)
+        )
+
     if dim == inp.dim() - 1:
         if sum(split_sizes) != inp.size(dim):
             raise RuntimeError(
@@ -936,29 +1083,12 @@ def _split_with_sizes(
         start = 0
         outs = []
         for split_size in split_sizes:
-            out = inp.__class__(
-                columns=inp._columns[start : start + split_size],
-                size=inp.size()[:-1],
-                device=inp.device,
-            )
+            columns = inp._columns[start : start + split_size]
+            outs.append(inp._with_columns(columns))
             start += split_size
-            outs.append(out)
         return tuple(outs)
 
     columns_list = [col.split(split_sizes, dim=dim) for col in inp._columns]
-    if len(columns_list) == 0:
-        return tuple(
-            inp.__class__(
-                columns=(),
-                size=(
-                    *inp.size()[:dim],
-                    split_size,
-                    *inp.size()[dim + 1 : -1],
-                ),
-                device=inp.device,
-            )
-            for split_size in split_sizes
-        )
 
     return tuple(
         inp.__class__(columns=columns, device=inp.device)
@@ -973,12 +1103,10 @@ def _index_select(
     index: Tensor,
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
+    if not inp._columns:
+        return inp._from_empty(inp._empty.index_select(dim, index))
     if dim == inp.dim() - 1:
-        return inp.__class__(
-            columns=[inp._columns[i] for i in index.tolist()],
-            size=inp.size()[:-1],
-            device=inp.device,
-        )
+        return inp._with_columns([inp._columns[i] for i in index.tolist()])
 
     return inp.__class__(
         columns=[column.index_select(dim, index) for column in inp._columns],
@@ -1026,19 +1154,12 @@ def _index(
             )
         if column_index.dtype == torch.bool:
             column_index = column_index.nonzero().view(-1)
-        return inp.__class__(
-            columns=[inp._columns[i] for i in column_index.tolist()],
-            size=inp.size()[:-1],
-            device=inp.device,
+        return inp._with_columns(
+            [inp._columns[i] for i in column_index.tolist()]
         )
 
-    if len(inp._columns) == 0:
-        dummy = torch.empty(inp.size(), device=inp.device)
-        return inp.__class__(
-            columns=(),
-            size=aten.index.Tensor(dummy, indices).size()[:-1],
-            device=inp.device,
-        )
+    if not inp._columns:
+        return inp._from_empty(aten.index.Tensor(inp._empty, indices))
 
     return inp.__class__(
         columns=[
@@ -1057,6 +1178,11 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
     dim = _normalize_dim(tensors[0], dim)
+
+    if all(not tensor._columns for tensor in tensors):
+        return tensors[0]._from_empty(
+            torch.cat([t._empty for t in tensors], dim=dim)
+        )
 
     if dim == tensors[0].dim() - 1:
         return tensors[0].__class__(
@@ -1099,6 +1225,11 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
         raise RuntimeError(
             f"Can't stack after the column dimension of "
             f"{tensors[0].__class__.__name__!r}"
+        )
+
+    if not tensors[0]._columns:
+        return tensors[0]._from_empty(
+            torch.stack([t._empty for t in tensors], dim=dim)
         )
 
     return tensors[0].__class__(

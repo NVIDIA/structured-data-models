@@ -16,8 +16,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import ICLModel
-from sdm.models.callback import Callback
+from sdm.models import Callback, ICLModel
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -181,7 +180,7 @@ class MyCallback(Callback):
 
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = True
     generators: ClassVar[list[torch.Generator | None]] = []
     draws: ClassVar[list[torch.Tensor]] = []
@@ -705,7 +704,7 @@ def test_estimator_batching_aligns_shuffled_class_columns(
     )
 
     def _check(out: TableTensor) -> None:
-        columns = out.columns[Stype.numerical]
+        columns = out.numerical_columns
         assert sorted(columns) == ["10", "20"]
         frequency = torch.tensor(
             [0.75 if column == "10" else 0.25 for column in columns]

@@ -51,12 +51,6 @@ parser.add_argument(
     help="Prediction batch size.",
 )
 add_finetune_args(parser)
-parser.add_argument(
-    "--enable-kv-cache",
-    action="store_true",
-    help="Cache context key/value projections at fit and reuse them "
-    "across prediction batches.",
-)
 args = parser.parse_args()
 
 os.environ["SDM_ENABLE_CATEGORY_CHECKS"] = "0"
@@ -72,7 +66,6 @@ result_dir = (
 config = {
     "max_context_size": args.max_context_size,
     "max_columns": args.max_columns,
-    "kv_cache": args.enable_kv_cache,
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size

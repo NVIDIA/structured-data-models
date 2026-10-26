@@ -100,7 +100,7 @@ def test_forward(
     out = cls_model(x_context, _cls_target(), x_query, recipe=_recipe())
 
     assert out.size() == (2, 3)
-    assert out.columns[Stype.numerical] == ("0", "10", "20")
+    assert out.numerical_columns == ("0", "10", "20")
     assert out.dtype == x_query.dtype
     assert torch.is_inference(out)
 
@@ -113,8 +113,60 @@ def test_forward(
     )
 
     assert out.size() == (2, 999)
-    assert out.columns[Stype.numerical] == tuple(
-        f"q{i:03d}" for i in range(1, 1000)
+    assert out.numerical_columns == tuple(f"q{i:03d}" for i in range(1, 1000))
+
+
+@pytest.mark.parametrize("grad_enabled", [False, True])
+def test_column_padding_parity(grad_enabled: bool) -> None:
+    model = _build("classification", "small").models["classification"]
+    model.train()
+
+    # Both tables hold 3 context rows followed by 2 query rows. The first table
+    # holds 2 real columns followed by padding, the second fills the batch.
+    num_columns = torch.tensor([2, 5])
+    categorical_mask = torch.tensor(
+        [
+            [False, True, False, False, False],
+            [False, True, False, True, False],
+        ]
+    )
+    x = torch.randn(2, 5, 5)
+    x = x.where(~categorical_mask[:, None], torch.randint_like(x, 3))
+    # Missing values in the first valid column of each table, in a context
+    # and a query row.
+    x[0, [0, 3], 0] = float("nan")
+    x[1, [0, 3], 0] = float("nan")
+    y = torch.randint(2, (2, 3))
+    x.requires_grad_()
+
+    with torch.set_grad_enabled(grad_enabled):
+        expected = torch.stack(
+            [
+                model(
+                    x=x[0, :, :2],
+                    y=y[0],
+                    categorical_mask=categorical_mask[0, :2],
+                ),
+                model(x=x[1], y=y[1], categorical_mask=categorical_mask[1]),
+            ]
+        )
+        actual = model.forward_train(
+            x=x,
+            y=y,
+            categorical_mask=categorical_mask,
+            num_columns=num_columns,
+        )
+    torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+
+    if not grad_enabled:
+        return
+    actual.square().mean().backward()
+    assert x.grad is not None
+    assert x.grad[0, :, 2:].count_nonzero() == 0
+    assert all(
+        parameter.grad is not None and parameter.grad.isfinite().all()
+        for parameter in model.parameters()
+        if parameter.requires_grad
     )
 
 
