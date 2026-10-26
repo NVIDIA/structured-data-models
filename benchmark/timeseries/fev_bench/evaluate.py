@@ -8,8 +8,8 @@ from pathlib import Path
 import fev
 import pandas as pd
 
-from benchmark.forecasting.fev_bench import FEV_URL
-from benchmark.forecasting.model import MODEL_CONFIGS
+from benchmark.timeseries.fev_bench import FEV_BENCH_URL
+from benchmark.timeseries.model import MODEL_CONFIGS
 
 BASELINE = "Seasonal Naive"
 REFERENCES = ("timesfm-3", "timesfm-2_5", "chronos-2", "seasonal_naive")
@@ -35,7 +35,7 @@ def main() -> None:
     # Compare with published results on tasks run by all models:
     tasks = set.intersection(*(set(df["task_name"]) for df in summaries))
     for name in REFERENCES:
-        path = f"{FEV_URL}/benchmarks/fev_bench/results/{name}.csv"
+        path = f"{FEV_BENCH_URL}/benchmarks/fev_bench/results/{name}.csv"
         summaries.append(pd.read_csv(path))
     summaries = pd.concat(summaries)
     summaries = summaries[summaries["task_name"].isin(tasks)]
