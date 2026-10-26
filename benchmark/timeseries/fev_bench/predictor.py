@@ -180,6 +180,7 @@ def _from(
         for column in columns
         if dataset.features[column].feature.dtype in ("string", "large_string")
     ]
+
     for batch in dataset.with_format("numpy").iter(batch_size):
         if not columns:
             yield []
