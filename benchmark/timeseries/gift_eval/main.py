@@ -69,9 +69,6 @@ path = Path(__file__).parent.parent
 path = path / "gift_eval_out" / config.name / "all_results.csv"
 path.parent.mkdir(parents=True, exist_ok=True)
 
-completed = set(pd.read_csv(path)["dataset"]) if path.exists() else set()
-properties = pd.read_json(f"{GIFT_EVAL_URL}/notebooks/dataset_properties.json")
-
 names = args.dataset or DATASETS
 if not os.getenv("GIFT_EVAL"):
     os.environ["GIFT_EVAL"] = snapshot_download(
@@ -83,6 +80,8 @@ if not os.getenv("GIFT_EVAL"):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = config.factory(device)
 
+completed = set(pd.read_csv(path)["dataset"]) if path.exists() else set()
+properties = pd.read_json(f"{GIFT_EVAL_URL}/notebooks/dataset_properties.json")
 for name in names:
     key, _, freq = name.partition("/")
     key = PRETTY_NAMES.get(key.lower(), key.lower())

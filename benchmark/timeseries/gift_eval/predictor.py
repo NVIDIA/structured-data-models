@@ -96,10 +96,10 @@ class SDMPredictor(Predictor):
                     y_i = torch.cat([y_i, y[..., : size - y_i.size(-1)]], -1)
 
                 out = self.model(
-                    x_context=x,
-                    y_context=y_i,
-                    x_query=torch.empty(
-                        (x.size(0), self.prediction_length, 0),
+                    x_context=sdm.TableTensor.from_tensor(x),
+                    y_context=sdm.TableTensor.from_tensor(y_i),
+                    x_query=sdm.TableTensor(
+                        size=(x.size(0), self.prediction_length),
                         device=self.device,
                     ),
                     num_estimators=self.config.num_estimators,

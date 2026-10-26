@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""SDM forecasting adapter for fev-bench."""
-
 from collections.abc import Iterator
 
 import datasets
@@ -11,17 +9,15 @@ import numpy as np
 import pandas as pd
 
 import sdm
-from benchmark.forecasting.model import ModelConfig, forecast, select_levels
+from benchmark.timeseries.model import ModelConfig
 
 
 class SDMModel(fev.ForecastingModel):
-    """fev model forecasting batches of series with an SDM model."""
-
     def __init__(
         self,
         model: sdm.models.ICLModel,
         config: ModelConfig,
-        batch_size: int,
+        batch_size: int = 64,
     ) -> None:
         super().__init__()
         self.model = model
