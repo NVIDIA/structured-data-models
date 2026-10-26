@@ -102,7 +102,7 @@ class RecipeExecution:
                 self.recipe.output,
             ):
                 for module in _iter_modules(processor):
-                    if isinstance(module, sp.TargetEncoder):
+                    if isinstance(module, sp.TargetAwareEnsembleProcessor):
                         module._set_buffer(name="_target", value=y)
 
             y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)

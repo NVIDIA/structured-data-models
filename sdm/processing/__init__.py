@@ -9,7 +9,7 @@ from sdm.processing.ensemble import (
     EnsembleInvertibleMixin,
 )
 from sdm.processing.series import SeriesEnsembleProcessor
-from sdm.processing.target import TargetEncoder
+from sdm.processing.target import TargetAwareEnsembleProcessor
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -61,7 +61,7 @@ __all__ = [
     "EnsembleProcessor",
     "EnsembleInvertibleMixin",
     "SeriesEnsembleProcessor",
-    "TargetEncoder",
+    "TargetAwareEnsembleProcessor",
     "EnsembleProcessorAdapter",
     "Identity",
     "Callable",

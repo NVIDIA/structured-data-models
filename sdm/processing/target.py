@@ -5,7 +5,7 @@ from sdm import TableTensor
 from sdm.processing import EnsembleProcessor
 
 
-class TargetEncoder(EnsembleProcessor):
+class TargetAwareEnsembleProcessor(EnsembleProcessor):
     r"""Base processor with access to unprocessed context targets.
 
     During recipe execution, ``_target`` contains the original target table,

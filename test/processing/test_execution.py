@@ -19,7 +19,7 @@ from sdm.testing import withCUDA
 
 @withCUDA
 def test_output_encoder_uses_raw_targets(device: torch.device) -> None:
-    class AddTargetMean(sp.TargetEncoder):
+    class AddTargetMean(sp.TargetAwareEnsembleProcessor):
         handles_stypes = (Stype.numerical,)
         requires_fit = False
 
