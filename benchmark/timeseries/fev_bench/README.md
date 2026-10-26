@@ -20,8 +20,6 @@ pip install . fev==0.10.0
 
   `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass.
 
-String-valued dynamic covariates are mapped to 100 numeric buckets using deterministic CRC32 hashing. Upstream uses Python's process-seeded `hash()`, so bucket assignments and predictions on tasks with string covariates can differ from its published results.
-
 > [!NOTE]
 > Weights of `TimesFM3` are distributed under the [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE).
 > Review the license before running the `TimesFM3` benchmark, which will download its weights noninteractively.
