@@ -1096,7 +1096,7 @@ def test_native_string_selection(
     assert actual.data_offset[1].diff().equal(expected.data_offset[1].diff())
 
 
-def test_native_string_selection_fullgraph() -> None:
+def test_native_string_selection_fullgraph(compilation: None) -> None:
     values = StringTensor.from_arrow(pa.array(["é🙂", None, "", "long尾"]))
     index = torch.tensor([3, 0, 3, 1, 2])
     compiled = torch.compile(_select_entries, fullgraph=True)
