@@ -12,6 +12,7 @@ import tqdm
 
 import sdm
 from benchmark.timeseries.model import ModelConfig
+from sdm import TableTensor
 
 
 class SDMPredictor(fev.ForecastingModel):
@@ -135,12 +136,18 @@ class SDMPredictor(fev.ForecastingModel):
                                 [y_i, y[..., : size - y_i.size(-1)]], dim=-1
                             )
 
-                        out = self.model(
-                            x_context=sdm.TableTensor.from_tensor(x_context),
-                            y_context=sdm.TableTensor.from_tensor(y_i),
-                            x_query=sdm.TableTensor.from_tensor(x_query),
-                            num_estimators=self.config.num_estimators,
-                        )
+                        with torch.amp.autocast(
+                            self.device.type,
+                            dtype=self.config.autocast_dtype,
+                            enabled=x_context.is_cuda
+                            and self.config.autocast_dtype != torch.float32,
+                        ):
+                            out = self.model(
+                                x_context=TableTensor.from_tensor(x_context),
+                                y_context=TableTensor.from_tensor(y_i),
+                                x_query=TableTensor.from_tensor(x_query),
+                                num_estimators=self.config.num_estimators,
+                            )
                         pred = out.numerical
                         pred = pred.view(y.size(0), task.horizon, size, -1)
                         preds.append(pred)
