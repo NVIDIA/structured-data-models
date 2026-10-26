@@ -206,6 +206,7 @@ def test_all_public_processors_have_contract_cases() -> None:
         sp.SentenceTransformer,
         sp.Detrend,
         sp.Interpolate,
+        sp.ClipNonnegative,
     }
     assert public_processors == covered_processors | specialized_processors
 
