@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Run an SDM forecasting model on fev-bench."""
+r"""Run an SDM time series forecasting model on fev-bench."""
 
 import argparse
 import json
@@ -12,14 +12,19 @@ import fev
 import pandas as pd
 import torch
 
-from benchmark.forecasting.fev_bench import FEV_URL
 from benchmark.forecasting.fev_bench.models import SDMModel
 from benchmark.forecasting.model import MODEL_CONFIGS, add_model_args
+from benchmark.timeseries.fev_bench import FEV_BENCH_URL
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     add_model_args(parser)
+    parser.add_argument(
+        "--mini",
+        action="store_true",
+        help="Run the 20-task fev-bench-mini subset.",
+    )
     parser.add_argument(
         "--task",
         action="append",
@@ -53,8 +58,9 @@ def main() -> None:
     )
 
     # Mirrors fev's official `models/evaluate.py` runner:
+    filename = "tasks_mini.yaml" if args.mini else "tasks.yaml"
     benchmark = fev.Benchmark.from_yaml(
-        f"{FEV_URL}/benchmarks/fev_bench/tasks.yaml"
+        f"{FEV_BENCH_URL}/benchmarks/fev_bench/{filename}"
     )
     for task in benchmark.tasks:
         if args.task is not None and task.task_name not in args.task:

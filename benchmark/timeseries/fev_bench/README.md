@@ -26,6 +26,9 @@ pip install . fev==0.10.0
 
 Results will be written to `benchmark/timeseries/fev_bench_out/<model>/`, and already completed configurations are skipped.
 
+Pass `--task` to run only selected fev-bench tasks, *e.g.*, `--task hospital --task proenfo_gfc12`.
+Pass `--mini` to run the 20-task fev-bench-mini subset:
+
 ## Evaluate
 
 Evaluate all available model results with:

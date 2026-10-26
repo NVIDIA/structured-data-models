@@ -27,6 +27,8 @@ pip install --no-deps "git+https://github.com/SalesforceAIResearch/gift-eval.git
 
 Results will be written to `benchmark/timeseries/gift_eval_out/<model>/`, and already completed configurations are skipped.
 
+Pass `--dataset` to run only selected GIFT-Eval datasets, *e.g.*, `--dataset hospital --dataset ett1/H`.
+
 ## Evaluate
 
 Evaluate all available model results with:

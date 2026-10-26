@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Evaluate SDM forecasting model results on fev-bench."""
+r"""Evaluate SDM time series forecasting results on fev-bench."""
 
 from pathlib import Path
 
