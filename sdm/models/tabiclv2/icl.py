@@ -56,6 +56,12 @@ class ICLBlock(torch.nn.Module):
             for _ in range(num_layers)
         )
 
+        # Keep final attention on SDPA to avoid FP8 overhead on small batches.
+        for layer in self.layers[:-1]:
+            cast(
+                TabICLv2TransformerBlock, layer
+            ).attn._supports_quantized_attention = True
+
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
         self.head = Sequential(
             Linear(channels, 2 * channels, **factory_kwargs),

@@ -80,11 +80,10 @@ def fp8_attention(
         _triton_fp8_attention is not None
         and not torch.is_grad_enabled()
         and query.is_cuda
+        and torch.version.cuda is not None
         and query.size(-1) in {32, 64, 128, 256}
-        # CUDA compute capability (major, minor): Ada, Hopper, RTX Blackwell.
-        # Restrict dispatch to architectures supported by this FP8 kernel.
-        and torch.cuda.get_device_capability(query.device)
-        in {(8, 9), (9, 0), (12, 0)}
+        # Native FP8 Tensor Cores require CUDA compute capability 8.9 or newer.
+        and torch.cuda.get_device_capability(query.device) >= (8, 9)
     ):
         if cache is not None and query.numel() == 0:
             return query, cache
