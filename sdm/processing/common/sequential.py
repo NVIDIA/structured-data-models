@@ -89,17 +89,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             out = child.transform(out)
         return out
 
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.fit_transform(out, generator=generator)
-        return out
-
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,

@@ -41,7 +41,7 @@ class Recipe:
     Args:
         features: Steps applied to model inputs before model execution.
         target: Steps applied to labels before model execution.
-        output: Steps fitted and applied to stacked model outputs.
+        output: Steps applied to stacked model outputs.
     """
 
     _features: EnsembleProcessor
@@ -137,6 +137,8 @@ class Recipe:
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
+        if self.output.requires_fit:
+            raise ValueError("'Recipe.output' should not require fitting")
 
     def prepend_features(self, processor: object) -> Self:
         """Prepend a processor to the feature pipeline."""

@@ -355,7 +355,7 @@ class RecipeExecution:
 
             out = torch.stack(list(outputs), dim=0)
 
-        return self.recipe.output.fit_transform(cast(TableTensor, out))
+        return self.recipe.output.transform(cast(TableTensor, out))
 
 
 def _align_to_fitted_groups(
