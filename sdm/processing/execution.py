@@ -95,6 +95,7 @@ class RecipeExecution:
         series_processors: tuple[sp.SeriesEnsembleProcessor, ...] = ()
         if y is not None:
             y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
+            raw_target = y
 
             for processor in (
                 self.recipe.features,
@@ -154,6 +155,8 @@ class RecipeExecution:
 
                 for task_dispatcher in task_dispatchers:
                     task_dispatcher._task = task
+
+            _fit_output(self.recipe.output, raw_target, generator=generator)
 
         self._related_processors = None
         self._related_locations = None
@@ -356,6 +359,27 @@ class RecipeExecution:
             out = torch.stack(list(outputs), dim=0)
 
         return self.recipe.output.transform(cast(TableTensor, out))
+
+
+def _fit_output(
+    processor: EnsembleProcessor,
+    target: EnsembleTable,
+    *,
+    generator: torch.Generator | None,
+) -> None:
+    if not processor.requires_fit:
+        return
+    if isinstance(processor, sp.Sequential):
+        for child in processor:
+            _fit_output(child, target, generator=generator)
+        processor._set_fitted(target[0].device)
+    elif isinstance(processor, sp.TaskDispatch):
+        if processor._task in processor.processors:
+            _fit_output(processor._processor(), target, generator=generator)
+        processor._set_fitted(target[0].device)
+    else:
+        assert isinstance(processor, sp.TargetAwareEnsembleProcessor)
+        processor.fit_ensemble(target, generator=generator)
 
 
 def _align_to_fitted_groups(

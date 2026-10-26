@@ -12,7 +12,12 @@ from sdm.testing import withCUDA
 
 @withCUDA
 @pytest.mark.parametrize("infer_members", [False, True])
-def test_clip_nonnegative(device: torch.device, infer_members: bool) -> None:
+@pytest.mark.parametrize("dispatch", [False, True])
+def test_clip_nonnegative(
+    device: torch.device,
+    infer_members: bool,
+    dispatch: bool,
+) -> None:
     target = torch.tensor(
         [
             [[torch.nan, -1.0, torch.nan], [0.0, 1.0, torch.nan]],
@@ -26,10 +31,13 @@ def test_clip_nonnegative(device: torch.device, infer_members: bool) -> None:
         target[1, 1, 0, 0] = -1.0
         x = x.unsqueeze(0).expand(2, -1, -1, -1)
 
+    if dispatch:
+        target = target[..., :1]
+    output = sp.Sequential(sp.AverageEstimators(), sp.ClipNonnegative())
     execution = RecipeExecution(
         Recipe(
             target=sp.FlipSign(probability=1.0),
-            output=[sp.AverageEstimators(), sp.ClipNonnegative()],
+            output=sp.TaskDispatch(regression=output) if dispatch else output,
         )
     )
     execution.fit_transform(
@@ -38,10 +46,13 @@ def test_clip_nonnegative(device: torch.device, infer_members: bool) -> None:
         related_tables=None,
         num_members=None if infer_members else 2,
     )
-    columns = [f"{name}__q{q}" for name in ("a", "b", "c") for q in (10, 90)]
+    names = ("a",) if dispatch else ("a", "b", "c")
+    columns = [f"{name}__q{q}" for name in names for q in (10, 90)]
     outputs = [
         TableTensor.from_tensor(
-            target.new_tensor(values).view(1, 1, -1).expand(2, 3, -1),
+            target.new_tensor(values[: len(columns)])
+            .view(1, 1, -1)
+            .expand(2, 3, -1),
             columns=columns,
         )
         for values in (
@@ -60,4 +71,24 @@ def test_clip_nonnegative(device: torch.device, infer_members: bool) -> None:
     if infer_members:
         expected = expected.clone()
         expected[1, :, 0] = -2.0
-    torch.testing.assert_close(result.numerical, expected)
+    torch.testing.assert_close(result.numerical, expected[..., : len(columns)])
+
+
+@withCUDA
+def test_clip_nonnegative_refit(device: torch.device) -> None:
+    target = TableTensor.from_tensor(
+        torch.tensor([[0.0, -1.0], [1.0, 1.0]], device=device)
+    )
+    pred = TableTensor.from_tensor(
+        torch.tensor([[-2.0, 1.0, -3.0, 2.0]], device=device)
+    )
+    processor = sp.ClipNonnegative().fit(target)
+    target.numerical.fill_(-1)
+    torch.testing.assert_close(
+        processor.transform(pred).numerical,
+        pred.numerical.new_tensor([[0.0, 1.0, -3.0, 2.0]]),
+    )
+    processor.fit(target)
+    torch.testing.assert_close(
+        processor.transform(pred).numerical, pred.numerical
+    )

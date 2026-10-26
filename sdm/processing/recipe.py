@@ -41,7 +41,8 @@ class Recipe:
     Args:
         features: Steps applied to model inputs before model execution.
         target: Steps applied to labels before model execution.
-        output: Steps applied to stacked model outputs.
+        output: Steps applied to stacked model outputs. Target-aware steps
+            that require fitting are fitted on unprocessed context targets.
     """
 
     _features: EnsembleProcessor
@@ -137,8 +138,23 @@ class Recipe:
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
-        if self.output.requires_fit:
-            raise ValueError("'Recipe.output' should not require fitting")
+        if any(
+            isinstance(module, Processor)
+            and module.requires_fit
+            and not isinstance(
+                module,
+                (
+                    sp.Sequential,
+                    sp.TaskDispatch,
+                    sp.TargetAwareEnsembleProcessor,
+                ),
+            )
+            for module in _iter_modules(self.output)
+        ):
+            raise ValueError(
+                "Fitted 'Recipe.output' steps must be "
+                "'TargetAwareEnsembleProcessor' instances"
+            )
 
     def prepend_features(self, processor: object) -> Self:
         """Prepend a processor to the feature pipeline."""
