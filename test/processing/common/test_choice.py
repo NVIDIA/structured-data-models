@@ -17,7 +17,7 @@ from sdm.processing import (
 
 class Add(Processor, InvertibleMixin):
     requires_fit = False
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
 
     def __init__(self, value: float) -> None:
         super().__init__()
@@ -31,7 +31,7 @@ class Add(Processor, InvertibleMixin):
 
 
 class AddFittedMemberCount(EnsembleProcessor):
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = True
 
     def __init__(self) -> None:

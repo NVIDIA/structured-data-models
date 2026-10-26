@@ -51,6 +51,15 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+# torch.compile on PyTorch 2.7 can fail after a graph break with both
+# contexts in one function. Keep the gradient context in a helper.
+def _call_with_grad_enabled(
+    fn: Callable, grad_enabled: bool, /, *args: Any, **kwargs: Any
+) -> Any:
+    with torch.set_grad_enabled(grad_enabled):
+        return fn(*args, **kwargs)
+
+
 def preserve_autograd_state(fn: Callable) -> Callable:
     r"""Re-apply the caller's autograd/inference-mode state for non-view ops.
 
@@ -65,11 +74,8 @@ def preserve_autograd_state(fn: Callable) -> Callable:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         inference_mode_enabled = torch.is_inference_mode_enabled()
         grad_enabled = torch.is_grad_enabled()
-        with (
-            torch.inference_mode(inference_mode_enabled),
-            torch.set_grad_enabled(grad_enabled),
-        ):
-            return fn(*args, **kwargs)
+        with torch.inference_mode(inference_mode_enabled):
+            return _call_with_grad_enabled(fn, grad_enabled, *args, **kwargs)
 
     return wrapper
 
@@ -329,30 +335,55 @@ class TableTensor(Tensor):
                 )
 
         column_names = list(chain.from_iterable(columns.values()))
-        column_to_loc: dict[str, tuple[Stype, int]] = {}
-        for stype_like, names in columns.items():
-            stype = Stype(stype_like)
-            for i, name in enumerate(names):
-                column_to_loc[name] = (stype, i)
-        if len(column_names) != len(column_to_loc):
+        if len(column_names) != len(set(column_names)):
             raise ValueError("Expected column names to be unique")
 
+        # Keep enum objects out of captured graph arguments.
+        return TableTensor._make_table_tensor(
+            columns={str(stype): names for stype, names in columns.items()},
+            numerical=numerical,
+            categorical=categorical,
+            datetime=datetime,
+            text=text,
+            id=id,
+            cls=None if cls is TableTensor else cls,
+        )
+
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_table_tensor(
+        columns: dict[str, tuple[str, ...]],
+        numerical: Tensor,
+        categorical: CategoricalTensor,
+        datetime: Tensor,
+        text: StringTensor,
+        id: ColumnarTensor,
+        cls: type[TableTensor] | None = None,
+    ) -> TableTensor:
+        cls = TableTensor if cls is None else cls
+        stype_columns = {
+            Stype(stype): names for stype, names in columns.items()
+        }
+        column_to_loc = {
+            name: (stype, i)
+            for stype, names in stype_columns.items()
+            for i, name in enumerate(names)
+        }
         out = Tensor._make_wrapper_subclass(
-            cls,
-            size=(*size, len(column_names)),
+            cls=cls,
+            size=(*numerical.size()[:-1], len(column_to_loc)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
         )
-
         out._numerical = numerical
         out._categorical = categorical
         out._datetime = datetime
         out._text = text
         out._id = id
-        out._columns = columns
+        out._columns = stype_columns
         out._column_to_loc = column_to_loc
-
         return out
 
     @classmethod
@@ -701,18 +732,18 @@ class TableTensor(Tensor):
 
         if isinstance(tensor, StringTensor):
             return cls(
-                columns={Stype.text: columns},
+                columns={"text": columns},
                 text=tensor,
             )
 
         if not tensor.is_floating_point():
             return cls(
-                columns={Stype.categorical: columns},
+                columns={"categorical": columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
             )
 
         return cls(
-            columns={Stype.numerical: columns},
+            columns={"numerical": columns},
             numerical=tensor,
         )
 
@@ -834,6 +865,40 @@ class TableTensor(Tensor):
     # Properties ##############################################################
 
     @property
+    def numerical_columns(self) -> tuple[str, ...]:
+        r"""Return numerical column names as an immutable tuple."""
+        return self._columns[Stype.numerical]
+
+    @property
+    def categorical_columns(self) -> tuple[str, ...]:
+        r"""Return categorical column names as an immutable tuple."""
+        return self._columns[Stype.categorical]
+
+    @property
+    def datetime_columns(self) -> tuple[str, ...]:
+        r"""Return datetime column names as an immutable tuple."""
+        return self._columns[Stype.datetime]
+
+    @property
+    def text_columns(self) -> tuple[str, ...]:
+        r"""Return text column names as an immutable tuple."""
+        return self._columns[Stype.text]
+
+    @property
+    def id_columns(self) -> tuple[str, ...]:
+        r"""Return identifier column names as an immutable tuple."""
+        return self._columns[Stype.id]
+
+    @property
+    def column_groups(self) -> tuple[tuple[Stype, tuple[str, ...]], ...]:
+        r"""Return column names grouped by semantic type as an immutable tuple.
+
+        Pairs follow ``columns`` iteration order and include types with no
+        columns.
+        """
+        return tuple(self._columns.items())
+
+    @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
         return self._columns.copy()
@@ -860,7 +925,7 @@ class TableTensor(Tensor):
     def active_stypes(self) -> frozenset[Stype]:
         r"""Semantic types with at least one column."""
         return frozenset(
-            stype for stype, tensor in self.items() if tensor.size(-1) > 0
+            stype for stype, columns in self.column_groups if columns
         )
 
     @property
@@ -940,7 +1005,7 @@ class TableTensor(Tensor):
             id: Replacement identifier block with shape ``[..., C_id]``.
         """
         return self.__class__(
-            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            columns=cast(Mapping[StypeLike, Sequence[str]], self._columns),
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
                 self.categorical if categorical is None else categorical
@@ -964,7 +1029,9 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
+            size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in stypes},
+            device=self.device,
             **{stype: getattr(self, stype) for stype in stypes},
         )
 
@@ -976,10 +1043,10 @@ class TableTensor(Tensor):
 
         .. testcode:: drop_stypes
 
-            assert table.columns[Stype.categorical] == ("country", "segment")
+            assert table.categorical_columns == ("country", "segment")
             table = table.drop_stypes("categorical")
-            assert table.columns[Stype.categorical] == ()
-            assert table.columns[Stype.numerical] == ("age", "income")
+            assert table.categorical_columns == ()
+            assert table.numerical_columns == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
@@ -1024,7 +1091,7 @@ class TableTensor(Tensor):
 
         blocks: dict[Stype, Tensor] = {}
         for stype, tensor in self.items():
-            indices = index_dict[stype]
+            indices = index_dict.get(stype, ())
             if len(indices) == 0:
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
@@ -1083,6 +1150,34 @@ class TableTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = ["numerical", "categorical", "datetime", "text", "id"]
+        # Let torch.compile track backing fields and their public properties.
+        attrs = [f"_{name}" for name in attrs] + attrs
+        columns = tuple(
+            (str(stype), names) for stype, names in self._columns.items()
+        )
+        ctx = (self.__class__, columns)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> TableTensor:
+        cls, columns = ctx
+        return cls(
+            size=outer_size[:-1],
+            columns=dict(columns),
+            numerical=inner_tensors["numerical"],
+            categorical=inner_tensors["categorical"],
+            datetime=inner_tensors["datetime"],
+            text=inner_tensors["text"],
+            id=inner_tensors["id"],
+        )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
             tuple(self.size()[:-1]),
@@ -1103,8 +1198,8 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+        if func in cls.HANDLED_FUNCTIONS:
+            return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -1182,11 +1277,12 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} "
+                f"({len(self._columns[stype]):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
-            for stype, tensor in self.items()
-            if tensor.size(-1) > 0
+            for stype, _ in self.items()
+            if self._columns[stype]
         ]
 
         out = f"{' ' * indent}{self.__class__.__name__}(\n"
@@ -1548,6 +1644,18 @@ def _flatten(
     )
 
 
+@TableTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: TableTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @TableTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: TableTensor) -> TableTensor:
@@ -1721,6 +1829,12 @@ def _slice(
             and step == 1
         ):
             return _alias(inp)
+        if (
+            end is not None
+            and (end == 0 or end <= -inp.size(-1))
+            and step == 1
+        ):
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1747,6 +1861,8 @@ def _narrow(
     if _is_column_dim(inp, dim):
         if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
             return _alias(inp)
+        if length == 0:
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1913,38 +2029,45 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     tensors = cast(Sequence[TableTensor], tensors)
 
     ref = tensors[0]
-    if not _is_column_dim(ref, dim):
+    is_column_dim = _is_column_dim(ref, dim)
+    if not is_column_dim:
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+    else:
+        # Skipping empty blocks below would otherwise hide a size mismatch.
+        for tensor in tensors[1:]:
+            if tensor.size()[:-1] != ref.size()[:-1]:
+                raise RuntimeError(
+                    f"Sizes of tensors must match except in the column "
+                    f"dimension (got {tuple(ref.size())} and "
+                    f"{tuple(tensor.size())})"
+                )
 
     blocks: dict[Stype, Tensor] = {}
-    for stype, _ in ref.items():
-        block_list = [tensor.blocks[stype] for tensor in tensors]
-        block_list = [block for block in block_list if block.size(-1) > 0]
-        if len(block_list) == 1:
-            blocks[stype] = block_list[0]
-        elif len(block_list) > 1:
-            blocks[stype] = torch.cat(block_list, dim=dim)
+    for stype, _ in TableTensor.items(ref):
+        block_list = [getattr(tensor, stype.value) for tensor in tensors]
+        if is_column_dim:
+            # Skip empty blocks so their dtypes cannot promote the others,
+            # but keep one so that an all-empty block retains its dtype.
+            block_list = [
+                block for block in block_list if block.size(-1) > 0
+            ] or block_list[:1]
+        blocks[stype] = (
+            block_list[0]
+            if len(block_list) == 1
+            else torch.cat(block_list, dim=dim)
+        )
 
-    size: Sequence[int] | None = None
-    if not _is_column_dim(ref, dim):
-        columns = ref._columns
-        if len(blocks) == 0:
-            size = list(tensors[0].size())
-            for tensor in tensors[1:]:
-                size[dim] += tensor.size(dim)
-    else:
+    columns = ref._columns
+    if is_column_dim:
         columns = {
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
-            for stype, _ in ref.items()
+            for stype, _ in TableTensor.items(ref)
         }
-        size = ref.size()
 
     return ref.__class__(
-        size=size[:-1] if size is not None else None,
-        columns=cast(dict[StypeLike, tuple[str, ...]], columns),
-        device=ref.device if len(blocks) == 0 else None,
+        columns=cast("dict[StypeLike, tuple[str, ...]]", columns),
         **blocks,
     )
 

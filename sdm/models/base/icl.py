@@ -19,9 +19,9 @@ from sdm import (
     TaskLike,
 )
 from sdm._inference import inference_mode
-from sdm._warnings import warn_once
+from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
-from sdm.models.callback import Callback
+from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -31,21 +31,16 @@ from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
 
-class ICLModel(torch.nn.Module, abc.ABC):
+class ICLModel(Model):
     r"""Base model for in-context foundation models on structured data.
 
     :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
-    It enriches models by unified pre-processing and post-processing routines,
-    key/value caching, and ensembling.
 
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.
     """
-
-    #: Semantic types supported for input columns in this model.
-    supported_feature_stypes: ClassVar[frozenset[Stype]]
 
     #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
@@ -91,9 +86,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 f"{self.__class__.__name__!r} received unsupported tasks "
                 f"{invalid}"
             )
-
-        self._cache: Cache | None = None
-        self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     def forward(
         self,
@@ -294,6 +286,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         contexts = [
             self._prepare_context(context, callbacks) for context in contexts
         ]
+        if x.is_cuda and len(contexts) > 1:
+            set_pinned_max_round_threshold(mb=1)
+
         class_values = _class_values(contexts, estimator_batch_size)
         batches = _batch_slices(
             contexts=contexts,
@@ -411,47 +406,29 @@ class ICLModel(torch.nn.Module, abc.ABC):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
-        num_batches = cast(int, self._cache["num_batches"])
-        caches = [cast(Cache, self._cache[i]) for i in range(num_batches)]
-        next_cache = caches[0]
-
-        compute_stream: torch.cuda.Stream | None = None
-        transfer_stream: torch.cuda.Stream | None = None
-        try:
-            if x.is_cuda:
-                compute_stream = torch.cuda.current_stream(x.device)
-                if x.device not in self._transfer_streams:
-                    transfer_stream = torch.cuda.Stream(x.device)
-                    self._transfer_streams[x.device] = transfer_stream
-                else:
-                    transfer_stream = self._transfer_streams[x.device]
-                with torch.cuda.stream(transfer_stream):
-                    next_cache = next_cache.to(x.device, non_blocking=True)
-
+        with self._prefetch(
+            items=[
+                cast(Cache, self._cache[i])
+                for i in range(cast(int, self._cache["num_batches"]))
+            ],
+            device=x.device,
+        ) as caches:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
                 inference_mode("no_grad" if requires_grad else "inference"),
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
-            if x.is_cuda:
-                assert compute_stream is not None
-                assert transfer_stream is not None
-                compute_stream.wait_stream(transfer_stream)
-
             outs: list[TableTensor] = []
             start = 0
-            for i in range(len(caches)):
-                cache, next_cache = next_cache, None
-                assert cache is not None
-
+            for cache in caches:
                 x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
                 batch_queries = [
                     self._prepare_query(
                         query=query,
                         x_schema=x_schema,
                         related_tables_schema=cast(
-                            RelatedTablesSchema | None,
+                            "RelatedTablesSchema | None",
                             cache["related_tables_schema"],
                         ),
                         callbacks=callbacks,
@@ -464,20 +441,13 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 ]
                 start += len(x_schemas)
 
-                if i + 1 < len(caches):
-                    next_cache = caches[i + 1]
-                if x.is_cuda and next_cache is not None:
-                    assert transfer_stream is not None
-                    with torch.cuda.stream(transfer_stream):
-                        next_cache = next_cache.to(x.device, non_blocking=True)
-
                 outs += self._forward_batch(
                     contexts=None,
                     queries=batch_queries,
                     cache=cache,
                     categorical_mask=cast(Tensor, cache["categorical_mask"]),
                     class_values=cast(
-                        Sequence[tuple[Any, ...] | None] | None,
+                        "Sequence[tuple[Any, ...] | None] | None",
                         cache["class_values"],
                     ),
                     callbacks=callbacks,
@@ -485,21 +455,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     generator=None,
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
-
-                if x.is_cuda:
-                    assert compute_stream is not None
-                    for tensor in cache._tensors():
-                        tensor.record_stream(compute_stream)
-
-                if x.is_cuda and next_cache is not None:
-                    assert compute_stream is not None
-                    assert transfer_stream is not None
-                    compute_stream.wait_stream(transfer_stream)
-
-        except BaseException:
-            if transfer_stream is not None:
-                transfer_stream.synchronize()
-            raise
 
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
@@ -514,26 +469,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
-
-    def clear(self) -> None:
-        r"""Clear cached context state created by :meth:`fit`."""
-        self._cache = None
-
-    def __getstate__(self) -> dict[str, object]:
-        for stream in self._transfer_streams.values():
-            stream.synchronize()
-        state = super().__getstate__()
-        state.pop("_transfer_streams", None)
-        return state
-
-    def __setstate__(self, state: dict[str, object]) -> None:
-        super().__setstate__(state)
-        self._transfer_streams = {}
-
-    def __repr__(self) -> str:
-        device = next(self.parameters()).device
-        device_repr = f"device={device}" if device.type != "cpu" else ""
-        return f"{self.__class__.__name__}({device_repr})"
 
     # Abstract Methods ########################################################
 
@@ -588,11 +523,6 @@ class ICLModel(torch.nn.Module, abc.ABC):
             replay), each named by its class value; :class:`ICLModel` relabels
             them per estimator when stacked.
         """
-
-    @classmethod
-    @abc.abstractmethod
-    def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
 
@@ -770,7 +700,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 f"dimensions (got {tuple(x.size()[:-1])} and "
                 f"{tuple(y.size()[:-1])})"
             )
-        feature_stypes = x.active_stypes
+        self._validate_feature_stype(x)
+
         if x_context_only is not None:
             if x_context_only.size()[:-1] != y.size()[:-1]:
                 raise ValueError(
@@ -779,18 +710,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     f"(got {tuple(x_context_only.size()[:-1])} and "
                     f"{tuple(y.size()[:-1])})"
                 )
-            feature_stypes = feature_stypes | x_context_only.active_stypes
-        invalid = feature_stypes - self.supported_feature_stypes - {Stype.id}
-        if len(invalid) > 0:
-            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
-            warn_once(
-                key="model-unsupported-feature-stypes",
-                message=(
-                    f"{self.__class__.__name__!r} received unsupported "
-                    f"feature stypes {stypes}. Columns with unsupported "
-                    f"feature stypes will not be consumed by the model."
-                ),
-            )
+            self._validate_feature_stype(x_context_only)
+
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
             stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
@@ -814,21 +735,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     f"{self.__class__.__name__!r} does not support related "
                     f"tables"
                 )
-            for table_name, table in related_tables.tables.items():
-                invalid = table.active_stypes - self.supported_feature_stypes
-                invalid = invalid - {Stype.id}
-                if len(invalid) > 0:
-                    stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
-                    warn_once(
-                        key="model-unsupported-feature-stypes",
-                        message=(
-                            f"{self.__class__.__name__!r} received "
-                            f"unsupported feature stypes {stypes} in related "
-                            f"table {table_name!r}. Columns with unsupported "
-                            f"feature stypes will not be consumed by the "
-                            f"model."
-                        ),
-                    )
+            for table in related_tables.tables.values():
+                self._validate_feature_stype(table)
 
     def _validate_query(
         self,
@@ -838,7 +746,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context != x_query.schema:
+        if x_context.columns != x_query.columns:
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )
@@ -867,7 +775,7 @@ def _stack(tables: Sequence[TableTensor]) -> TableTensor:
     renamed: list[Tensor] = [
         ref,
         *(
-            table.__class__(columns=columns, **dict(table.items()))
+            table.__class__(columns=columns, **dict(TableTensor.items(table)))
             for table in tables[1:]
         ),
     ]
@@ -934,7 +842,7 @@ def _batch_slices(
                 (
                     tuple(
                         (stype, block.size(), block.dtype)
-                        for stype, block in table.items()
+                        for stype, block in TableTensor.items(table)
                     ),
                     tuple(c.numel() for c in table.categorical.categories),
                 )
@@ -962,7 +870,7 @@ def _categorical_mask(members: Sequence[MemberContext]) -> Tensor:
         [
             [
                 member.input_stypes.get(column) == Stype.categorical
-                for column in member.x.columns[Stype.numerical]
+                for column in member.x.numerical_columns
             ]
             for member in members
         ],
@@ -1010,7 +918,7 @@ def _unstack(
         return outs
     # The model labels columns in the first member's class order; member `e`'s
     # column `j` holds class `class_values[e][j]`.
-    labels = out.columns[Stype.numerical]
+    labels = out.numerical_columns
     index = {value: i for i, value in enumerate(first)}
     stacked = cast(Sequence[tuple[Any, ...]], class_values)
     return [

@@ -15,8 +15,11 @@ license-files = [
     "sdm/models/tabiclv2/LICENSE",
     "sdm/models/tabfm/LICENSE",
     "sdm/models/timesfm3/LICENSE",
+    "sdm/models/timestral/LICENSE",
     "sdm/models/kumo/relational/NOTICE",
+    "sdm/models/kumo/timeseries/anomaly/NOTICE",
     "third_party/contributor-covenant/LICENSE",
+    "third_party/dpm-solver/LICENSE",
     "third_party/pytorch/LICENSE",
     "third_party/tabpfn-extensions/LICENSE",
 ]
@@ -41,6 +44,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
 ]
 dependencies = [
     "torch>=2.7",
@@ -58,14 +62,17 @@ Repository = "https://github.com/NVIDIA/structured-data-models"
 Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 
 [dependency-groups]
-test = [
+test-cpu = [
     "pytest",
     "pytest-cov",
     "pandas",
-    "cudf-cu13>=26.8; sys_platform == 'linux'",
     "pyg-lib; sys_platform == 'linux'",
-    "pylibcugraph-cu13>=26.8; sys_platform == 'linux'",
     "sentence-transformers>=5.4",
+]
+test = [
+    { include-group = "test-cpu" },
+    "cudf-cu13>=26.8; sys_platform == 'linux'",
+    "pylibcugraph-cu13>=26.8; sys_platform == 'linux'",
 ]
 doc = [
     "myst-parser",
@@ -90,23 +97,7 @@ fallback_version = "0.1.0.dev0"
 managed = true
 package = true
 find-links = ["https://data.pyg.org/whl/torch-2.14.0+cpu.html"]
-exclude-newer = "7 days"
-
-[tool.uv.exclude-newer-package]
-cudf-cu13 = false
-libcudf-cu13 = false
-libcugraph-cu13 = false
-libcuvs-cu13 = false
-libkvikio-cu13 = false
-libraft-cu13 = false
-librmm-cu13 = false
-pylibcudf-cu13 = false
-pylibcugraph-cu13 = false
-pylibraft-cu13 = false
-rmm-cu13 = false
-relbench = false
-torch = false
-triton = false
+exclude-newer = "1 day"
 
 [tool.pytest.ini_options]
 addopts = [

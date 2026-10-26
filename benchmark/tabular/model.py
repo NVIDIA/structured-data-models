@@ -34,7 +34,6 @@ from benchmark.tabular.finetune import (
     full_finetune,
     kumo_small_binary_epochs,
 )
-from sdm.processing.execution import RecipeExecution
 
 Task = Literal["classification", "regression"]
 KumoTabularSize = Literal["small", "medium", "large"]
@@ -97,7 +96,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
-        self._set_default_param_value("kv_cache", False)
+        self._set_default_param_value("kv_cache", True)
         self._set_default_param_value("estimator_batch_size", "auto")
         self._set_default_param_value("finetune", False)
         self._set_default_param_value("finetune_epochs", None)
@@ -225,7 +224,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 if isinstance(processor, sp.SelectColumns):
                     processor.max_columns = params["max_columns"]
 
-        self._recipe_execution: RecipeExecution | None = None
+        self._recipe = recipe
+        self._kv_cache = params["kv_cache"]
         if params["kv_cache"]:
             with torch.amp.autocast(
                 self._device.type,
@@ -242,26 +242,9 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 )
             return
 
-        self._recipe_execution = RecipeExecution(recipe)
-        with (
-            torch.inference_mode(),
-            torch.amp.autocast(self._device.type, enabled=False),
-        ):
-            contexts = self._recipe_execution.fit_transform(
-                x=x_context,
-                y=y_context,
-                related_tables=None,
-                num_members=num_estimators,
-                generator=generator,
-            )
-        self._contexts = tuple(
-            context._replace(
-                x=cast(sdm.TableTensor, context.x.cpu()),
-                y=cast(sdm.TableTensor, context.y.cpu()),
-            )
-            for context in contexts
-        )
-        # Replay the same model-side randomness as the cached fit path.
+        self._x_context = x_context.cpu()
+        self._y_context = y_context.cpu()
+        # Replay preprocessing and model randomness for every query batch.
         if generator is not None:
             self._rng_state = generator.get_state()
         elif self._device.type == "cuda":
@@ -286,67 +269,41 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 *x_query.size(),
             )
 
-        if self._recipe_execution is None:
-            with torch.amp.autocast(
+        with (
+            torch.inference_mode(),
+            torch.amp.autocast(
                 self._device.type,
                 self.autocast_dtype,
                 enabled=x_query.is_cuda,
-            ):
+            ),
+        ):
+            if self._kv_cache:
                 out = self.model.predict(x_query)
-        else:
-            with (
-                torch.inference_mode(),
-                torch.amp.autocast(self._device.type, enabled=False),
-            ):
-                queries = self._recipe_execution.transform(
-                    x=x_query,
-                    related_tables=None,
-                )
+            else:
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
                 )
-                outputs: list[sdm.TableTensor] = []
-                size = self._estimator_batch_size(x_query)
-                size = len(self._contexts) if size is None else size
-                for start in range(0, len(self._contexts), size):
-                    batch = [
-                        context._replace(
-                            x=cast(
-                                sdm.TableTensor, context.x.to(self._device)
-                            ),
-                            y=cast(
-                                sdm.TableTensor, context.y.to(self._device)
-                            ),
-                        )
-                        for context in self._contexts[start : start + size]
-                    ]
-                    with torch.amp.autocast(
-                        self._device.type,
-                        self.autocast_dtype,
-                        enabled=x_query.is_cuda,
-                    ):
-                        outputs += self.model._forward_members(
-                            contexts=batch,
-                            queries=queries[start : start + size],
-                            estimator_batch_size=None,
-                            generator=generator,
-                        )
-
-                if self.problem_type == REGRESSION:
-                    outputs = list(
-                        self._recipe_execution.inverse_transform_target(
-                            outputs
-                        )
-                    )
-                out = self._recipe_execution.transform_output(outputs)
+                out = self.model(
+                    x_context=self._x_context.to(self._device),
+                    y_context=self._y_context.to(self._device),
+                    x_query=x_query,
+                    recipe=self._recipe,
+                    num_estimators=(
+                        None if self._expand_query else self._num_estimators
+                    ),
+                    estimator_batch_size=self._estimator_batch_size(x_query),
+                    generator=generator,
+                )
 
         if self.problem_type == REGRESSION:
             return out.numerical.float().mean(dim=-1).cpu().numpy()
 
         assert self.num_classes is not None
-        columns = out.columns[sdm.Stype.numerical]
-        indices = [columns.index(str(i)) for i in range(self.num_classes)]
-        probabilities = out.numerical[..., indices].float().cpu().numpy()
+        columns = out.numerical_columns
+        probabilities = np.zeros((len(X), self.num_classes), dtype=np.float32)
+        probabilities[:, [int(column) for column in columns]] = (
+            out.numerical.float().cpu().numpy()
+        )
         return self._convert_proba_to_unified_form(probabilities)
 
     def _estimator_batch_size(self, x: torch.Tensor) -> int | None:
@@ -376,10 +333,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
     def _set_device(self, device: str) -> None:
         self.model.to(device)
-        if self._recipe_execution is not None:
-            recipe = self._recipe_execution.recipe
-            for processor in (recipe.features, recipe.target, recipe.output):
-                processor.to(device)
         self._device = torch.device(device)
 
     def _more_tags(self) -> dict[str, bool]:
