@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, TableTensor
 
 
 def test_shared_member_table() -> None:
@@ -118,6 +118,38 @@ def test_replace_tables_packs_only_within_existing_groups() -> None:
     assert all(group.size(0) == 2 for group in output._iter_groups())
     for member_id, table in enumerate(tables):
         assert output[member_id].equal(table)
+
+
+@pytest.mark.parametrize("shared_categories", [False, True])
+def test_replace_tables_preserves_category_identity(
+    shared_categories: bool,
+) -> None:
+    categories = torch.tensor([10, 20])
+    second_categories = categories if shared_categories else categories.clone()
+    tables = tuple(
+        TableTensor(
+            categorical=CategoricalTensor(
+                code=code,
+                categories=(vocabulary,),
+            )
+        )
+        for code, vocabulary in (
+            (torch.tensor([[0], [-1]]), categories),
+            (torch.tensor([[1], [0]]), second_categories),
+        )
+    )
+    ensemble_table = EnsembleTable.from_table(tables[0], num_members=3)
+    output = ensemble_table.replace_tables(
+        tables=tables,
+        member_table_ids=(0, 1, 0),
+    )
+
+    assert output.num_groups == (1 if shared_categories else 2)
+    for member_id, table_id in enumerate((0, 1, 0)):
+        actual = output[member_id].categorical
+        expected = tables[table_id].categorical
+        assert actual.categories[0] is expected.categories[0]
+        torch.testing.assert_close(actual.code, expected.code)
 
 
 def test_gather_members_preserves_member_order_and_sharing() -> None:

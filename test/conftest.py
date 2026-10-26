@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
+
 import pandas as pd
 import pytest
 import torch
@@ -11,6 +13,23 @@ from sdm import RelationalData, Stype, TableTensor, infer_stypes
 @pytest.fixture
 def device() -> torch.device:
     return torch.device("cpu")
+
+
+@pytest.fixture
+def compilation() -> Iterator[None]:
+    # PyTorch may support a Python version before its compiler does.
+    # Check the installed build so tests run when compilation is supported.
+    if not torch._dynamo.is_dynamo_supported():
+        pytest.skip(
+            "torch.compile is not supported by this Python/PyTorch build"
+        )
+
+    # Keep per-test specializations from exhausting the recompile limit.
+    torch._dynamo.reset()
+    try:
+        yield
+    finally:
+        torch._dynamo.reset()
 
 
 @pytest.fixture(scope="session", autouse=True)

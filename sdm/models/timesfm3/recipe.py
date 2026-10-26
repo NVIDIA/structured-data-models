@@ -7,7 +7,7 @@ import sdm.processing as sp
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
         features=[
-            sp.Interpolate(),
+            sp.Interpolate(fill_leading=False),
             sp.Detrend(threshold=0.5),
             sp.Clip(-1e20, 1e20),
             # Negate every second estimator for symmetric averaging:
@@ -18,7 +18,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             ),
         ],
         target=[
-            sp.Interpolate(),
+            sp.Interpolate(fill_leading=False),
             sp.Detrend(threshold=0.5),
             sp.Clip(-1e20, 1e20),
             sp.Choice(

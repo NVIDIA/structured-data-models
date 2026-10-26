@@ -46,6 +46,16 @@ reviews:
         dependencies optional). In `__init__.py`, imports and `__all__`
         are intentionally ordered by dependency, not alphabetically — do
         not suggest alphabetical sorting there.
+    - path: 'sdm/_kernels/**'
+      instructions: >-
+        For changes introducing or expanding a custom GPU kernel, check
+        whether the performance evidence includes a practical
+        compiler-generated or existing-library alternative. If absent,
+        request a comparison or a concrete explanation of incompatibility.
+        Check that comparisons preserve workload and numerical requirements
+        and distinguish startup from prediction latency. Treat this as a
+        justification question; do not infer performance from source code
+        alone.
     - path: 'test/**/*.py'
       instructions: >-
         Pytest-based tests. Check that behavior changes in sdm/ have
@@ -65,6 +75,8 @@ reviews:
 
   slop_detection:
     enabled: true
+    include_all_authors: true
+    label: slop
 
   finishing_touches:
     docstrings:

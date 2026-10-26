@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -19,19 +19,13 @@ from sdm.nn import (
 from sdm.testing import withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
-pytestmark = pytest.mark.skipif(
-    os.getenv("FULL_TEST", "0") != "1",
-    reason="Fast test run",
-)
-
-
-@pytest.fixture(autouse=True)
-def _reset_dynamo() -> Iterator[None]:
-    # Isolate compile caches so per-test guard specializations of shared
-    # forward code objects never hit the recompile limit.
-    torch._dynamo.reset()
-    yield
-    torch._dynamo.reset()
+pytestmark = [
+    pytest.mark.skipif(
+        os.getenv("FULL_TEST", "0") != "1",
+        reason="Fast test run",
+    ),
+    pytest.mark.usefixtures("compilation"),
+]
 
 
 def fullgraph(module: torch.nn.Module) -> Callable[..., Tensor]:
@@ -121,9 +115,9 @@ def test_sdpa_compile(
     value = torch.randn(2, 5, kv_heads, channels, device=device)
     attn_mask = seqused = None
     if masking == "attn_mask":
-        attn_mask = torch.ones(2, 3, 5, dtype=torch.bool, device=device)
+        attn_mask = torch.ones(2, 1, 3, 5, dtype=torch.bool, device=device)
         attn_mask[..., 1:] = torch.randint(
-            0, 2, (2, 3, 4), dtype=torch.bool, device=device
+            0, 2, (2, 1, 3, 4), dtype=torch.bool, device=device
         )
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
@@ -264,9 +258,9 @@ def test_transformer_block_compile(
     key_value = torch.randn(2, 5, channels, device=device)
     attn_mask = seqused = None
     if masking == "attn_mask":
-        attn_mask = torch.ones(2, 3, 5, dtype=torch.bool, device=device)
+        attn_mask = torch.ones(2, 1, 3, 5, dtype=torch.bool, device=device)
         attn_mask[..., 1:] = torch.randint(
-            0, 2, (2, 3, 4), dtype=torch.bool, device=device
+            0, 2, (2, 1, 3, 4), dtype=torch.bool, device=device
         )
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)

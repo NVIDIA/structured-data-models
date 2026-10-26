@@ -22,9 +22,9 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Linear, ReLU, RMSNorm, Sequential
+from torch.nn import Linear, ReLU, Sequential
 
-from sdm.nn import RotaryEmbedding, SoftplusScale, TransformerBlock
+from sdm.nn import RMSNorm, RotaryEmbedding, SoftplusScale, TransformerBlock
 
 
 class ResidualBlock(torch.nn.Module):
@@ -99,7 +99,7 @@ class TimesFM3TransformerBlock(TransformerBlock):
     ) -> int:
         r""":meta private:"""  # noqa: D415
         length = max(query_length, key_value_length or 0)
-        factor = 13 if element_size <= 2 else 8
+        factor = 9 if element_size <= 2 else 8
         return factor * length * element_size * self.attn.q_dim
 
 
