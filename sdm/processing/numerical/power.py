@@ -226,8 +226,13 @@ class PowerTransform(Processor, InvertibleMixin):
             features using statistics fitted after the power transform.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
+
+    lambdas: Tensor
+    max: Tensor
+    mean: Tensor
+    scale: Tensor
 
     def __init__(
         self,
@@ -272,16 +277,22 @@ class PowerTransform(Processor, InvertibleMixin):
 
         # ``mean`` never exceeds the column maximum, and is zero for an
         # entirely missing column, whose max must be zero.
-        self.max = torch.where(finite, table.numerical, mean).amax(
-            dim=-2,
-            keepdim=True,
+        self._set_buffer(
+            name="max",
+            value=torch.where(finite, table.numerical, mean).amax(
+                dim=-2,
+                keepdim=True,
+            ),
         )
         del finite
 
-        self.lambdas = self._optimize_lambdas(
-            finite_or_nan,
-            constant_features,
-            count=count,
+        self._set_buffer(
+            name="lambdas",
+            value=self._optimize_lambdas(
+                inp=finite_or_nan,
+                constant_features=constant_features,
+                count=count,
+            ),
         )
 
         if self.standardize:
@@ -292,11 +303,11 @@ class PowerTransform(Processor, InvertibleMixin):
             var /= count
             scale = var.sqrt()
             scale[_constant_feature_mask(var, mean, count)] = 1.0
-            self.mean = mean
-            self.scale = scale
+            self._set_buffer("mean", mean)
+            self._set_buffer("scale", scale)
         else:
-            self.mean = torch.zeros_like(self.lambdas)
-            self.scale = torch.ones_like(self.lambdas)
+            self._set_buffer("mean", torch.zeros_like(self.lambdas))
+            self._set_buffer("scale", torch.ones_like(self.lambdas))
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""

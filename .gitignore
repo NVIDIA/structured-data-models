@@ -221,7 +221,7 @@ scoringbench_out/
 evals/
 datasets.json
 
-# Forecasting benchmarks
+# Time Series benchmarks
 gift_eval_out/
 fev_bench_out/
 time_bench_out/

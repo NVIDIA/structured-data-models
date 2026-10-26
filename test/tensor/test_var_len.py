@@ -8,9 +8,29 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm import VarLenTensor
+from sdm import StringTensor, VarLenTensor
 from sdm.tensor.var_len import _compact
 from sdm.testing import onlyCUDA, withCUDA
+
+
+@pytest.mark.parametrize("tensor_type", [VarLenTensor, StringTensor])
+def test_compiled_var_len_reconstruction(
+    compilation: None,
+    tensor_type: type[VarLenTensor],
+) -> None:
+    def reconstruct(inp: VarLenTensor) -> VarLenTensor:
+        data = inp._data[inp._offset[0] : inp._offset[-1]]
+        return type(inp)(
+            data=data,
+            offset=inp._offset,
+            valid=inp._valid,
+            size=inp.size(),
+        )
+
+    tensor = tensor_type.from_tensor(torch.tensor([97, 98], dtype=torch.uint8))
+    out = torch.compile(reconstruct, backend="eager")(tensor)
+    assert type(out) is tensor_type
+    assert out.tolist() == tensor.tolist()
 
 
 def test_dtype_conversion() -> None:
@@ -419,6 +439,17 @@ def test_data_offset() -> None:
     assert offset.equal(torch.tensor([0, 1, 2]))
 
     tensor = VarLenTensor(
+        data=torch.empty(0),
+        offset=torch.zeros(5, dtype=torch.int64),
+        valid=None,
+        size=(2,),
+        storage_offset=2,
+    )
+    data, offset = tensor.data_offset
+    assert data.numel() == 0
+    assert offset.equal(torch.tensor([0, 0, 0]))
+
+    tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
         valid=None,
@@ -451,6 +482,16 @@ def test_equal_allclose() -> None:
     assert torch.equal(tensor, other[:, ::2])
     assert tensor.allclose(other[:, ::2])
     assert torch.allclose(tensor, other[:, ::2])
+
+
+def test_compiled_equal_independent_views(compilation: None) -> None:
+    values = [[1], [2, 3]]
+    tensor = VarLenTensor.from_list(values)
+    other = VarLenTensor.from_list([[0], *values, [0]])[1:-1]
+    equal = torch.compile(torch.equal, backend="eager", fullgraph=False)
+
+    assert equal(tensor, other)
+    assert not equal(tensor, VarLenTensor.from_list([[99], [2, 3]]))
 
 
 def test_isnan_isfinite() -> None:

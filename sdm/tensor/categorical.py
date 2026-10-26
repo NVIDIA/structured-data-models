@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
@@ -14,7 +14,7 @@ from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import override
 
-from sdm.tensor import StringTensor, VarLenTensor
+from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import (
     arrow_as_tensor,
     combine_arrow_chunks,
@@ -26,6 +26,12 @@ if TYPE_CHECKING:
     import cudf
 
 aten = torch.ops.aten
+
+
+def _iter_categories(tensor: CategoricalTensor) -> Iterator[Tensor]:
+    """Yield category tensors through attributes tracked by torch.compile."""
+    for index in range(tensor.size(-1)):
+        yield getattr(tensor, f"_category_{index}")
 
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:
@@ -115,8 +121,23 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
+        return CategoricalTensor._make_categorical_tensor(
+            code=code,
+            categories=tuple(categories),
+            cls=None if cls is CategoricalTensor else cls,
+        )
+
+    # Avoid Dynamo reading _code before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_categorical_tensor(
+        code: Tensor,
+        categories: tuple[Tensor, ...],
+        cls: type[CategoricalTensor] | None = None,
+    ) -> CategoricalTensor:
+        cls = CategoricalTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls,
+            cls=cls,
             size=code.size(),
             strides=code.stride(),
             storage_offset=code.storage_offset(),
@@ -126,7 +147,9 @@ class CategoricalTensor(Tensor):
         )
 
         out._code = code
-        out._categories = tuple(categories)
+        out._categories = categories
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
 
         return out
 
@@ -306,6 +329,10 @@ class CategoricalTensor(Tensor):
                 for column in tensor.unbind(dim=-1)
             ]
         )
+        # Tell torch.compile that nonempty columns have at least one category.
+        if tensor.numel() > 0:
+            for category in categories:
+                torch._check(category.numel() > 0)
         return cls(
             code=torch.stack(values, dim=-1),
             categories=categories,
@@ -322,6 +349,43 @@ class CategoricalTensor(Tensor):
     def categories(self) -> tuple[Tensor, ...]:
         r"""Return category vector for each categorical column."""
         return self._categories
+
+    # Methods #################################################################
+
+    def decode(self) -> Tensor:
+        r"""Decode this tensor to its category values."""
+        from sdm.tensor import ColumnarTensor  # noqa: PLC0415
+
+        if self.size(-1) == 0:
+            raise ValueError("Decoding requires at least one column")
+
+        tensors = []
+        for tensor in self.split(1, dim=-1):
+            code = tensor.code.squeeze(-1)
+            valid = code >= 0
+            if not valid.all():
+                tensor = tensor.categories[0][code.clamp(min=0)]
+                if isinstance(tensor, VarLenTensor):
+                    data, offset = tensor.contiguous().data_offset
+                    tensor = tensor.__class__(
+                        data=data,
+                        offset=offset,
+                        valid=valid.reshape(-1),
+                        size=tensor.size(),
+                    )
+                elif tensor.is_floating_point():
+                    tensor[~valid] = torch.nan
+                else:
+                    tensor = NullableTensor(tensor, valid)
+            else:
+                tensor = tensor.categories[0][code]
+
+            tensors.append(tensor)
+
+        if len(tensors) == 1:
+            return tensors[0].unsqueeze(-1)
+
+        return ColumnarTensor(tensors)
 
     # Decorators ##############################################################
 
@@ -345,6 +409,29 @@ class CategoricalTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "code",
+            *(f"_category_{i}" for i in range(self.code.size(-1))),
+        ]
+        return attrs, (self.__class__,)
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> CategoricalTensor:
+        (cls,) = ctx
+        code = inner_tensors["code"]
+        return cls(
+            code=code,
+            categories=tuple(
+                inner_tensors[f"_category_{i}"] for i in range(code.size(-1))
+            ),
+        )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
@@ -430,6 +517,16 @@ class CategoricalTensor(Tensor):
             for column in self.split(1, dim=-1)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
+        out += f", num_categories={tuple(c.numel() for c in self.categories)}"
+        out += f", dtype={self.dtype}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
 
 
 @CategoricalTensor.implements(aten.isnan.default)
@@ -685,6 +782,15 @@ def _flatten(
     end_dim: int = -1,
 ) -> Tensor:
     return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
+
+
+@CategoricalTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: CategoricalTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> Tensor:
+    return aten.unflatten.int.decompose(inp, dim, sizes)
 
 
 @CategoricalTensor.implements(aten.squeeze.default)

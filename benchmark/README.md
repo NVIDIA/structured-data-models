@@ -9,7 +9,7 @@ This folder contains benchmark integrations for `structured-data-models`:
   - [**`talent/`**](tabular/talent/): [TALENT](https://github.com/LAMDA-Tabular/TALENT)
 - [**`relational/`**](relational/): Relational benchmarks
   - [**`relarena/`**](relational/relarena): [RelArena](https://github.com/PriorLabs/relarena)
-- [**`forecasting/`**](forecasting/): Time-series forecasting benchmarks
-  - [**`gift_eval/`**](forecasting/): [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval)
-  - [**`fev_bench/`**](forecasting/): [fev-bench](https://github.com/autogluon/fev)
-  - [**`time_bench/`**](forecasting/): [TIME](https://github.com/zqiao11/TIME)
+- [**`timeseries/`**](timeseries/): Time series benchmarks
+  - [**`gift_eval/`**](timeseries/gift_eval/): [GIFT-Eval](https://github.com/SalesforceAIResearch/gift-eval)
+  - [**`fev_bench/`**](timeseries/fev_bench/): [fev-bench](https://github.com/autogluon/fev)
+  - [**`time_bench/`**](timeseries/time_bench/): [TIME](https://github.com/zqiao11/TIME)

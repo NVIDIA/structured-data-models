@@ -34,6 +34,24 @@ Its weights are not bundled with this project and may be downloaded only after t
 The [`sdm/models/timesfm3/`](sdm/models/timesfm3/) implementation contains code derived from [`TimesFM`](https://github.com/google-research/timesfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## Timestral
+
+- Source: https://github.com/mistralai/timestral
+- Code license: Apache License 2.0
+- License terms: [`sdm/models/timestral/LICENSE`](sdm/models/timestral/LICENSE)
+- Optional pretrained weights: https://huggingface.co/collections/mistralai/timestral
+- Weights license: [Modified MIT License](https://huggingface.co/mistralai/Timestral-209M/blob/main/LICENSE)
+
+The [`sdm/models/timestral/`](sdm/models/timestral/) implementation contain code derived from [`Timestral`](https://github.com/mistralai/timestral).
+
+## DPM-Solver
+
+- Source: https://github.com/LuChengTHU/dpm-solver
+- License: MIT
+- License terms: [`third_party/dpm-solver/LICENSE`](third_party/dpm-solver/LICENSE)
+
+The [`sdm/models/kumo/timeseries/anomaly`](sdm/models/kumo/timeseries/anomaly) implementation contains code derived from [DPM-Solver](https://github.com/LuChengTHU/dpm-solver).
+
 ## TabPFN Extensions
 
 - Source: https://github.com/PriorLabs/tabpfn-extensions
