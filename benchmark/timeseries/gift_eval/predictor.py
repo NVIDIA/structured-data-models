@@ -3,6 +3,7 @@
 
 from collections.abc import Iterator
 
+import numpy as np
 import torch
 from gluonts.dataset import Dataset
 from gluonts.itertools import batcher
@@ -41,6 +42,7 @@ class SDMPredictor(Predictor):
             xs = []
             if (
                 self.model.supports_context_only_columns
+                and sdm.Stype.numerical in self.model.supported_feature_stypes
                 and "past_feat_dynamic_real" in batch[0]
             ):
                 xs = [
@@ -67,6 +69,19 @@ class SDMPredictor(Predictor):
             for i, x_i in enumerate(xs):
                 x[i, :, -x_i.size(-1) :] = x_i
 
+            size = y.size(1)
+            if self.config.max_variates is not None:
+                # Keep room for at least one target, matching upstream's
+                # fixed-seed selection of past covariates.
+                count = min(x.size(1), self.config.max_variates - 1)
+                if count < x.size(1):
+                    rng = np.random.default_rng(42)
+                    index = np.sort(
+                        rng.choice(x.size(1), count, replace=False)
+                    )
+                    x = x[:, index]
+                size = min(size, self.config.max_variates - count)
+
             y = y.transpose(-1, -2).to(
                 self.device,
                 memory_format=torch.contiguous_format,
@@ -76,17 +91,33 @@ class SDMPredictor(Predictor):
                 memory_format=torch.contiguous_format,
             )
 
-            out = self.model(
-                x_context=x,
-                y_context=y,
-                x_query=torch.empty(
-                    (x.size(0), self.prediction_length, 0),
-                    device=self.device,
-                ),
-                num_estimators=self.config.num_estimators,
+            x_query = x.new_empty(
+                (x.size(0), self.prediction_length, 0),
             )
-            pred = out.numerical
-            pred = pred.view(y.size(0), self.prediction_length, y.size(2), -1)
+            predictions = []
+            for start in range(0, y.size(-1), size):
+                chunk = y[..., start : start + size]
+                # Upstream fills the last chunk with leading target channels.
+                if chunk.size(-1) < size:
+                    chunk = torch.cat(
+                        [chunk, y[..., : size - chunk.size(-1)]], dim=-1
+                    )
+                out = self.model(
+                    x_context=x,
+                    y_context=chunk,
+                    x_query=x_query,
+                    num_estimators=self.config.num_estimators,
+                )
+                predictions.append(
+                    out.numerical.view(
+                        y.size(0), self.prediction_length, size, -1
+                    )
+                )
+            pred = (
+                predictions[0]
+                if len(predictions) == 1
+                else torch.cat(predictions, dim=-2)[..., : y.size(-1), :]
+            )
             pred = pred.permute(0, 3, 1, 2).cpu().numpy()  # [B, Q, R, C]
             levels = out.numerical_columns[: pred.shape[1]]
             levels = [str(float(f"0.{q.split('q')[-1]}")) for q in levels]

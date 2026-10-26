@@ -98,7 +98,6 @@ Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where
 Since predictions are returned as a {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
 
 In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to them (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
-Similarly, {py:func}`~sdm.evaluation.to_quantiles` converts quantile predictions of one or more targets into a single tensor together with their quantile levels.
 
 ## Ensembling
 

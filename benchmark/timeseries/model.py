@@ -15,6 +15,7 @@ class ModelConfig:
     factory: Callable[[torch.device], sdm.models.ICLModel]
     num_estimators: int = 1
     max_context_size: int | None = None
+    max_variates: int | None = None
 
 
 MODEL_CONFIGS = {
@@ -26,5 +27,6 @@ MODEL_CONFIGS = {
         ),
         num_estimators=2,
         max_context_size=15_360,
+        max_variates=32,
     ),
 }
