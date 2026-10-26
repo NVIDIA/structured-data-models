@@ -12,7 +12,7 @@ from sdm.testing import withCUDA
 
 @withCUDA
 @pytest.mark.parametrize("infer_members", [False, True])
-def test_target_clamper(device: torch.device, infer_members: bool) -> None:
+def test_clip_nonnegative(device: torch.device, infer_members: bool) -> None:
     target = torch.tensor(
         [
             [[torch.nan, -1.0, torch.nan], [0.0, 1.0, torch.nan]],
@@ -29,7 +29,7 @@ def test_target_clamper(device: torch.device, infer_members: bool) -> None:
     execution = RecipeExecution(
         Recipe(
             target=sp.FlipSign(probability=1.0),
-            output=[sp.AverageEstimators(), sp.TargetClamper()],
+            output=[sp.AverageEstimators(), sp.ClipNonnegative()],
         )
     )
     execution.fit_transform(

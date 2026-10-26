@@ -56,7 +56,7 @@ from sdm.processing.output import (
     AverageEstimators,
     Softmax,
     SortQuantiles,
-    TargetClamper,
+    ClipNonnegative,
 )
 from sdm.processing.recipe import Recipe
 
@@ -107,6 +107,6 @@ __all__ = [
     "AverageEstimators",
     "Softmax",
     "SortQuantiles",
-    "TargetClamper",
+    "ClipNonnegative",
     "Recipe",
 ]

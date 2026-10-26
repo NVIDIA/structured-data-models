@@ -7,8 +7,8 @@ from sdm import EnsembleTable, Stype
 from sdm.processing import TargetAwareEnsembleProcessor
 
 
-class TargetClamper(TargetAwareEnsembleProcessor):
-    r"""Clamp predictions to zero for targets with nonnegative observations.
+class ClipNonnegative(TargetAwareEnsembleProcessor):
+    r"""Clip predictions at zero for targets with nonnegative observations.
 
     NaNs are ignored; targets without observations are left unchanged.
     Apply after estimator reduction. When estimators have different contexts,
@@ -25,8 +25,8 @@ class TargetClamper(TargetAwareEnsembleProcessor):
     ) -> EnsembleTable:
         if self._target is None:
             raise RuntimeError(
-                "'TargetClamper' has no context targets; use it in a 'Recipe' "
-                "through model execution"
+                "'ClipNonnegative' has no context targets; use it in a "
+                "'Recipe' through model execution"
             )
 
         nonnegative = []
