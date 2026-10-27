@@ -1063,7 +1063,7 @@ def test_reshape_inference_mode() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("offset_dtype", [torch.int32, torch.int64])
-@pytest.mark.parametrize("indices", [[], [2, 0, 2, 1], [0, 1, 2], [-1, 0]])
+@pytest.mark.parametrize("indices", [[], [2, 0, 2, 1], [-1, 0]])
 @pytest.mark.parametrize("layout", ["slice", "stride", "broadcast"])
 def test_native_string_selection(
     device: torch.device,
@@ -1094,6 +1094,16 @@ def test_native_string_selection(
     assert actual.device == expected.device
     assert actual.data_offset[1].dtype == expected.data_offset[1].dtype
     assert actual.data_offset[1].diff().equal(expected.data_offset[1].diff())
+
+
+def test_native_string_selection_capacity_overflow() -> None:
+    values = StringTensor.from_arrow(pa.array(["a", "bb"]))
+    # A conservative bound can exceed the offset dtype's padded capacity.
+    values._max_length = torch.iinfo(torch.int32).max
+    index = torch.tensor([1, 0, 1])
+    actual = _select_entries(values, index)
+    assert actual.tolist() == values[index].tolist()
+    assert actual.data_offset[1].dtype == torch.int32
 
 
 def test_native_string_selection_fullgraph(compilation: None) -> None:

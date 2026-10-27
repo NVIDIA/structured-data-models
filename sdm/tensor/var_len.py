@@ -1620,10 +1620,9 @@ def _select_entries(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
         used = byte < (end - start)[:, None]
         source = (start[:, None] + byte).clamp_max(inp._data.numel() - 1)
         target = torch.where(used, offset[:-1, None] + byte, capacity)
-        values = inp._data[source].where(used, 0)
         # Padding writes only to the extra byte, outside the logical payload.
         data = inp._data.new_zeros(capacity + 1).scatter_(
-            0, target.flatten().long(), values.flatten()
+            0, target.flatten().long(), inp._data[source].flatten()
         )[:-1]
     else:
         byte = torch.arange(capacity, device=inp.device, dtype=offset.dtype)
