@@ -775,7 +775,11 @@ def _stack(tables: Sequence[TableTensor]) -> TableTensor:
     renamed: list[Tensor] = [
         ref,
         *(
-            table.__class__(columns=columns, **dict(TableTensor.items(table)))
+            table.__class__(
+                columns=columns,
+                datetime_units=table.datetime_units,
+                **dict(TableTensor.items(table)),
+            )
             for table in tables[1:]
         ),
     ]

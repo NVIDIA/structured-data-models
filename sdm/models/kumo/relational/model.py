@@ -30,6 +30,7 @@ from sdm.models.kumo.relational.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe, Standardize
+from sdm.tensor.datetime import DatetimeUnit, relative_days
 
 
 class KumoRelational(ICLModel):
@@ -399,6 +400,10 @@ class _KumoRelational(torch.nn.Module):
                 rel_time_i = self._get_rel_time(  # Inject relative time:
                     datetime=context.related_tables.tables[name].datetime,
                     seed_datetime=x_context.datetime,
+                    datetime_units=context.related_tables.tables[
+                        name
+                    ].datetime_units,
+                    seed_datetime_units=x_context.datetime_units,
                     task_row=context_task_row_i,
                     standardizer=standardizer,
                 )
@@ -420,6 +425,10 @@ class _KumoRelational(torch.nn.Module):
                 rel_time_i = self._get_rel_time(  # Inject relative time:
                     datetime=query.related_tables.tables[name].datetime,
                     seed_datetime=x_query.datetime,
+                    datetime_units=query.related_tables.tables[
+                        name
+                    ].datetime_units,
+                    seed_datetime_units=x_query.datetime_units,
                     task_row=query_task_row_i,
                     standardizer=cast(
                         Standardize, cache[f"table_{name}.standardizer"]
@@ -571,6 +580,8 @@ class _KumoRelational(torch.nn.Module):
         seed_datetime: Tensor,
         task_row: Tensor,
         standardizer: Standardize,
+        datetime_units: Sequence[DatetimeUnit],
+        seed_datetime_units: Sequence[DatetimeUnit],
     ) -> Tensor | None:
 
         if datetime.size(-1) == 0 or seed_datetime.size(-1) == 0:
@@ -582,8 +593,10 @@ class _KumoRelational(torch.nn.Module):
         na_mask = na_mask.unsqueeze(-2) | (datetime == NaT).unsqueeze(-1)
         na_mask = na_mask.flatten(-2)
 
-        rel_time = seed_datetime.unsqueeze(-2) - datetime.unsqueeze(-1)
-        rel_time = rel_time.flatten(-2) / (24 * 60 * 60 * 1_000_000)
+        rel_time = relative_days(
+            datetime, datetime_units, seed_datetime, seed_datetime_units
+        )
+        rel_time = rel_time.flatten(-2)
         rel_time = rel_time.sign() * rel_time.abs().log1p()
 
         if not standardizer.is_fitted:

@@ -9,6 +9,7 @@ from torch import Tensor
 
 from sdm import TableTensor
 from sdm.relational import RelationalData, TaskLink
+from sdm.relational.backend._time import TemporalClock
 from sdm.relational.join import join_index
 
 
@@ -53,10 +54,15 @@ class PyGLibRelationalSampler:
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
         self._colptr_dict: dict[tuple[str, str, str], Tensor] = {}
-        self._time_dict: dict[str, Tensor] = {}
+        times = {}
         for table_name, time_column in self.time_columns.items():
-            time = self.data.tables[table_name][time_column].datetime
-            self._time_dict[table_name] = time.squeeze(-1).contiguous()
+            table = self.data.tables[table_name][time_column]
+            times[table_name] = (
+                table.datetime.squeeze(-1).contiguous(),
+                table.datetime_units[0],
+            )
+        self._clock = TemporalClock(times)
+        self._time_dict = self._clock.times
 
         for i, (rel, edge_index) in enumerate(
             zip(self.data.relationships, self.data.edge_indices())
@@ -112,7 +118,10 @@ class PyGLibRelationalSampler:
             )
 
         if task_time_column is not None:
-            seed_time = task_table[task_time_column].datetime.squeeze(-1)
+            table = task_table[task_time_column]
+            seed_time = self._clock.query_time(
+                table.datetime.squeeze(-1), table.datetime_units[0]
+            )
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)

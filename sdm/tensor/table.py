@@ -20,6 +20,7 @@ from typing_extensions import override
 
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm.tensor.datetime import DatetimeUnit, convert_datetime, datetime_parts
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _resolve_device
 
@@ -197,10 +198,19 @@ class TableTensor(Tensor):
         columns: Column names grouped by semantic type.
         numerical: The numerical column block of shape ``[..., C_num]``.
         categorical: The categorical column block of shape ``[..., C_cat]``.
-        datetime: The ``datetime64[us]`` column block of shape ``[..., C_dt]``.
+        datetime: Integer timestamps of shape ``[..., C_dt]``. Units are given
+            by ``datetime_units``; existing raw inputs default to microseconds.
         text: The text column block of shape ``[..., C_text]``.
         id: The identifier column block of shape ``[..., C_id]``.
         device: The device.
+        datetime_units: Units of each datetime column, defaulting to ``"us"``.
+            Arrow/pandas ingress retains nanoseconds when conversion to
+            microseconds would lose precision. Combining rows with different
+            units promotes the affected columns to nanoseconds, requiring
+            values to fit the int64 nanosecond timestamp range. In-place
+            assignment requires matching units to preserve views. Convert mixed
+            units eagerly before compiled execution; cross-unit range
+            validation synchronizes CUDA, while unchanged units do not.
     """
 
     HANDLED_FUNCTIONS: ClassVar[
@@ -210,6 +220,7 @@ class TableTensor(Tensor):
     _numerical: Tensor
     _categorical: CategoricalTensor
     _datetime: Tensor
+    _datetime_units: tuple[DatetimeUnit, ...]
     _text: StringTensor
     _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
@@ -230,6 +241,7 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        datetime_units: Sequence[DatetimeUnit] | None = None,
     ) -> None:
         pass
 
@@ -243,6 +255,7 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        datetime_units: Sequence[DatetimeUnit] | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
         if size is not None and len(size) == 0:
@@ -310,6 +323,14 @@ class TableTensor(Tensor):
         if id is None:
             id = ColumnarTensor((), size=size, device=device)
 
+        datetime_units = (
+            ("us",) * datetime.size(-1)
+            if datetime_units is None
+            else tuple(datetime_units)
+        )
+        if len(datetime_units) != datetime.size(-1):
+            raise ValueError("Expected one datetime unit per datetime column")
+
         columns = {
             Stype(stype): tuple(names)
             for stype, names in (columns or {}).items()
@@ -344,6 +365,7 @@ class TableTensor(Tensor):
             numerical=numerical,
             categorical=categorical,
             datetime=datetime,
+            datetime_units=datetime_units,
             text=text,
             id=id,
             cls=None if cls is TableTensor else cls,
@@ -357,6 +379,7 @@ class TableTensor(Tensor):
         numerical: Tensor,
         categorical: CategoricalTensor,
         datetime: Tensor,
+        datetime_units: tuple[DatetimeUnit, ...],
         text: StringTensor,
         id: ColumnarTensor,
         cls: type[TableTensor] | None = None,
@@ -380,6 +403,7 @@ class TableTensor(Tensor):
         out._numerical = numerical
         out._categorical = categorical
         out._datetime = datetime
+        out._datetime_units = datetime_units
         out._text = text
         out._id = id
         out._columns = stype_columns
@@ -420,6 +444,7 @@ class TableTensor(Tensor):
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
 
+        datetime_units: list[DatetimeUnit] = []
         blocks: dict[Stype, Tensor] = {}
         for stype in columns:
             tensors: list[Tensor] = []
@@ -433,7 +458,19 @@ class TableTensor(Tensor):
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
-                    array = array.cast(pa.timestamp("us"))
+                    try:
+                        converted = array.cast(pa.timestamp("us"))
+                    except pa.ArrowInvalid:
+                        if (
+                            not pa.types.is_timestamp(array.type)
+                            or array.type.unit != "ns"
+                        ):
+                            raise
+                        converted = array.cast(pa.timestamp("ns"))
+                        datetime_units.append("ns")
+                    else:
+                        datetime_units.append("us")
+                    array = converted
                     values = array.to_numpy(zero_copy_only=False)
                     values = values.astype("int64")
                     tensor = torch.from_numpy(values).unsqueeze(-1)
@@ -449,6 +486,7 @@ class TableTensor(Tensor):
 
         return cls(
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            datetime_units=datetime_units,
             **blocks,
         )
 
@@ -473,8 +511,10 @@ class TableTensor(Tensor):
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous().cpu()
                 array = tensor.numpy().reshape(tensor.size(0), -1)
-                array = array.view("datetime64[us]")
-                arrays.extend(pa.array(a) for a in array)
+                arrays.extend(
+                    pa.array(a.view(f"datetime64[{unit}]"))
+                    for a, unit in zip(array, self.datetime_units)
+                )
             else:
                 tensor = tensor.detach().movedim(-1, 0).contiguous().cpu()
                 arrays.extend(to_arrow(t) for t in tensor)
@@ -767,6 +807,7 @@ class TableTensor(Tensor):
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
 
+        datetime_units: list[DatetimeUnit] = []
         blocks: dict[Stype, Tensor] = {}
         for stype in columns:
             tensors: list[Tensor] = []
@@ -781,7 +822,14 @@ class TableTensor(Tensor):
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_cudf(ser, device=device)
                 elif stype == Stype.datetime:
-                    ser = ser.astype("datetime64[us]", copy=False)
+                    unit: DatetimeUnit = "us"
+                    if (
+                        ser.dtype == np.dtype("datetime64[ns]")
+                        and (ser.astype("int64").fillna(0) % 1_000 != 0).any()
+                    ):
+                        unit = "ns"
+                    datetime_units.append(unit)
+                    ser = ser.astype(f"datetime64[{unit}]", copy=False)
                     ser = ser.astype("int64", copy=False)
                     if ser.null_count > 0:
                         ser = ser.fillna(NaT)
@@ -800,6 +848,7 @@ class TableTensor(Tensor):
 
         return cls(
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            datetime_units=datetime_units,
             **blocks,
         )
 
@@ -828,12 +877,13 @@ class TableTensor(Tensor):
                 df = cudf.DataFrame(
                     {
                         name: to_cudf(column, mask).astype(
-                            "datetime64[us]", copy=False
+                            f"datetime64[{unit}]", copy=False
                         )
-                        for name, column, mask in zip(
+                        for name, column, mask, unit in zip(
                             self._columns[stype],
                             tensor,
                             tensor != NaT,
+                            self.datetime_units,
                         )
                     }
                 )
@@ -979,6 +1029,48 @@ class TableTensor(Tensor):
         """
         return self.schema == other.schema
 
+    @property
+    def datetime_units(self) -> tuple[DatetimeUnit, ...]:
+        """Units of the integer timestamps, in datetime-column order."""
+        return getattr(
+            self, "_datetime_units", ("us",) * self.datetime.size(-1)
+        )
+
+    def _new_with_blocks(
+        self,
+        *,
+        columns: Mapping[StypeLike, Sequence[str]] | None = None,
+        datetime_units: Sequence[DatetimeUnit] | None = None,
+        size: Sequence[int] | None = None,
+        device: torch.device | str | None = None,
+        **blocks: Any,
+    ) -> Self:
+        columns = (
+            cast(Mapping[StypeLike, Sequence[str]], self._columns)
+            if columns is None
+            else columns
+        )
+        if datetime_units is None:
+            names = next(
+                (
+                    names
+                    for stype, names in columns.items()
+                    if Stype(stype) == Stype.datetime
+                ),
+                (),
+            )
+            datetime_units = tuple(
+                self.datetime_units[self._column_to_loc[name][1]]
+                for name in names
+            )
+        return self.__class__(
+            columns=columns,
+            datetime_units=datetime_units,
+            size=size,
+            device=device,
+            **blocks,
+        )
+
     def replace_blocks(
         self,
         *,
@@ -1004,7 +1096,7 @@ class TableTensor(Tensor):
             text: Replacement text block with shape ``[..., C_text]``.
             id: Replacement identifier block with shape ``[..., C_id]``.
         """
-        return self.__class__(
+        return self._new_with_blocks(
             columns=cast(Mapping[StypeLike, Sequence[str]], self._columns),
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
@@ -1028,7 +1120,7 @@ class TableTensor(Tensor):
             stypes = (stypes,)
         stypes = tuple(Stype(stype) for stype in stypes)
 
-        return self.__class__(
+        return self._new_with_blocks(
             size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in stypes},
             device=self.device,
@@ -1056,7 +1148,7 @@ class TableTensor(Tensor):
         stypes = {Stype(stype) for stype in stypes}
 
         keep = tuple(stype for stype in self._columns if stype not in stypes)
-        return self.__class__(
+        return self._new_with_blocks(
             size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in keep},
             device=self.device,
@@ -1104,7 +1196,7 @@ class TableTensor(Tensor):
                     dim=-1,
                 )
 
-        return self.__class__(columns=columns_dict, **blocks)
+        return self._new_with_blocks(columns=columns_dict, **blocks)
 
     def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.
@@ -1157,7 +1249,7 @@ class TableTensor(Tensor):
         columns = tuple(
             (str(stype), names) for stype, names in self._columns.items()
         )
-        ctx = (self.__class__, columns)
+        ctx = (self.__class__, columns, self.datetime_units)
         return attrs, ctx
 
     @staticmethod
@@ -1167,13 +1259,15 @@ class TableTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> TableTensor:
-        cls, columns = ctx
+        cls, columns, *precision = ctx
+        datetime_units = precision[0] if precision else None
         return cls(
             size=outer_size[:-1],
             columns=dict(columns),
             numerical=inner_tensors["numerical"],
             categorical=inner_tensors["categorical"],
             datetime=inner_tensors["datetime"],
+            datetime_units=datetime_units,
             text=inner_tensors["text"],
             id=inner_tensors["id"],
         )
@@ -1187,6 +1281,8 @@ class TableTensor(Tensor):
             self._datetime,
             self._text,
             self._id,
+            None,
+            self.datetime_units,
         )
         return (self.__class__, args)
 
@@ -1198,6 +1294,16 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        if func in (aten.copy_.default, aten.index_put_.default):
+            tables = [arg for arg in args if isinstance(arg, TableTensor)]
+            if len(tables) > 1 and any(
+                table.datetime_units != tables[0].datetime_units
+                for table in tables[1:]
+            ):
+                raise ValueError(
+                    "In-place table assignment requires matching "
+                    "datetime units"
+                )
         if func in cls.HANDLED_FUNCTIONS:
             return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
@@ -1332,7 +1438,7 @@ def _alias(inp: TableTensor) -> TableTensor:
     blocks = {
         stype: aten.alias.default(tensor) for stype, tensor in inp.items()
     }
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1393,7 +1499,7 @@ def _to_dtype_layout(
         )
         for stype, tensor in inp.items()
     }
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1496,7 +1602,7 @@ def _contiguous(
         stype: tensor.contiguous(memory_format=memory_format)
         for stype, tensor in inp.items()
     }
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1515,7 +1621,7 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
         stype: tensor.pin_memory() if tensor.numel() > 0 else tensor
         for stype, tensor in inp.items()
     }
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1540,8 +1646,12 @@ def _equal(inp: TableTensor, other: Tensor) -> bool:
     if inp.stypes != other.stypes:
         return False
 
-    for stype, block in _align_like(inp, other).items():
-        if not block.equal(other.blocks[stype]):
+    aligned = _align_like(inp, other)
+    for stype, block in aligned.items():
+        if stype == Stype.datetime:
+            if not _datetime_equal(aligned, other):
+                return False
+        elif not block.equal(other.blocks[stype]):
             return False
 
     return True
@@ -1562,8 +1672,12 @@ def _allclose(
     if inp.stypes != other.stypes:
         return False
 
-    for stype, block in _align_like(inp, other).items():
-        if stype != Stype.numerical:  # Tolerance only applies for numerical:
+    aligned = _align_like(inp, other)
+    for stype, block in aligned.items():
+        if stype == Stype.datetime:
+            if not _datetime_equal(aligned, other):
+                return False
+        elif stype != Stype.numerical:  # Tolerance only applies for numerical:
             if not block.equal(other.blocks[stype]):
                 return False
         elif not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
@@ -1612,7 +1726,7 @@ def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
         stype: tensor.view((*size[:-1], tensor.size(-1)))
         for stype, tensor in inp.items()
     }
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1679,7 +1793,7 @@ def _squeeze_dims(inp: TableTensor, dim: Sequence[int]) -> TableTensor:
             f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1696,7 +1810,7 @@ def _unsqueeze(inp: TableTensor, dim: int) -> TableTensor:
             f"{inp.__class__.__name__!r}"
         )
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1726,7 +1840,7 @@ def _expand(
         )
         for stype, tensor in inp.items()
     }
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1747,7 +1861,7 @@ def _transpose(inp: TableTensor, dim0: int, dim1: int) -> TableTensor:
             f"{inp.__class__.__name__!r}"
         )
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1765,7 +1879,7 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
             f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1807,7 +1921,7 @@ def _select(inp: TableTensor, dim: int, index: int) -> TableTensor:
         stype: tensor.select(dim, index) for stype, tensor in inp.items()
     }
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1844,7 +1958,7 @@ def _slice(
         for stype, tensor in inp.items()
     }
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1872,7 +1986,7 @@ def _narrow(
         for stype, tensor in inp.items()
     }
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -1890,7 +2004,7 @@ def _unbind(inp: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
 
     stypes = tuple(tensors_dict.keys())
     return tuple(
-        inp.__class__(
+        inp._new_with_blocks(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
             **dict(zip(stypes, blocks)),
         )
@@ -1912,7 +2026,7 @@ def _split(
                 f"{inp.__class__.__name__!r} with split size 1"
             )
         return tuple(
-            inp.__class__(
+            inp._new_with_blocks(
                 columns={stype: (name,)},
                 **{stype: tensor.narrow(-1, i, 1)},
             )
@@ -1926,7 +2040,7 @@ def _split(
 
     stypes = tuple(tensors_dict.keys())
     return tuple(
-        inp.__class__(
+        inp._new_with_blocks(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
             **dict(zip(stypes, blocks)),
         )
@@ -1955,7 +2069,7 @@ def _split_with_sizes(
 
     stypes = tuple(blocks_dict.keys())
     return tuple(
-        inp.__class__(
+        inp._new_with_blocks(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
             **dict(zip(stypes, blocks)),
         )
@@ -1978,7 +2092,7 @@ def _index_select(
         stype: tensor.index_select(dim, index) for stype, tensor in inp.items()
     }
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -2010,7 +2124,7 @@ def _index(
         for stype, tensor in inp.items()
     }
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
@@ -2042,9 +2156,19 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
                     f"{tuple(tensor.size())})"
                 )
 
+    datetime_units = (
+        tuple(chain.from_iterable(t.datetime_units for t in tensors))
+        if is_column_dim
+        else _common_datetime_units(tensors)
+    )
     blocks: dict[Stype, Tensor] = {}
     for stype, _ in TableTensor.items(ref):
         block_list = [getattr(tensor, stype.value) for tensor in tensors]
+        if stype == Stype.datetime and not is_column_dim:
+            block_list = [
+                _datetime_in_units(tensor, datetime_units)
+                for tensor in tensors
+            ]
         if is_column_dim:
             # Skip empty blocks so their dtypes cannot promote the others,
             # but keep one so that an all-empty block retains its dtype.
@@ -2066,8 +2190,9 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             for stype, _ in TableTensor.items(ref)
         }
 
-    return ref.__class__(
+    return ref._new_with_blocks(
         columns=cast("dict[StypeLike, tuple[str, ...]]", columns),
+        datetime_units=datetime_units,
         **blocks,
     )
 
@@ -2095,18 +2220,67 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     ref = tensors[0]
     tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
 
+    datetime_units = _common_datetime_units(tensors)
     blocks = {
         stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
         for stype in ref._columns
+        if stype != Stype.datetime
     }
+    blocks[Stype.datetime] = torch.stack(
+        [_datetime_in_units(tensor, datetime_units) for tensor in tensors], dim
+    )
 
-    return ref.__class__(
+    return ref._new_with_blocks(
         columns=cast(dict[StypeLike, tuple[str, ...]], ref._columns),
+        datetime_units=datetime_units,
         **blocks,
     )
 
 
 # Helpers #####################################################################
+
+
+def _common_datetime_units(
+    tables: Sequence[TableTensor],
+) -> tuple[DatetimeUnit, ...]:
+    return tuple(
+        "ns"
+        if any(table.datetime_units[i] == "ns" for table in tables)
+        else "us"
+        for i in range(len(tables[0].datetime_units))
+    )
+
+
+def _datetime_in_units(
+    table: TableTensor, units: Sequence[DatetimeUnit]
+) -> Tensor:
+    if tuple(units) == table.datetime_units:
+        return table.datetime
+    return torch.cat(
+        [
+            convert_datetime(column, source, target)
+            for column, source, target in zip(
+                table.datetime.split(1, dim=-1), table.datetime_units, units
+            )
+        ],
+        dim=-1,
+    )
+
+
+def _datetime_equal(left: TableTensor, right: TableTensor) -> bool:
+    if left.datetime_units == right.datetime_units:
+        return left.datetime.equal(right.datetime)
+    for a, b, a_unit, b_unit in zip(
+        left.datetime.unbind(-1),
+        right.datetime.unbind(-1),
+        left.datetime_units,
+        right.datetime_units,
+    ):
+        a_parts = datetime_parts(a, a_unit)
+        b_parts = datetime_parts(b, b_unit)
+        if not all(a.equal(b) for a, b in zip(a_parts, b_parts)):
+            return False
+    return True
 
 
 def _block_size_repr(size: Sequence[int]) -> str:
@@ -2152,7 +2326,7 @@ def _align_like(inp: TableTensor, ref: TableTensor) -> TableTensor:
         else:
             blocks[stype] = inp.blocks[stype]
 
-    return inp.__class__(
+    return inp._new_with_blocks(
         columns=cast(Mapping[StypeLike, Sequence[str]], ref._columns),
         **blocks,
     )
