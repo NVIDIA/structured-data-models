@@ -1597,38 +1597,36 @@ def _materialize(
     )
 
 
-def _select_entries(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
-    """Compact selected entries into bounded backing storage.
+def _permute_entries(inp: VarLenTensor, perm: Tensor) -> VarLenTensor:
+    """Reorder one-dimensional entries by a permutation.
 
-    The input and index are one-dimensional. Padding after the final offset
-    keeps the output capacity static without truncating selected values.
+    A permutation of a view with nonzero stride selects at most the bytes of
+    its backing storage, so the output keeps that static capacity regardless
+    of individual entry lengths. Bytes after the final offset are zero.
     """
-    index = index.where(index >= 0, index + inp.numel())
-    positions = index * inp.stride(0) + inp._logical_storage_offset
-    start = inp._offset[positions]
-    end = inp._offset[positions + 1]
-    max_length = inp._max_length
-    if max_length is None:
-        max_length = inp._data.numel()
-    capacity = index.numel() * max_length
-    if capacity > torch.iinfo(inp._offset.dtype).max:
-        return cast(VarLenTensor, inp[index])
-    offset = torch.cat((start.new_zeros(1), (end - start).cumsum(0)))
-    offset = offset.to(inp._offset.dtype)
-    if index.numel() == 0 or inp._data.numel() == 0:
-        data = inp._data.new_empty(0)
-    else:
-        byte = torch.arange(capacity, device=inp.device, dtype=offset.dtype)
-        owner = torch.searchsorted(offset[1:], byte, right=True)
-        owner = owner.clamp_max(index.numel() - 1)
-        source = start[owner] + byte - offset[owner]
-        used = byte < offset[-1]
-        source = source.where(used, 0)
-        data = inp._data[source].where(used, 0)
+    if inp.stride(0) == 0:
+        return cast(VarLenTensor, inp[perm])
+
+    rows = perm * inp.stride(0) + inp._logical_storage_offset
+    start = inp._offset[rows].long()
+    length = inp._offset[rows + 1].long() - start
+    offset = torch.cat((length.new_zeros(1), length.cumsum(0)))
+
+    # Map each output byte to its entry; a trailing segment pads to capacity.
+    capacity = inp._data.numel()
+    repeats = torch.cat((length, (capacity - offset[-1]).reshape(1)))
+    owner = torch.arange(perm.numel() + 1, device=perm.device)
+    owner = owner.repeat_interleave(repeats, output_size=capacity)
+    byte = torch.arange(capacity, device=perm.device)
+    source = (
+        torch.cat((start, start.new_zeros(1)))[owner] + byte - offset[owner]
+    )
+    data = inp._data[source].masked_fill(byte >= offset[-1], 0)
+
     return inp.__class__(
         data=data,
-        offset=offset,
-        valid=inp._valid[positions] if inp._valid is not None else None,
-        size=index.shape,
+        offset=offset.to(inp._offset.dtype),
+        valid=inp._valid[rows] if inp._valid is not None else None,
+        size=perm.shape,
         max_length=inp._max_length,
     )

@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 
 from sdm import StringTensor, VarLenTensor
-from sdm.tensor.var_len import _compact, _select_entries
+from sdm.tensor.var_len import _compact, _permute_entries
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -1063,12 +1063,12 @@ def test_reshape_inference_mode() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("offset_dtype", [torch.int32, torch.int64])
-@pytest.mark.parametrize("indices", [[], [2, 0, 2, 1], [-1, 0]])
+@pytest.mark.parametrize("perm", [[2, 0, 1], [0, 1, 2]])
 @pytest.mark.parametrize("layout", ["slice", "stride", "broadcast"])
-def test_native_string_selection(
+def test_permute_entries(
     device: torch.device,
     offset_dtype: torch.dtype,
-    indices: list[int],
+    perm: list[int],
     layout: str,
 ) -> None:
     values = StringTensor.from_arrow(
@@ -1087,73 +1087,81 @@ def test_native_string_selection(
         values = cast(StringTensor, values[::2])
     else:
         values = cast(StringTensor, values[1:2].expand(3))
-    index = torch.tensor(indices, device=device, dtype=torch.int64)
+    index = torch.tensor(perm, device=device)
     expected = cast(StringTensor, values[index])
-    actual = _select_entries(values, index)
+    actual = _permute_entries(values, index)
     assert actual.tolist() == expected.tolist()
     assert actual.device == expected.device
     assert actual.data_offset[1].dtype == expected.data_offset[1].dtype
     assert actual.data_offset[1].diff().equal(expected.data_offset[1].diff())
 
 
-def test_native_string_selection_capacity_overflow() -> None:
-    values = StringTensor.from_arrow(pa.array(["a", "bb"]))
-    # A conservative bound can exceed the offset dtype's padded capacity.
-    values._max_length = torch.iinfo(torch.int32).max
-    index = torch.tensor([1, 0, 1])
-    actual = _select_entries(values, index)
-    assert actual.tolist() == values[index].tolist()
-    assert actual.data_offset[1].dtype == torch.int32
+def test_permute_entries_skewed_lengths() -> None:
+    # Capacity follows the stored bytes, not count times the longest entry.
+    values = StringTensor.from_list(["a"] * 1000 + ["b" * 100_000])
+    perm = torch.arange(values.numel()).flip(0)
+    actual = _permute_entries(values, perm)
+    assert actual.tolist() == values[perm].tolist()
+    assert actual._data.numel() == values._data.numel()
 
 
-def test_native_string_selection_fullgraph(compilation: None) -> None:
+def test_permute_entries_bool_payload() -> None:
+    values = VarLenTensor(
+        data=torch.tensor([True, False, True, True]),
+        offset=torch.tensor([0, 1, 4]),
+        valid=None,
+        size=(2,),
+    )
+    actual = _permute_entries(values, torch.tensor([1, 0]))
+    assert actual.dtype == torch.bool
+    assert actual.tolist() == [[False, True, True], [True]]
+
+
+def test_permute_entries_fullgraph(compilation: None) -> None:
     values = StringTensor.from_arrow(pa.array(["é🙂", None, "", "long尾"]))
-    index = torch.tensor([3, 0, 3, 1, 2])
-    compiled = torch.compile(_select_entries, fullgraph=True)
-    actual = compiled(values, index)
-    assert actual.tolist() == values[index].tolist()
+    perm = torch.tensor([3, 0, 2, 1])
+    compiled = torch.compile(_permute_entries, fullgraph=True)
+    assert compiled(values, perm).tolist() == values[perm].tolist()
 
 
-def test_native_string_selection_meta() -> None:
+def test_permute_entries_meta() -> None:
     values = StringTensor(
         data=torch.empty(12, dtype=torch.uint8, device="meta"),
         offset=torch.empty(4, dtype=torch.int32, device="meta"),
         valid=torch.empty(3, dtype=torch.bool, device="meta"),
         size=(3,),
     )
-    index = torch.empty(4, dtype=torch.int64, device="meta")
-    actual = _select_entries(values, index)
-    assert actual.shape == index.shape
+    perm = torch.empty(3, dtype=torch.int64, device="meta")
+    actual = _permute_entries(values, perm)
+    assert actual.shape == perm.shape
     assert actual.dtype == torch.uint8
-    assert actual.device == index.device
-    assert actual._offset.shape == (index.numel() + 1,)
+    assert actual._offset.shape == (perm.numel() + 1,)
     assert actual._offset.dtype == torch.int32
-    assert actual._data.numel() == index.numel() * 12
-    assert actual._max_length is None
+    assert actual._data.numel() == values._data.numel()
     assert actual.valid is not None
-    assert actual.valid.shape == index.shape
+    assert actual.valid.shape == perm.shape
 
 
 @pytest.mark.parametrize("empty", [False, True])
-def test_native_string_selection_empty_payload(empty: bool) -> None:
+def test_permute_entries_empty_payload(empty: bool) -> None:
     values = StringTensor.from_arrow(
         pa.array([], type=pa.string()) if empty else pa.array(["", None, ""])
     )
-    index = torch.tensor([] if empty else [2, 0, 1, 2], dtype=torch.int64)
-    actual = _select_entries(values, index)
-    assert actual.tolist() == values[index].tolist()
+    perm = torch.tensor([] if empty else [2, 0, 1], dtype=torch.int64)
+    actual = _permute_entries(values, perm)
+    assert actual.tolist() == values[perm].tolist()
     assert actual._max_length == 0
 
 
-def test_native_string_selection_null_payload() -> None:
+def test_permute_entries_null_payload() -> None:
     values = StringTensor(
         data=torch.tensor([97, 255, 98], dtype=torch.uint8),
         offset=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
         valid=torch.tensor([True, False, True]),
         size=(3,),
     )
-    index = torch.tensor([1, 2, 0, 1])
-    actual = _select_entries(values, index)
-    assert actual.tolist() == values[index].tolist()
+    perm = torch.tensor([1, 2, 0])
+    actual = _permute_entries(values, perm)
+    assert actual.tolist() == values[perm].tolist()
     assert actual._max_length is None
-    assert actual.data_offset[1].diff().tolist() == [1, 1, 1, 1]
+    assert actual.data_offset[1].diff().tolist() == [1, 1, 1]
