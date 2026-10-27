@@ -37,6 +37,9 @@ class KumoAnomaly(Model):
     Multivariate Time-Series Anomaly Detection"
     <https://arxiv.org/abs/2610.12754>`__ paper.
 
+    .. figure:: /images/kumo_anomaly_light.png
+        :width: 100%
+
     :class:`KumoAnomaly` reconstructs multivariate time series with conditional
     diffusion and uses reconstruction errors to score anomalies. It combines
     sinusoidal time embeddings and learned feature embeddings with
