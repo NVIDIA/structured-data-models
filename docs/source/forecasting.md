@@ -78,7 +78,7 @@ out["ice_cream__q90"].numerical  # upper end of an 80% prediction interval
 
 ## Multivariate Forecasting
 
-A models that {py:attr}`~sdm.models.ICLModel.supports_multi_target` can forecast multiple targets jointly, allowing them to exploit dependencies between them.
+A model that {py:attr}`~sdm.models.ICLModel.supports_multi_target` can forecast multiple targets jointly, allowing them to exploit dependencies between them.
 
 In this case, we can simply add the daily sales of cold drinks as a second target:
 
