@@ -10,7 +10,6 @@ Run the command below from the repository root:
 pip install . fev==0.10.0
 ```
 
-
 ## Run
 
 - **`TimesFM3`**:
