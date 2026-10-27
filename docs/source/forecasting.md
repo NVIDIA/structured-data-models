@@ -14,6 +14,16 @@ Forecasting thus motivates useful extensions to the in-context learning formulat
 - **Known future covariates** provide inputs for both context and query rows.
 - **Past-only covariates** provide inputs for context rows even when their query values are unavailable.
 
+```{figure} images/forecasting_light.svg
+:figclass: light-only
+:width: 100%
+```
+
+```{figure} images/forecasting_dark.svg
+:figclass: dark-only
+:width: 100%
+```
+
 This package incorporates these extensions through the same {py:class}`~sdm.models.ICLModel` used by other models.
 In particular, `y_context` contains the observed targets, columns shared by `x_context` and `x_query` represent known future covariates, and columns exclusive to `x_context` represent past-only covariates.
 
