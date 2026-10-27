@@ -18,11 +18,8 @@ from timebench.evaluation.data import (
 from timebench.evaluation.saver import save_window_predictions
 from timebench.evaluation.utils import get_available_terms
 
-from benchmark.forecasting.gift_eval.models import (
-    QUANTILE_LEVELS,
-    SDMPredictor,
-)
 from benchmark.forecasting.model import MODEL_CONFIGS, add_model_args
+from benchmark.timeseries.predictor import SDMPredictor
 
 
 def main() -> None:
@@ -72,7 +69,7 @@ def main() -> None:
                 prediction_length=dataset.prediction_length,
                 batch_size=args.batch_size,
             )
-            forecasts = predictor.predict(dataset.test_data.input)
+            forecasts = list(predictor.predict(dataset.test_data.input))
             # GluonTS stores quantiles as [Q, H, V] (or [Q, H] if univariate):
             quantiles = np.stack([f.forecast_array for f in forecasts])
             if quantiles.ndim == 4:
@@ -85,7 +82,7 @@ def main() -> None:
                 output_base_dir=str(result_dir),
                 seasonality=get_seasonality(dataset.freq),
                 model_hyperparams=vars(args),
-                quantile_levels=list(QUANTILE_LEVELS),
+                quantile_levels=[float(q) for q in forecasts[0].forecast_keys],
             )
 
 

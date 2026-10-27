@@ -12,8 +12,6 @@ from gluonts.model.predictor import Predictor
 import sdm
 from benchmark.timeseries.model import ModelConfig
 
-QUANTILE_LEVELS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
-
 
 class SDMPredictor(Predictor):
     def __init__(

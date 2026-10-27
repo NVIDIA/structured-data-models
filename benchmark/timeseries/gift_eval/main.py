@@ -26,8 +26,8 @@ from benchmark.timeseries.gift_eval.datasets import (
     MED_LONG_DATASETS,
     PRETTY_NAMES,
 )
-from benchmark.timeseries.gift_eval.predictor import SDMPredictor
 from benchmark.timeseries.model import MODEL_CONFIGS
+from benchmark.timeseries.predictor import SDMPredictor
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
