@@ -1608,6 +1608,8 @@ def _select_entries(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
     start = inp._offset[positions]
     end = inp._offset[positions + 1]
     max_length = inp._max_length
+    if max_length is None:
+        max_length = inp._data.numel()
     capacity = index.numel() * max_length
     if capacity > torch.iinfo(inp._offset.dtype).max:
         return cast(VarLenTensor, inp[index])
@@ -1637,5 +1639,5 @@ def _select_entries(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
         offset=offset,
         valid=inp._valid[positions] if inp._valid is not None else None,
         size=index.shape,
-        max_length=max_length,
+        max_length=inp._max_length,
     )

@@ -1129,6 +1129,7 @@ def test_native_string_selection_meta() -> None:
     assert actual._offset.shape == (index.numel() + 1,)
     assert actual._offset.dtype == torch.int32
     assert actual._data.numel() == index.numel() * 12
+    assert actual._max_length is None
     assert actual.valid is not None
     assert actual.valid.shape == index.shape
 
@@ -1141,6 +1142,7 @@ def test_native_string_selection_empty_payload(empty: bool) -> None:
     index = torch.tensor([] if empty else [2, 0, 1, 2], dtype=torch.int64)
     actual = _select_entries(values, index)
     assert actual.tolist() == values[index].tolist()
+    assert actual._max_length == 0
 
 
 def test_native_string_selection_null_payload() -> None:
@@ -1153,4 +1155,5 @@ def test_native_string_selection_null_payload() -> None:
     index = torch.tensor([1, 2, 0, 1])
     actual = _select_entries(values, index)
     assert actual.tolist() == values[index].tolist()
+    assert actual._max_length is None
     assert actual.data_offset[1].diff().tolist() == [1, 1, 1, 1]
