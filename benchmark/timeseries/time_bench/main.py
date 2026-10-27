@@ -1,15 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Run an SDM forecasting model on the TIME benchmark."""
+r"""Run an SDM time series forecasting model on TIME."""
 
 import argparse
-from dataclasses import replace
+import os
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import numpy as np
 import torch
+import tqdm
 from gluonts.time_feature import get_seasonality
+from huggingface_hub import snapshot_download
 from timebench.evaluation.data import (
     Dataset,
     get_dataset_settings,
@@ -18,73 +21,75 @@ from timebench.evaluation.data import (
 from timebench.evaluation.saver import save_window_predictions
 from timebench.evaluation.utils import get_available_terms
 
-from benchmark.forecasting.model import MODEL_CONFIGS, add_model_args
+from benchmark.timeseries.model import MODEL_CONFIGS
 from benchmark.timeseries.predictor import SDMPredictor
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--model",
+    choices=tuple(MODEL_CONFIGS),
+    default="timesfm3",
+    help="SDM model to benchmark.",
+)
+parser.add_argument(
+    "--dataset",
+    action="append",
+    help="Run only the selected TIME dataset; repeat to combine.",
+)
+args = parser.parse_args()
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    add_model_args(parser)
-    parser.add_argument(
-        "--dataset",
-        action="append",
-        help="Run only the selected TIME dataset; repeat to combine.",
+config = MODEL_CONFIGS[args.model]
+dataset_config = load_dataset_config()
+path = Path(__file__).parent.parent / "time_bench_out" / config.name
+
+names = args.dataset or dataset_config["datasets"]
+if not os.getenv("TIME_DATASET"):
+    os.environ["TIME_DATASET"] = snapshot_download(
+        repo_id="Real-TSF/TIME",
+        repo_type="dataset",
+        allow_patterns=[f"{name}/*" for name in names],
     )
-    args = parser.parse_args()
 
-    model_config = MODEL_CONFIGS[args.model]
-    if args.max_context_size is not None:
-        model_config = replace(
-            model_config, max_context_size=args.max_context_size
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = config.factory(device)
+
+for name in names:
+    for term in get_available_terms(name, dataset_config):
+        if (path / name / term / "metrics.npz").exists():
+            continue
+
+        settings = get_dataset_settings(name, term, dataset_config)
+        dataset = Dataset(
+            name=name,
+            term=term,
+            prediction_length=settings["prediction_length"],
+            test_length=settings["test_length"],
         )
-    result_dir = (
-        Path(__file__).parent.parent / "time_bench_out" / model_config.name
-    )
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model_config.factory(device)
-
-    # Mirrors TIME's official `experiments/*.py` runners:
-    config = load_dataset_config()
-    for name in args.dataset or config["datasets"]:
-        for term in get_available_terms(name, config):
-            if (result_dir / name / term / "metrics.npz").exists():
-                continue
-
-            settings = get_dataset_settings(name, term, config)
-            dataset = Dataset(
-                name=name,
-                term=term,
-                prediction_length=settings["prediction_length"],
-                test_length=settings["test_length"],
-                val_length=settings.get("val_length", 0),
-                # Flatten multivariate series for models without joint
-                # multi-target forecasting:
-                to_univariate=not model.supports_multi_target,
+        predictor = SDMPredictor(model, config, dataset.prediction_length)
+        outs = list(
+            tqdm.tqdm(
+                predictor.predict(dataset.test_data.input),
+                total=len(dataset.test_data),
+                desc=f"{name}/{term}",
             )
+        )
 
-            predictor = SDMPredictor(
-                model,
-                config=model_config,
-                prediction_length=dataset.prediction_length,
-                batch_size=args.batch_size,
-            )
-            forecasts = list(predictor.predict(dataset.test_data.input))
-            # GluonTS stores quantiles as [Q, H, V] (or [Q, H] if univariate):
-            quantiles = np.stack([f.forecast_array for f in forecasts])
-            if quantiles.ndim == 4:
-                quantiles = quantiles.swapaxes(-1, -2)  # [N, Q, V, H]
+        quantiles = np.stack([out.forecast_array for out in outs])
+        if quantiles.ndim == 4:
+            quantiles = quantiles.swapaxes(-1, -2)  # [B, Q, C, R]
 
+        with redirect_stdout(None):
             save_window_predictions(
                 dataset=dataset,
                 fc_quantiles=quantiles,
                 ds_config=f"{name}/{term}",
-                output_base_dir=str(result_dir),
+                output_base_dir=str(path),
                 seasonality=get_seasonality(dataset.freq),
-                model_hyperparams=vars(args),
-                quantile_levels=[float(q) for q in forecasts[0].forecast_keys],
+                quantile_levels=[float(q) for q in outs[0].forecast_keys],
             )
-
-
-if __name__ == "__main__":
-    main()
+        with np.load(path / name / term / "metrics.npz") as metrics:
+            mase = np.nanmean(metrics["MASE"])
+            crps = np.nanmean(metrics["CRPS"])
+        print(f"{name}/{term}: MASE={mase:.4f}, CRPS={crps:.4f}")

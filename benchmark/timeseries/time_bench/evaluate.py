@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Evaluate SDM results with TIME's official leaderboard script."""
+r"""Evaluate SDM time series forecasting results on TIME."""
 
 import argparse
 import subprocess
