@@ -3,86 +3,66 @@
 
 r"""Evaluate SDM time series forecasting results on TIME."""
 
-import argparse
-import subprocess
-import sys
-import tempfile
+import gc
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 from huggingface_hub import snapshot_download
 
-from benchmark.forecasting.model import MODEL_CONFIGS
+from benchmark.timeseries.model import MODEL_CONFIGS
 
-# Pinned revision of the published results. The official script adds the
-# seasonal naive baseline itself:
-REVISION = "1ebbe655f7fad151f5447ef94b2c371d71ba6d7e"
-REFERENCES = ("TimesFM-3", "TimesFM-2.5", "Chronos-2")
+BASELINE = "seasonal_naive"
+REFERENCES = ("TimesFM-3", "TimesFM-2.5", "Chronos-2", BASELINE)
+METRICS = ("MASE", "CRPS")
 
+runs = {}
+for config in MODEL_CONFIGS.values():
+    path = Path(__file__).parent.parent / "time_bench_out" / config.name
+    if any(path.glob("**/metrics.npz")):
+        runs[f"[SDM] {config.name}"] = path
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--time-path",
-        type=Path,
-        required=True,
-        help="Path to the pinned TIME checkout.",
+configs = set.intersection(
+    *(
+        {path.parent.relative_to(run) for path in run.rglob("metrics.npz")}
+        for run in runs.values()
     )
-    args = parser.parse_args()
+)
 
-    script = args.time_path / "scripts" / "compute_local_leaderboard.py"
-    if not script.is_file():
-        raise FileNotFoundError(f"TIME checkout not found at {args.time_path}")
+path = snapshot_download(
+    repo_id="Real-TSF/TIME-Output",
+    repo_type="dataset",
+    allow_patterns=[
+        f"results/{name}/{config.as_posix()}/metrics.npz"
+        for name in REFERENCES
+        for config in sorted(configs)
+    ],
+)
+gc.collect()
+for name in REFERENCES:
+    runs[name] = Path(path) / "results" / name
 
-    result_root = Path(__file__).parent.parent / "time_bench_out"
-    runs = {}
-    for model_config in MODEL_CONFIGS.values():
-        if (result_root / model_config.name).is_dir():
-            runs[f"[SDM] {model_config.name}"] = (
-                result_root / model_config.name
+rows = []
+for model, run in runs.items():
+    for config in sorted(configs):
+        with np.load(run / config / "metrics.npz") as metrics:
+            rows.append(
+                {
+                    "model": model,
+                    "dataset": config.as_posix(),
+                    **{
+                        metric: np.nanmean(metrics[metric])
+                        for metric in METRICS
+                    },
+                }
             )
 
-    if not runs:
-        raise FileNotFoundError(f"No TIME results found under {result_root}")
-
-    # Compare with published results on configurations run by all models:
-    configs = set.intersection(
-        *(
-            {
-                path.parent.relative_to(run)
-                for path in run.glob("**/metrics.npz")
-            }
-            for run in runs.values()
-        )
-    )
-    reference_root = snapshot_download(
-        repo_id="Real-TSF/TIME-Output",
-        repo_type="dataset",
-        revision=REVISION,
-        allow_patterns=[
-            f"results/{name}/**/{file}"
-            for name in REFERENCES
-            for file in ("metrics.npz", "config.json")
-        ],
-    )
-    for name in REFERENCES:
-        runs[name] = Path(reference_root) / "results" / name
-
-    # The official script reads all models under `output/results/`:
-    with tempfile.TemporaryDirectory(prefix="sdm-time-") as directory:
-        results = Path(directory) / "output" / "results"
-        for name, run in runs.items():
-            for config in configs:
-                if (run / config / "metrics.npz").is_file():
-                    (results / name / config).parent.mkdir(
-                        parents=True, exist_ok=True
-                    )
-                    (results / name / config).symlink_to(run / config)
-        subprocess.run(
-            [sys.executable, str(script.resolve())],
-            cwd=directory,
-            check=True,
-        )
-
-
-if __name__ == "__main__":
-    main()
+df = pd.DataFrame(rows).set_index(["model", "dataset"])
+scores = np.log(df.div(df.loc[BASELINE], level="dataset"))
+terms = scores.index.get_level_values("dataset").str.split("/").str[-1]
+for i, (group, score) in enumerate([("all", scores), *scores.groupby(terms)]):
+    if i > 0:
+        print()
+    summary = np.exp(score.groupby("model").mean()).sort_values("CRPS")
+    print(f"TIME leaderboard ({group}):")
+    print(summary.reset_index().to_string(index=False, float_format="%.4f"))
