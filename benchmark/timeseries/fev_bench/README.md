@@ -19,15 +19,17 @@ pip install . fev==0.10.0
   ```
 
   `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass.
+  Unlike the official `float32` evaluation, we use `bfloat16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
 
 > [!NOTE]
 > Weights of `TimesFM3` are distributed under the [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE).
 > Review the license before running the `TimesFM3` benchmark, which will download its weights noninteractively.
 
+String-valued covariates are encoded into 100 numeric buckets using deterministic `CRC32` hashing.
 Results will be written to `benchmark/timeseries/fev_bench_out/<model>/`, and already completed configurations are skipped.
 
 Pass `--task` to run only selected fev-bench tasks, *e.g.*, `--task hospital --task proenfo_gfc12`.
-Pass `--mini` to run the 20-task fev-bench-mini subset:
+Pass `--mini` to run the 20-task fev-bench-mini subset.
 
 ## Evaluate
 

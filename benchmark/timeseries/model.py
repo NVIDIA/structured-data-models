@@ -13,6 +13,7 @@ import sdm
 class ModelConfig:
     name: str
     factory: Callable[[torch.device], sdm.models.ICLModel]
+    autocast_dtype: torch.dtype
     num_estimators: int = 1
     max_context_size: int | None = None
     max_variates: int | None = None
@@ -25,6 +26,7 @@ MODEL_CONFIGS = {
             accept_license=True,
             device=device,
         ),
+        autocast_dtype=torch.bfloat16,
         num_estimators=2,
         max_context_size=15_360,
         max_variates=32,
