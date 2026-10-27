@@ -293,14 +293,20 @@ class _TimesFM3(torch.nn.Module):
         future_x = self.revin(future_x, mean.unsqueeze(-1), scale)
         x[mask] = 0.0
         future_x[future_mask] = 0.0
+
+        # Mask leading fully padded patches, keeping horizon patches visible.
+        patch_mask = mask.all(dim=-1) & future_mask.all(dim=-1)
+        patch_mask = patch_mask.int().cumprod(dim=-1).bool()
+        if not patch_mask.any():  # Pay for device sync here:
+            patch_mask = None
+
         x = torch.cat(
             [x, future_x, mask.to(x.dtype), future_mask.to(x.dtype)],
             dim=-1,
         )  # [..., C, N, *]
 
-        # Run the model (assume no empty leading patches):
         x = self.patch_embedding(x)  # [..., C, N, D]
-        out = self.icl_block(x)  # [..., C, N, O * Q]
+        out = self.icl_block(x, patch_mask=patch_mask)  # [..., C, N, O * Q]
         out = out.unflatten(-1, (self.output_patch_size, -1))
         first = mid // P - 1
 
