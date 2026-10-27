@@ -5,6 +5,7 @@ r"""Run an SDM time series forecasting model on TIME."""
 
 import argparse
 import os
+import warnings
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -37,6 +38,8 @@ parser.add_argument(
     help="Run only the selected TIME dataset; repeat to combine.",
 )
 args = parser.parse_args()
+
+warnings.filterwarnings("ignore", message=r"'.*' is deprecated.*")
 
 config = MODEL_CONFIGS[args.model]
 dataset_config = load_dataset_config()
