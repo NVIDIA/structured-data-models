@@ -116,12 +116,14 @@ def test_from_arrow_zero_string_chunks(arrow_type: pa.DataType) -> None:
 @pytest.mark.parametrize("arrow_type", [pa.string(), pa.large_string()])
 def test_from_arrow_sliced_nullable(arrow_type: pa.DataType) -> None:
     tensor = StringTensor.from_arrow(
-        pa.array(["x", "hi", None, "yo"], type=arrow_type)[1:],
+        pa.array(["x", "hi", None, "yo", "z"], type=arrow_type)[1:],
     )
 
-    assert tensor.tolist() == ["hi", None, "yo"]
+    assert tensor.tolist() == ["hi", None, "yo", "z"]
     assert tensor[torch.tensor([0, 2])].tolist() == ["hi", "yo"]
-    assert tensor.view(3, 1).t().contiguous().tolist() == [["hi", None, "yo"]]
+    transposed = tensor.view(2, 2).t()
+    assert not transposed.is_contiguous()
+    assert transposed.contiguous().tolist() == [["hi", "yo"], [None, "z"]]
 
 
 @onlyCUDA
