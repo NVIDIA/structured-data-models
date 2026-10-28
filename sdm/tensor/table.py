@@ -21,7 +21,7 @@ from typing_extensions import override
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import _record_stream_op, _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -1200,6 +1200,9 @@ class TableTensor(Tensor):
     ) -> Any:
         if func in cls.HANDLED_FUNCTIONS:
             return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_stream_op(func, *args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"

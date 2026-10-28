@@ -3,7 +3,7 @@
 
 import abc
 from collections.abc import Callable, Iterator
-from typing import Self
+from typing import Any, Self
 
 import torch
 from torch import Tensor
@@ -122,3 +122,13 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
     if device.type == "mps" and device.index is None:
         return torch.device("mps", 0)
     return device
+
+
+def _record_stream_op(
+    op: Callable[[Tensor, int], None], tensor: Any, stream_index: int
+) -> None:
+    # Dynamo represents streams as graph-owned indices. Forward the builtin
+    # operation to backing tensors without resolving the stream in Python.
+    attrs, _ = tensor.__tensor_flatten__()
+    for name in attrs:
+        op(getattr(tensor, name), stream_index)

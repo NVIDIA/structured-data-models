@@ -16,7 +16,7 @@ from typing_extensions import override
 
 from sdm.tensor import NullableTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import _record_stream_op, _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -359,6 +359,9 @@ class ColumnarTensor(Tensor):
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             return handler(*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_stream_op(func, *args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import (
@@ -32,3 +33,82 @@ def test_record_stream() -> None:
 
     for tensor in tensors:
         assert tensor.record_stream(stream) is None
+
+
+def _stream_sources(kind: str) -> tuple[torch.Tensor, ...]:
+    data = torch.arange(4096, device="cuda")
+    valid = data.remainder(3).ne(0)
+    if kind == "categorical":
+        return data.remainder(4096).view(-1, 1), data
+    if kind in ("var_len", "string"):
+        offset = torch.arange(4097, device="cuda")
+        if kind == "string":
+            data = data.remainder(26).add(97).to(torch.uint8)
+        return data, offset, valid
+    return data, valid
+
+
+def _stream_tensor(
+    kind: str, sources: tuple[torch.Tensor, ...]
+) -> torch.Tensor:
+    if kind == "categorical":
+        return CategoricalTensor(sources[0], (sources[1],))
+    if kind == "columnar":
+        return ColumnarTensor((sources[0], NullableTensor(*sources)))
+    if kind == "nullable":
+        return NullableTensor(*sources)
+    if kind in ("var_len", "string"):
+        cls = StringTensor if kind == "string" else VarLenTensor
+        return cls(*sources, size=(4096,))
+    assert kind == "table"
+    return TableTensor(
+        numerical=NullableTensor(
+            sources[0].view(-1, 1), sources[1].view(-1, 1)
+        )
+    )
+
+
+def _record_stream_tensor(
+    kind: str,
+    sources: tuple[torch.Tensor, ...],
+    stream: torch.cuda.Stream,
+) -> None:
+    _stream_tensor(kind, sources).record_stream(stream)
+
+
+@onlyCUDA
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize(
+    "kind",
+    ["categorical", "columnar", "nullable", "var_len", "string", "table"],
+)
+def test_record_stream_fullgraph_lifetime(kind: str) -> None:
+    if not hasattr(torch.ops.streams, "record_stream"):
+        pytest.skip(
+            "graph-owned stream recording requires streams.record_stream"
+        )
+    sources = _stream_sources(kind)
+    expected = tuple(source.cpu() for source in sources)
+    outputs = tuple(
+        torch.empty_like(value, pin_memory=True) for value in expected
+    )
+    specs = tuple((source.shape, source.dtype) for source in sources)
+    stream = torch.cuda.Stream()
+
+    compiled_record = torch.compile(_record_stream_tensor, fullgraph=True)
+    assert compiled_record(kind, sources, stream) is None
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        # Keep copies pending while the allocation stream reuses storage.
+        torch.cuda._sleep(50_000_000)
+        for output, source in zip(outputs, sources):
+            output.copy_(source, non_blocking=True)
+    del sources, source
+    replacements = [
+        torch.full(shape, 1, dtype=dtype, device="cuda")
+        for shape, dtype in specs
+    ]
+    stream.synchronize()
+    for output, value in zip(outputs, expected):
+        torch.testing.assert_close(output, value)
+    del replacements

@@ -21,6 +21,7 @@ from sdm.tensor.io import (
     to_arrow,
     to_cudf,
 )
+from sdm.tensor.mixin import _record_stream_op
 
 if TYPE_CHECKING:
     import cudf
@@ -462,6 +463,9 @@ class CategoricalTensor(Tensor):
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             return handler(*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_stream_op(func, *args, **(kwargs or {}))
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._code, args)

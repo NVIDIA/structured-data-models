@@ -20,6 +20,7 @@ from sdm.tensor.io import (
     to_arrow,
     to_cudf,
 )
+from sdm.tensor.mixin import _record_stream_op
 
 if TYPE_CHECKING:
     import cudf
@@ -384,6 +385,9 @@ class NullableTensor(Tensor):
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             return handler(*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_stream_op(func, *args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
