@@ -8,9 +8,9 @@ Runtime, test, and documentation dependencies are declared in [`pyproject.toml`]
 - Source: https://github.com/scikit-learn/scikit-learn
 - License: BSD 3-Clause
 - Copyright: Copyright (c) 2007-2026 The scikit-learn developers.
-- License terms: https://github.com/scikit-learn/scikit-learn/blob/1.9.0/COPYING
+- License terms: https://github.com/scikit-learn/scikit-learn/blob/main/COPYING
 
-scikit-learn is an optional dependency installed with `structured-data-models[prior]`; its source code is not bundled with this repository.
+`scikit-learn` is an optional dependency installed with `structured-data-models[prior]`; its source code is not bundled with this repository.
 
 ## TabICLv2
 
