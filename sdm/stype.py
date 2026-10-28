@@ -6,13 +6,15 @@ from __future__ import annotations
 import importlib.util
 import re
 import warnings
-from collections.abc import Callable, Hashable, Iterable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Hashable, Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import pyarrow as pa
 import pyarrow.compute as pc
+
+import sdm
 
 if TYPE_CHECKING:
     import cudf
@@ -113,15 +115,16 @@ def infer_stypes(
     *,
     text: Literal["off", "infer", "drop"] = "off",
     id: Literal["off", "infer", "drop"] = "off",
-    _low_cardinality: Literal["off", "infer"] = "off",
     unsupported: Literal["error", "warn", "drop"] = "error",
+    config: StypeConfig | Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
 
     Semantic types are inferred as follows:
 
     * Integer, floating-point, and decimal columns are inferred as
-      :attr:`~Stype.numerical`.
+      :attr:`~Stype.numerical` if they have more than three distinct values,
+      and :attr:`~Stype.categorical` otherwise.
     * String, boolean and dictionary-encoded columns are inferred as
       :attr:`~Stype.categorical`.
     * Datetime columns are inferred as :attr:`~Stype.datetime`.
@@ -153,29 +156,36 @@ def infer_stypes(
             ``"error"`` raises a :class:`TypeError`.
             ``"warn"`` emits a warning and omits the column.
             ``"drop"`` omits the column silently.
+        config: Optional threshold overrides grouped by semantic type (see
+            :class:`StypeConfig`), *e.g.*,``{"text": {"min_unique": 50}}``.
 
     Returns:
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
 
-    fn: (
-        Callable[
-            [str, object, Policy, Policy, Literal["off", "infer"]],
-            Stype | None,
-        ]
-        | None
-    ) = None
+    if not isinstance(config, StypeConfig):
+        config = replace(
+            sdm.stype.config,
+            **{
+                name: replace(getattr(sdm.stype.config, name), **values)
+                for name, values in (config or {}).items()
+            },
+        )
+
+    fn = None
     columns: Iterable[tuple[Hashable, object]] | None = None
     if isinstance(table, pa.Table):
         fn = _infer_arrow_stype
         columns = zip(table.column_names, table.columns)
+
     if fn is None and importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
             fn = _infer_pandas_stype
             columns = table.items()
+
     if fn is None and importlib.util.find_spec("cudf") is not None:
         import cudf
 
@@ -198,7 +208,7 @@ def infer_stypes(
             continue
 
         try:
-            stype = fn(name, column, text, id, _low_cardinality)
+            stype = fn(name, column, text, id, config)
         except TypeError:
             if unsupported == "error":
                 raise
@@ -231,7 +241,7 @@ def _infer_arrow_stype(
     array: object,
     text: Policy,
     id: Policy,
-    low_cardinality: Literal["off", "infer"],
+    config: StypeConfig,
 ) -> Stype | None:
     assert isinstance(array, pa.Array | pa.ChunkedArray)
     dtype = array.type
@@ -252,7 +262,7 @@ def _infer_arrow_stype(
         or pa.types.is_floating(dtype)
         or pa.types.is_decimal(dtype)
     ):
-        if low_cardinality != "off" and _is_arrow_low_cardinality(array):
+        if _is_arrow_categorical(array, config.categorical):
             return Stype.categorical
         return Stype.numerical
 
@@ -260,7 +270,7 @@ def _infer_arrow_stype(
         return Stype.categorical
 
     if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
-        if text != "off" and _is_arrow_text(array):
+        if text != "off" and _is_arrow_text(array, config.text):
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
@@ -275,7 +285,7 @@ def _infer_pandas_stype(
     ser: object,
     text: Policy,
     id: Policy,
-    low_cardinality: Literal["off", "infer"],
+    config: StypeConfig,
 ) -> Stype | None:
     import pandas as pd
     from pandas.api.types import (
@@ -303,7 +313,7 @@ def _infer_pandas_stype(
         return None if id == "drop" else Stype.id
 
     if is_integer_dtype(dtype) or is_float_dtype(dtype):
-        if low_cardinality != "off" and _is_series_low_cardinality(ser):
+        if _is_series_categorical(ser, config.categorical):
             return Stype.categorical
         return Stype.numerical
 
@@ -311,7 +321,10 @@ def _infer_pandas_stype(
         return Stype.categorical
 
     if is_string:
-        if text != "off" and _is_arrow_text(pa.array(ser, from_pandas=True)):
+        if text != "off" and _is_arrow_text(
+            array=pa.array(ser, from_pandas=True),
+            config=config.text,
+        ):
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
@@ -326,7 +339,7 @@ def _infer_cudf_stype(
     ser: object,
     text: Policy,
     id: Policy,
-    low_cardinality: Literal["off", "infer"],
+    config: StypeConfig,
 ) -> Stype | None:
     import cudf
     from cudf.api.types import (
@@ -353,7 +366,7 @@ def _infer_cudf_stype(
         or is_float_dtype(dtype)
         or is_decimal_dtype(dtype)
     ):
-        if low_cardinality != "off" and _is_series_low_cardinality(ser):
+        if _is_series_categorical(ser, config.categorical):
             return Stype.categorical
         return Stype.numerical
 
@@ -361,7 +374,7 @@ def _infer_cudf_stype(
         return Stype.categorical
 
     if is_string_dtype(dtype):
-        if text != "off" and _is_cudf_text(ser):
+        if text != "off" and _is_cudf_text(ser, config.text):
             return None if text == "drop" else Stype.text
         return Stype.categorical
 
@@ -379,63 +392,82 @@ def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
 
 
-def _is_arrow_text(array: pa.Array | pa.ChunkedArray) -> bool:
-    if (num_values := len(array) - array.null_count) == 0:
+def _is_arrow_text(
+    array: pa.Array | pa.ChunkedArray,
+    config: TextConfig,
+) -> bool:
+    if config.min_unique_ratio >= 1:
         return False
 
-    array = pc.call_function("drop_null", [array])
-    num_unique = pc.call_function("count_distinct", [array]).as_py()
-    if num_unique < config.text.min_unique:
-        return False
-    if num_unique / num_values <= config.text.min_unique_ratio:
+    num_values = len(array) - array.null_count
+    if num_values == 0 or num_values < config.min_unique:
         return False
 
     unique = pc.call_function("unique", [array])
+    unique = pc.call_function("drop_null", [unique])
+    if len(unique) < config.min_unique:
+        return False
+    if len(unique) / num_values <= config.min_unique_ratio:
+        return False
+
     tokens = pc.call_function("utf8_split_whitespace", [unique])
     words = pc.call_function("list_value_length", [tokens])
     avg_words = pc.call_function("mean", [words]).as_py()
-    return avg_words >= config.text.min_avg_words
+    return avg_words >= config.min_avg_words
 
 
-def _is_cudf_text(ser: cudf.Series) -> bool:
-    if (num_values := ser.count()) == 0:
+def _is_cudf_text(ser: cudf.Series, config: TextConfig) -> bool:
+    if config.min_unique_ratio >= 1:
         return False
 
-    if (num_unique := ser.nunique(dropna=True)) < config.text.min_unique:
+    num_values = ser.count()
+    if num_values == 0 or num_values < config.min_unique:
         return False
-    if num_unique / num_values <= config.text.min_unique_ratio:
+
+    if (num_unique := ser.nunique(dropna=True)) < config.min_unique:
+        return False
+    if num_unique / num_values <= config.min_unique_ratio:
         return False
 
     unique = ser.dropna().unique()
     avg_words = unique.str.token_count().mean()
-    return avg_words >= config.text.min_avg_words
+    return avg_words >= config.min_avg_words
 
 
-def _is_arrow_low_cardinality(array: pa.Array | pa.ChunkedArray) -> bool:
-    if len(array) < config.categorical.min_rows:
+def _is_arrow_categorical(
+    array: pa.Array | pa.ChunkedArray,
+    config: CategoricalConfig,
+) -> bool:
+    if config.max_unique < 2:
+        return False
+    if len(array) < config.min_rows:
         return False
 
-    # A prefix holds a subset of the distinct values, so most columns are
-    # ruled out without a full pass.
     options = pc.CountOptions(mode="all")
-    prefix = array.slice(0, 1024)
-    num_unique = pc.call_function("count_distinct", [prefix], options).as_py()
-    if num_unique > config.categorical.max_unique:
-        return False
+
+    if len(array) > 1024 and config.max_unique < 1024:  # Exit early:
+        tmp = array.slice(0, 1024)
+        num_unique = pc.call_function("count_distinct", [tmp], options).as_py()
+        if num_unique > config.max_unique:
+            return False
 
     num_unique = pc.call_function("count_distinct", [array], options).as_py()
-    return 1 < num_unique <= config.categorical.max_unique
+    return 1 < num_unique <= config.max_unique
 
 
-def _is_series_low_cardinality(ser: pd.Series | cudf.Series) -> bool:
-    if len(ser) < config.categorical.min_rows:
+def _is_series_categorical(
+    ser: pd.Series | cudf.Series,
+    config: CategoricalConfig,
+) -> bool:
+    if config.max_unique < 2:
+        return False
+    if len(ser) < config.min_rows:
         return False
 
-    # A prefix holds a subset of the distinct values, so most columns are
-    # ruled out without a full pass.
-    prefix = ser.iloc[:1024]
-    if prefix.nunique(dropna=False) > config.categorical.max_unique:
-        return False
+    if len(ser) > 1024 and config.max_unique < 1024:  # Exit early:
+        tmp = ser.iloc[:1024]
+        if tmp.nunique(dropna=False) > config.max_unique:
+            return False
 
     num_unique = ser.nunique(dropna=False)
-    return 1 < num_unique <= config.categorical.max_unique
+    return 1 < num_unique <= config.max_unique
