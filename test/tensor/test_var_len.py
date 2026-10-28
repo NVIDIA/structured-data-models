@@ -1105,6 +1105,31 @@ def test_permute_entries_skewed_lengths() -> None:
     assert actual._data.numel() == values._data.numel()
 
 
+@withCUDA
+@pytest.mark.parametrize("perm", [[4, 0, 3, 1, 2], [0, 1, 2, 3, 4]])
+def test_permute_entries_long_and_short(
+    device: torch.device,
+    perm: list[int],
+) -> None:
+    # Mostly long entries, mixed with short, empty and null ones; the last
+    # entry ends at the end of the payload.
+    values = StringTensor.from_arrow(
+        pa.array(["a" * 41, "bc", None, "", "é" * 59 + "z"])
+    )
+    assert values._valid is not None
+    values = StringTensor(
+        data=values._data.to(device),
+        offset=values._offset.to(device),
+        valid=values._valid.to(device),
+        size=values.shape,
+    )
+    index = torch.tensor(perm, device=device)
+    actual = _permute_entries(values, index)
+    assert actual.tolist() == values[index].tolist()
+    assert actual._data.numel() == values._data.numel()
+    assert not actual._data[actual._offset[-1] :].any()
+
+
 def test_permute_entries_bool_payload() -> None:
     values = VarLenTensor(
         data=torch.tensor([True, False, True, True]),
