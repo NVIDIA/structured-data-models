@@ -216,6 +216,15 @@ def test_arrow() -> None:
     assert tensor.tolist() == [[1, 2], None, [3]]
 
 
+def test_arrow_sliced_nullable() -> None:
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[0, 0, 0], [1], None, [2, 3]])[1:],
+    )
+
+    assert tensor.tolist() == [[1], None, [2, 3]]
+    assert tensor[torch.tensor([0, 2])].tolist() == [[1], [2, 3]]
+
+
 def test_arrow_bool() -> None:
     tensor = VarLenTensor.from_arrow(
         pa.array(

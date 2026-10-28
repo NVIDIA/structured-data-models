@@ -113,6 +113,17 @@ def test_from_arrow_zero_string_chunks(arrow_type: pa.DataType) -> None:
     assert tensor.to_arrow().to_pylist() == []
 
 
+@pytest.mark.parametrize("arrow_type", [pa.string(), pa.large_string()])
+def test_from_arrow_sliced_nullable(arrow_type: pa.DataType) -> None:
+    tensor = StringTensor.from_arrow(
+        pa.array(["x", "hi", None, "yo"], type=arrow_type)[1:],
+    )
+
+    assert tensor.tolist() == ["hi", None, "yo"]
+    assert tensor[torch.tensor([0, 2])].tolist() == ["hi", "yo"]
+    assert tensor.view(3, 1).t().contiguous().tolist() == [["hi", None, "yo"]]
+
+
 @onlyCUDA
 def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")
@@ -146,6 +157,17 @@ def test_from_cudf_sliced_values() -> None:
     assert tensor._offset.equal(
         torch.tensor([0, 1, 3, 5, 5], device=tensor.device)
     )
+
+
+@onlyCUDA
+def test_from_cudf_sliced_nullable() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = StringTensor.from_cudf(cudf.Series(["x", "hi", None, "yo"])[1:])
+
+    assert tensor.tolist() == ["hi", None, "yo"]
+    index = torch.tensor([0, 2], device=tensor.device)
+    assert tensor[index].tolist() == ["hi", "yo"]
 
 
 @onlyCUDA

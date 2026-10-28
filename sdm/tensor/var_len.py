@@ -1009,11 +1009,13 @@ def _valid(inp: VarLenTensor) -> Tensor | None:
     if inp._valid is None:
         return None
 
+    # `as_strided` offsets are absolute, but `_valid` may be a view:
+    storage_offset = inp._valid.storage_offset() + int(inp.storage_offset())
     return torch.as_strided(
         inp._valid,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=storage_offset,
     )
 
 
@@ -1440,22 +1442,25 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
 
 
 def _layout_view(inp: VarLenTensor) -> Tensor:
+    # `as_strided` offsets are absolute, but `_offset` may be a view:
+    storage_offset = inp._offset.storage_offset() + int(inp.storage_offset())
     return torch.as_strided(
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=storage_offset,
     )
 
 
 def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
+    storage_offset = view.storage_offset() - inp._offset.storage_offset()
     return inp.__class__(
         data=inp._data,
         offset=inp._offset,
         valid=inp._valid,
         size=view.size(),
         stride=view.stride(),
-        storage_offset=0 if view.numel() == 0 else int(view.storage_offset()),
+        storage_offset=0 if view.numel() == 0 else int(storage_offset),
     )
 
 
@@ -1494,12 +1499,7 @@ def _materialize(
     non_blocking: bool = False,
 ) -> VarLenTensor:
     # Use PyTorch's own memory-format semantics to materialize data:
-    start = torch.as_strided(
-        inp._offset,
-        size=inp.size(),
-        stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
-    )
+    start = _layout_view(inp)
     start = function(start)
     assert start.storage_offset() == 0
     assert _span_len(start.size(), start.stride()) == start.numel()
@@ -1508,7 +1508,9 @@ def _materialize(
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()) + 1,
+        storage_offset=(
+            inp._offset.storage_offset() + int(inp.storage_offset()) + 1
+        ),
     )
     end = function(end)
     assert end.storage_offset() == 0
@@ -1529,14 +1531,8 @@ def _materialize(
         stride=(1,),
         storage_offset=end.storage_offset(),
     )
-    valid: Tensor | None = None
-    if inp._valid is not None:
-        valid = torch.as_strided(
-            inp._valid,
-            size=inp.size(),
-            stride=inp.stride(),
-            storage_offset=int(inp.storage_offset()),
-        )
+    valid = _valid(inp)
+    if valid is not None:
         valid = function(valid).contiguous().view(-1)
 
     offset, index = _compact(start, end)
