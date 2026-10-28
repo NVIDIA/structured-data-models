@@ -7,6 +7,7 @@ import importlib.util
 import re
 import warnings
 from collections.abc import Callable, Hashable, Iterable, Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, TypeAlias
 
@@ -40,18 +41,69 @@ class Stype(StrEnum):
     text = "text"
     id = "id"
 
+    @classmethod
+    def all(cls) -> tuple[Stype, ...]:
+        r""":meta private:"""  # noqa: D415
+        return (  # Explicit members avoid enum iteration in compiled regions.
+            cls.numerical,
+            cls.categorical,
+            cls.datetime,
+            cls.text,
+            cls.id,
+        )
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}.{self.name}"
 
-
-# Keep enum iteration outside compiled processor calls.
-_ALL_STYPES = tuple(Stype)
 
 StypeLike: TypeAlias = Stype | str
 
 # Semantic Type Inference #####################################################
 
 
+@dataclass
+class CategoricalConfig:
+    r"""Thresholds for inferring numeric columns as :attr:`~Stype.categorical`.
+
+    Args:
+        min_rows: Minimum row count, including nulls.
+        max_unique: Maximum distinct value count, including nulls.
+    """
+
+    min_rows: int = 151
+    max_unique: int = 3
+
+
+@dataclass
+class TextConfig:
+    r"""Thresholds for inferring string columns as :attr:`~Stype.text`.
+
+    Args:
+        min_unique: Minimum number of distinct strings, excluding nulls.
+        min_unique_ratio: Minimum ratio of distinct strings, excluding nulls.
+        min_avg_words: Minimum average number of words per distinct string.
+    """
+
+    min_unique: int = 200
+    min_unique_ratio: float = 0.05
+    min_avg_words: float = 3
+
+
+@dataclass
+class StypeConfig:
+    r"""Semantic type inference thresholds.
+
+    Args:
+        categorical: Thresholds for inferring numeric columns as
+            :attr:`~Stype.categorical`.
+        text: Thresholds for inferring string columns as :attr:`~Stype.text`.
+    """
+
+    categorical: CategoricalConfig = field(default_factory=CategoricalConfig)
+    text: TextConfig = field(default_factory=TextConfig)
+
+
+config = StypeConfig()
 Policy: TypeAlias = Literal["off", "infer", "drop"]
 
 
@@ -327,73 +379,63 @@ def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
 
 
-_TEXT_MIN_UNIQUE_VALUES = 200
-_TEXT_MIN_UNIQUE_RATIO = 0.05
-_TEXT_MIN_AVERAGE_WORD_COUNT = 3
-
-
 def _is_arrow_text(array: pa.Array | pa.ChunkedArray) -> bool:
     if (num_values := len(array) - array.null_count) == 0:
         return False
 
     array = pc.call_function("drop_null", [array])
     num_unique = pc.call_function("count_distinct", [array]).as_py()
-    if num_unique < _TEXT_MIN_UNIQUE_VALUES:
+    if num_unique < config.text.min_unique:
         return False
-    if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
+    if num_unique / num_values <= config.text.min_unique_ratio:
         return False
 
     unique = pc.call_function("unique", [array])
     tokens = pc.call_function("utf8_split_whitespace", [unique])
     words = pc.call_function("list_value_length", [tokens])
     avg_words = pc.call_function("mean", [words]).as_py()
-    return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
+    return avg_words >= config.text.min_avg_words
 
 
 def _is_cudf_text(ser: cudf.Series) -> bool:
     if (num_values := ser.count()) == 0:
         return False
 
-    if (num_unique := ser.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
+    if (num_unique := ser.nunique(dropna=True)) < config.text.min_unique:
         return False
-    if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
+    if num_unique / num_values <= config.text.min_unique_ratio:
         return False
 
     unique = ser.dropna().unique()
     avg_words = unique.str.token_count().mean()
-    return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
-
-
-_LOW_CARDINALITY_MIN_ROWS = 151
-_LOW_CARDINALITY_MAX_UNIQUE_VALUES = 3
-_LOW_CARDINALITY_PREFIX_ROWS = 1024
+    return avg_words >= config.text.min_avg_words
 
 
 def _is_arrow_low_cardinality(array: pa.Array | pa.ChunkedArray) -> bool:
-    if len(array) < _LOW_CARDINALITY_MIN_ROWS:
+    if len(array) < config.categorical.min_rows:
         return False
 
     # A prefix holds a subset of the distinct values, so most columns are
     # ruled out without a full pass.
     options = pc.CountOptions(mode="all")
-    prefix = array.slice(0, _LOW_CARDINALITY_PREFIX_ROWS)
+    prefix = array.slice(0, 1024)
     num_unique = pc.call_function("count_distinct", [prefix], options).as_py()
-    if num_unique > _LOW_CARDINALITY_MAX_UNIQUE_VALUES:
+    if num_unique > config.categorical.max_unique:
         return False
 
     num_unique = pc.call_function("count_distinct", [array], options).as_py()
-    return 1 < num_unique <= _LOW_CARDINALITY_MAX_UNIQUE_VALUES
+    return 1 < num_unique <= config.categorical.max_unique
 
 
 def _is_series_low_cardinality(ser: pd.Series | cudf.Series) -> bool:
-    if len(ser) < _LOW_CARDINALITY_MIN_ROWS:
+    if len(ser) < config.categorical.min_rows:
         return False
 
     # A prefix holds a subset of the distinct values, so most columns are
     # ruled out without a full pass.
-    prefix = ser.iloc[:_LOW_CARDINALITY_PREFIX_ROWS]
-    if prefix.nunique(dropna=False) > _LOW_CARDINALITY_MAX_UNIQUE_VALUES:
+    prefix = ser.iloc[:1024]
+    if prefix.nunique(dropna=False) > config.categorical.max_unique:
         return False
 
     num_unique = ser.nunique(dropna=False)
-    return 1 < num_unique <= _LOW_CARDINALITY_MAX_UNIQUE_VALUES
+    return 1 < num_unique <= config.categorical.max_unique

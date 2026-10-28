@@ -85,7 +85,7 @@ def test_infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("sdm.stype._TEXT_MIN_UNIQUE_VALUES", 2)
+    monkeypatch.setattr("sdm.stype.config.text.min_unique", 2)
 
     assert infer_stypes(table, id="infer", text="infer") == {
         "user_id": Stype.id,
