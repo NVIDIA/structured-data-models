@@ -2106,6 +2106,11 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
+[package.optional-dependencies]
+prior = [
+    { name = "scikit-learn" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "cudf-cu13", marker = "sys_platform == 'linux'" },
@@ -2145,9 +2150,6 @@ test-cpu = [
     { name = "pytest-cov" },
     { name = "sentence-transformers" },
 ]
-train = [
-    { name = "scikit-learn" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -2155,9 +2157,11 @@ requires-dist = [
     { name = "numpy" },
     { name = "pyarrow" },
     { name = "safetensors" },
+    { name = "scikit-learn", marker = "extra == 'prior'" },
     { name = "torch", specifier = ">=2.7" },
     { name = "typing-extensions" },
 ]
+provides-extras = ["prior"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2196,7 +2200,6 @@ test-cpu = [
     { name = "pytest-cov" },
     { name = "sentence-transformers", specifier = ">=5.4" },
 ]
-train = [{ name = "scikit-learn" }]
 
 [[package]]
 name = "sympy"
