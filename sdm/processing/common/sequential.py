@@ -11,7 +11,6 @@ from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
 )
-from sdm.stype import _ALL_STYPES
 
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -30,7 +29,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
-            return _ALL_STYPES
+            return Stype.all()
         return self._merge_stypes(self)
 
     def append(self, processor: object) -> Self:

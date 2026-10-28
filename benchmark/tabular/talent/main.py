@@ -98,7 +98,6 @@ config = {
         "finetune_train_size": args.finetune_train_size,
         "finetune_context_frac": args.finetune_context_frac,
         "finetune_val_frac": args.finetune_val_frac,
-        "low_cardinality": model.low_cardinality,
     },
 }
 

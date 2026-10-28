@@ -60,7 +60,6 @@ class ModelConfig:
     num_estimators: int
     autocast_dtype: torch.dtype
     max_classes: int | None = None
-    low_cardinality: Literal["off", "infer"] = "off"
 
 
 @lru_cache(maxsize=2)
@@ -104,21 +103,18 @@ MODEL_CONFIGS = {
         factory=partial(_create_kumo_tabular, size="small"),
         num_estimators=8,
         autocast_dtype=torch.float16,
-        low_cardinality="infer",
     ),
     "kumo-tabular-medium": ModelConfig(
         name="KumoTabular-Medium",
         factory=partial(_create_kumo_tabular, size="medium"),
         num_estimators=8,
         autocast_dtype=torch.float16,
-        low_cardinality="infer",
     ),
     "kumo-tabular-large": ModelConfig(
         name="KumoTabular-Large",
         factory=partial(_create_kumo_tabular, size="large"),
         num_estimators=16,
         autocast_dtype=torch.float16,
-        low_cardinality="infer",
     ),
     "kumo-tabular-small-ft": ModelConfig(
         name="KumoTabularSmallFT",
@@ -126,7 +122,6 @@ MODEL_CONFIGS = {
         num_estimators=8,
         autocast_dtype=torch.float16,
         max_classes=10,
-        low_cardinality="infer",
     ),
     "tabfm": ModelConfig(
         name="TabFM",
@@ -191,10 +186,6 @@ class SDMMethod(Method):
         )
         self._finetune_val_frac = general.get(
             "finetune_val_frac", FINETUNE_VAL_FRAC
-        )
-        self._low_cardinality = general.get(
-            "low_cardinality",
-            self._config.low_cardinality,
         )
         self._numerical_stypes: list[str] = []
 
@@ -287,17 +278,12 @@ class SDMMethod(Method):
     ) -> list[str]:
         if numerical is None:
             return []
-        if self._low_cardinality == "off":
-            return ["numerical"] * numerical.shape[1]
         # Typed from the train rows, as the TabArena wrapper types its
         # context: numerical columns with 2 or 3 distinct values become
         # categorical.
-        frame = pd.DataFrame(numerical).rename(columns=str)
-        stypes = sdm.infer_stypes(
-            frame,
-            _low_cardinality=self._low_cardinality,
-        )
-        return [str(stypes[column]) for column in frame.columns]
+        df = pd.DataFrame(numerical).rename(columns=str)
+        stypes = sdm.infer_stypes(df)
+        return [str(stypes[column]) for column in df.columns]
 
     def _to_target(self, values: np.ndarray) -> sdm.TableTensor:
         return sdm.TableTensor.from_columns(

@@ -79,7 +79,6 @@ class SDMModel(AbstractTorchModel, abc.ABC):
 
     default_num_estimators: ClassVar[int]
     autocast_dtype: ClassVar[torch.dtype]
-    low_cardinality: ClassVar[Literal["off", "infer"]] = "off"
 
     @staticmethod
     @abc.abstractmethod
@@ -148,10 +147,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             )
 
         X = self.preprocess(X, y=y)
-        self.stypes = sdm.infer_stypes(
-            X,
-            _low_cardinality=self.low_cardinality,
-        )
+        self.stypes = sdm.infer_stypes(X)
         x_context = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
@@ -370,8 +366,6 @@ class SDMKumoTabularModel(SDMModel):
     size: ClassVar[KumoTabularSize]
     default_num_estimators = 16
     autocast_dtype = torch.float16
-    # AutoGluon's feature generator hands binary columns over as integers.
-    low_cardinality = "infer"
     # Bagged children are fit one at a time in this process, so they share the
     # pretrained network of their task through AutoGluon's registry.
     _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {

@@ -141,6 +141,9 @@ include = ["examples/**", "benchmark/**"]
 unresolved-import = "ignore"
 unresolved-attribute = "ignore"
 
+[tool.ty.overrides.analysis]
+replace-imports-with-any = ["autogluon.**", "tabarena.**"]
+
 [[tool.ty.overrides]]
 include = ["sdm/_kernels/triton/**"]
 
