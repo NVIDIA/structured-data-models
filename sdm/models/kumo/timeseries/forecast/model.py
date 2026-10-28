@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 import torch
 from torch import Tensor
@@ -17,10 +17,10 @@ from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumo.timeseries.forecast.ckpt import remap_ckpt
 from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
+from sdm.models.kumo.timeseries.forecast.darr import embed, knn
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
-from sdm.tensor.table import TableSchema
 
 
 class KumoForecast(ICLModel):
@@ -40,12 +40,20 @@ class KumoForecast(ICLModel):
     Optional cross-channel mixing lets forecasts use dependencies between
     variates after temporal encoding. The forecasting head predicts the native
     up to 72-step horizon directly from a 512-step history.
+    Forecast horizons beyond 72 steps are extended autoregressively, up to
+    512 steps.
+
+    For longer observation histories, Domain-Aware Representation and
+    Retrieval (DARR) can augment the direct forecast with patterns retrieved
+    from historical data. Set ``alpha < 1`` to retrieve similar historical
+    windows using nearest neighbors and blend their observed continuations
+    with the direct forecast.
 
     Within the :class:`~sdm.models.ICLModel` protocol, :class:`KumoForecast`
     treats rows as ordered time steps. In a default forward pass,
     ``x_context`` contains past-only historical covariates, ``y_context``
-    contains one or more past target series, and ``x_query`` is required to be
-    empty.
+    contains one or more past target series, and ``x_query`` has no columns.
+    The number of query rows determines the forecast horizon.
 
     Args:
         cross_channel: Whether to mix variates after encoding.
@@ -105,15 +113,25 @@ class KumoForecast(ICLModel):
 
         return self
 
-    def forward(
+    def forward(  # noqa: D417
         self,
         x_context: Tensor | TableTensor,
         y_context: Tensor | TableTensor,
         x_query: Tensor | TableTensor,
         *args: Any,
+        alpha: float = 1.0,
+        k: int = 64,
+        temperature: float | None = 0.05,
         **kwargs: Any,
     ) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
+        r"""The in-context learning forward pass.
+
+        Args:
+            alpha: Blend weight between direct and retrieved forecasts.
+                ``1`` uses only the direct forecast, ``0`` uses only retrieval.
+            k: Maximum number of historical neighbors to retrieve.
+            temperature: Softmax temperature for weighting retrieved neighbors.
+        """
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
@@ -128,37 +146,14 @@ class KumoForecast(ICLModel):
             )
             x_query = x_query[..., :0]
 
+        kwargs.update(alpha=alpha, k=k, temperature=temperature)
         return super().forward(x_context, y_context, x_query, *args, **kwargs)
 
-    def fit(self, x: Tensor | TableTensor, *args: Any, **kwargs: Any) -> None:
+    def fit(self, *args: Any, **kwargs: Any) -> None:
         r""":meta private:"""  # noqa: D415
-        if isinstance(x, TableTensor):
-            kwargs["context_only_columns"] = [
-                column for columns in x.columns.values() for column in columns
-            ]
-        else:
-            kwargs["context_only_columns"] = range(x.size(-1))
-
-        return super().fit(x, *args, **kwargs)
-
-    def predict(
-        self,
-        x: Tensor | TableTensor,
-        *args: Any,
-        **kwargs: Any,
-    ) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
-        if x.size(-1) > 0:
-            warn_once(
-                key="kumo-forecast-future-covariate",
-                message=(
-                    f"{self.__class__.__name__!r} does not support future "
-                    f"covariates. Query columns will be ignored."
-                ),
-            )
-            x = x[..., :0]
-
-        return super().predict(x, *args, **kwargs)
+        raise NotImplementedError(
+            f"{self.__class__.__name__!r} does not support `fit()`"
+        )
 
     def _forward(
         self,
@@ -170,56 +165,101 @@ class KumoForecast(ICLModel):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        alpha: float = 1.0,
+        k: int = 64,
+        temperature: float | None = 0.05,
+        batch_size: int = 8,
         **kwargs: Any,
     ) -> TableTensor:
+        assert y_context is not None
+        assert x_query is not None
 
-        if (
-            y_context is not None
-            and y_context.size(-2) < self.model.context_size
-        ):
+        if not 0 <= alpha <= 1:
+            raise ValueError(
+                f"Expected 'alpha' between zero and one (got {alpha})"
+            )
+
+        if y_context.size(-2) < self.model.context_size:
             raise ValueError(
                 f"Expected at least {self.model.context_size} context rows "
                 f"(got {y_context.size(-2)})"
             )
 
-        if (
-            x_query is not None
-            and not 1 <= x_query.size(-2) <= self.model.prediction_size
-        ):
+        horizon = x_query.size(-2)
+        if not 1 <= horizon <= 512:
             raise ValueError(
-                "Number of query rows must be between 1 and "
-                f"{self.model.prediction_size} steps "
-                f"(got {x_query.size(-2)})"
+                "Number of query rows must be between 1 and 512 steps "
+                f"(got {horizon})"
             )
 
-        if cache is None or cache.is_recording:
-            assert y_context is not None
-            y_schema = y_context.schema
-            x = y_context.numerical
-            if x_context_only is not None and x_context_only.size(-1) > 0:
-                if self.model.cross_channel is None:
-                    warn_once(
-                        key="kumo-forecast-historical-covariate",
-                        message=(
-                            "Historical covariates have no effect when "
-                            "'cross_channel' is disabled."
-                        ),
-                    )
-                x = torch.cat([x, x_context_only.numerical], dim=-1)
+        context_size = self.model.context_size
+        prediction_size = self.model.prediction_size
+        memory_horizon = max(prediction_size, horizon)
+        use_darr = alpha < 1 and y_context.size(-2) >= (
+            self.model.context_size + memory_horizon
+        )
 
-            x = x[..., -self.model.context_size :, :].transpose(-1, -2)
-            out = self.model(x)[..., : y_context.size(-1), :].transpose(-1, -2)
+        x = y_context.numerical.transpose(-1, -2)  # [..., C, R]
+        if x_context_only is not None and x_context_only.size(-1) > 0:
+            if self.model.cross_channel is None and not use_darr:
+                warn_once(
+                    key="kumo-forecast-historical-covariate",
+                    message=(
+                        "Historical covariates have no effect when "
+                        "'cross_channel' and DARR retrieval are inactive."
+                    ),
+                )
+            x = torch.cat(
+                [x, x_context_only.numerical.transpose(-1, -2)],
+                dim=-2,
+            )
 
-            if cache is not None:
-                cache["out"] = out
-        else:
-            y_schema = cast(TableSchema, cache["y_schema"])
-            out = cast(Tensor, cache["out"])
+        # Forecast:
+        last_x = x[..., -self.model.context_size :]
+        encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
+        out = self.model.decode(encoded, mean, scale)
 
-        length = 0 if x_query is None else x_query.size(-2)
+        # Autoregressive Forecasts:
+        if horizon > prediction_size and (alpha != 0 or not use_darr):
+            outs = [out]
+            for _ in range(prediction_size, horizon, prediction_size):
+                last_x = last_x[..., prediction_size:]
+                last_x = torch.cat([last_x, out], dim=-1)
+                out = self.model(last_x)
+                outs.append(out)
+            out = torch.cat(outs, dim=-1)
+        out = out[..., :horizon]
+
+        if use_darr:  # Memory-based Retrieval:
+            key = self.model.encode_memory(
+                x=x,
+                horizon=memory_horizon,
+                batch_size=batch_size,
+            )  # [..., N, D]
+            query = embed(encoded)  # [..., D]
+
+            window = x.unfold(
+                dimension=-1,
+                size=context_size + memory_horizon,
+                step=prediction_size,
+            ).transpose(-3, -2)  # [..., N, C, context_size+memory_horizon]
+
+            retrieved = knn(
+                query=query,
+                key=key,
+                value=window[..., context_size : context_size + horizon],
+                k=k,
+                temperature=temperature,
+            )
+            if alpha == 0:
+                out = retrieved
+            else:
+                out = alpha * out + (1 - alpha) * retrieved
+
+        out = out[..., : len(y_context.numerical_columns), :].transpose(-1, -2)
         return TableTensor(
-            columns={Stype.numerical: y_schema.columns[Stype.numerical]},
-            numerical=out[..., :length, :],
+            columns={Stype.numerical: y_context.numerical_columns},
+            numerical=out,
         )
 
 
@@ -282,7 +322,44 @@ class _KumoForecast(torch.nn.Module):
         self,
         x: Tensor,  # [..., C, R]
     ) -> Tensor:  # [..., C, prediction_size]
+        encoded, mean, scale = self.encode(x)
+        return self.decode(encoded, mean, scale)
 
+    def decode(self, encoded: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
+        return self.revin.inverse(self.head(encoded.flatten(-2)), mean, scale)
+
+    def encode_memory(
+        self,
+        x: Tensor,  # [..., C, R]
+        horizon: int,
+        batch_size: int,
+    ) -> Tensor:  # [..., N, D]
+        window = x.unfold(
+            dimension=-1,
+            size=self.context_size + horizon,
+            step=self.prediction_size,
+        ).transpose(-3, -2)  # [..., N, C, L + H]
+
+        key = x.new_empty(
+            (*x.size()[:-2], window.size(-3), self.lin.out_features),
+            dtype=torch.float32,
+        )
+        for start in range(0, window.size(-3), batch_size):
+            x = window[
+                ...,
+                start : start + batch_size,
+                :,
+                : self.context_size,
+            ]
+            x, _, _ = self.encode(x)
+            key[..., start : start + batch_size, :] = embed(x)
+
+        return key
+
+    def encode(
+        self,
+        x: Tensor,  # [..., C, R]
+    ) -> tuple[Tensor, Tensor, Tensor]:
         mean, scale = self.revin.compute_stats(x)
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
@@ -293,5 +370,4 @@ class _KumoForecast(torch.nn.Module):
         if self.cross_channel is not None:
             x = self.cross_channel(x)  # [..., C, N, D]
 
-        x = self.head(x.flatten(-2))  # [..., C, prediction_size]
-        return self.revin.inverse(x, mean, scale)
+        return x, mean, scale
