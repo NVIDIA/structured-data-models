@@ -63,11 +63,11 @@ class KumoForecast(ICLModel):
     Additional Forward Parameters:
         alpha (float): Blend weight between direct and retrieved forecasts.
             ``1.0`` uses only the direct forecast, ``0.0`` uses only retrieval.
-            (default: :obj:`1.0`)
+            (default: ``1.0``)
         k (int): Maximum number of historical neighbors to retrieve.
-            (default: :obj:`64`)
+            (default: ``64``)
         temperature (float | None): Softmax temperature for weighting retrieved
-            neighbors. (default: :obj:`0.05`)
+            neighbors. (default: ``0.05``)
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(

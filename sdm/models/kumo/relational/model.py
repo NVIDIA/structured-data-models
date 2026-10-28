@@ -145,7 +145,7 @@ class KumoRelational(ICLModel):
     Additional Forward Parameters:
         num_hops (int | None): The number of relational
             message-passing hops. If ``None``, will be automatically inferred
-            from the context. (default: `None`)
+            from the context. (default: ``None``)
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(

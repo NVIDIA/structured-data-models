@@ -88,4 +88,6 @@ class Standardize(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:
+        if self.eps == 0:
+            return super().__repr__(indent=indent)
         return f"{' ' * indent}{self.__class__.__name__}(eps={self.eps})"
