@@ -250,7 +250,8 @@ class VarLenTensor(Tensor):
         out._offset = offset
         out._valid = valid
         # Mirror size and stride in an empty tensor's shape so torch.compile
-        # can make them symbolic (it fixes a nested subclass's own size).
+        # can make them symbolic. A tensor nested in another one, like a
+        # categorical vocabulary, would otherwise keep its first traced size.
         out._layout = offset.new_empty_strided(
             (*size, 0), (*stride, 1), dtype=torch.uint8
         )
