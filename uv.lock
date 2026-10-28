@@ -2106,6 +2106,11 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
+[package.optional-dependencies]
+prior = [
+    { name = "scikit-learn" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "cudf-cu13", marker = "sys_platform == 'linux'" },
@@ -2152,9 +2157,11 @@ requires-dist = [
     { name = "numpy" },
     { name = "pyarrow" },
     { name = "safetensors" },
+    { name = "scikit-learn", marker = "extra == 'prior'" },
     { name = "torch", specifier = ">=2.7" },
     { name = "typing-extensions" },
 ]
+provides-extras = ["prior"]
 
 [package.metadata.requires-dev]
 dev = [
