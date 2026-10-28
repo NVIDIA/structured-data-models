@@ -4,47 +4,38 @@
 import pytest
 import torch
 
-from sdm import (
-    CategoricalTensor,
-    StringTensor,
-    Stype,
-    TableTensor,
-    VarLenTensor,
-)
+from sdm import CategoricalTensor, StringTensor, TableTensor, VarLenTensor
 from sdm.processing import AddCategoryCounts, ImputeMode
 from sdm.testing import withCUDA
 
 
 def _table(category: torch.Tensor, codes: list[int]) -> TableTensor:
     return TableTensor(
-        columns={Stype.categorical: ("city",)},
+        columns={"categorical": ("city",)},
         categorical=CategoricalTensor(
-            code=torch.tensor(
-                data=codes, dtype=torch.int32, device=category.device
-            ).unsqueeze(-1),
+            code=torch.tensor(codes, device=category.device).unsqueeze(-1),
             categories=(category,),
         ),
     )
 
 
 @withCUDA
-@pytest.mark.parametrize("processor_type", [ImputeMode, AddCategoryCounts])
-@pytest.mark.parametrize("kind", ["tensor", "var_len", "string"])
+@pytest.mark.parametrize(
+    ("processor_type", "category"),
+    [
+        (ImputeMode, torch.tensor([1, 0, 2, 0])),
+        (ImputeMode, VarLenTensor.from_list([[1], [], [2, 3], []])),
+        (AddCategoryCounts, StringTensor.from_list(["a", "", "b", ""])),
+    ],
+    ids=["tensor", "var_len", "string"],
+)
 def test_category_checks_compile(
     compilation: None,
     device: torch.device,
     processor_type: type[ImputeMode | AddCategoryCounts],
-    kind: str,
+    category: torch.Tensor,
 ) -> None:
-    if kind == "tensor":
-        category = torch.tensor([1, 2], device=device)
-    elif kind == "var_len":
-        category = VarLenTensor.from_list([[1], [2, 3]], device=device)
-    else:
-        # A vocabulary view retains its physical storage and logical stride.
-        category = StringTensor.from_list(
-            values=["a", "unused", "b", "unused"], device=device
-        )[::2]
+    category = category.to(device)[::2]
     table = _table(category, [0, 1, -1, -7])
     processor = processor_type().fit(_table(category.clone(), [0, 1, -1, -7]))
     compiled = torch.compile(processor.transform, fullgraph=True)
