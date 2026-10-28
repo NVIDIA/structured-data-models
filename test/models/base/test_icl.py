@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -17,7 +18,9 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import Callback, ICLModel
+from sdm.models.base.icl import _copy_to_pinned_cpu
 from sdm.processing import InvertibleMixin, Processor
+from sdm.testing import onlyCUDA
 
 
 @dataclass
@@ -819,3 +822,100 @@ def test_estimator_batching_groups_by_layout_not_names(
         estimator_batch_size=None,
     )
     torch.testing.assert_close(model.predict(x).numerical, expected.numerical)
+
+
+@onlyCUDA
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("compiled", [False, True])
+@pytest.mark.parametrize("layout", ["contiguous", "transposed", "sliced"])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.int64])
+@pytest.mark.parametrize("inference", [False, True])
+@pytest.mark.parametrize("source_device", ["cpu", "pinned", "cuda"])
+def test_cache_offload(
+    compiled: bool,
+    layout: str,
+    dtype: torch.dtype,
+    inference: bool,
+    source_device: str,
+) -> None:
+    # Compile the copy boundary independently of fit preprocessing.
+    copy = (
+        torch.compile(_copy_to_pinned_cpu, fullgraph=True, backend="inductor")
+        if compiled
+        else _copy_to_pinned_cpu
+    )
+    expected = torch.arange(32 * 32, dtype=dtype).reshape(32, 32)
+    if layout == "transposed":
+        expected = expected.t()
+    elif layout == "sliced":
+        expected = expected[:, ::2]
+
+    stream = torch.cuda.Stream()
+    with (
+        torch.inference_mode() if inference else nullcontext(),
+        torch.cuda.stream(stream),
+    ):
+        source = torch.arange(
+            32 * 32,
+            device="cuda" if source_device == "cuda" else "cpu",
+            dtype=dtype,
+            pin_memory=source_device == "pinned",
+        ).reshape(32, 32)
+        if layout == "transposed":
+            source = source.t()
+        elif layout == "sliced":
+            source = source[:, ::2]
+        # The offload must observe preceding writes on the current stream.
+        source.add_(1)
+        reference = torch.ops.aten._to_copy.default(
+            source,
+            device="cpu",
+            pin_memory=True,
+            non_blocking=True,
+        )
+        try:
+            out = copy(source)
+        finally:
+            stream.synchronize()
+
+        assert out.device.type == "cpu"
+        assert out.is_pinned() == reference.is_pinned()
+        if source_device == "cuda":
+            assert out.is_pinned()
+        torch.testing.assert_close(out, expected + 1, rtol=0, atol=0)
+
+        # Cache storage must survive reuse of its source.
+        source.zero_()
+        stream.synchronize()
+        torch.testing.assert_close(out, expected + 1, rtol=0, atol=0)
+        restored = out.to(device="cuda", non_blocking=True)
+        stream.synchronize()
+        torch.testing.assert_close(
+            restored.cpu(), expected + 1, rtol=0, atol=0
+        )
+
+
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.int64])
+@pytest.mark.parametrize("layout", ["contiguous", "transposed", "sliced"])
+def test_cache_offload_cpu(dtype: torch.dtype, layout: str) -> None:
+    source = torch.arange(32 * 32, dtype=dtype).reshape(32, 32)
+    if layout == "transposed":
+        source = source.t()
+    elif layout == "sliced":
+        source = source[:, ::2]
+    reference = torch.ops.aten._to_copy.default(
+        source,
+        device="cpu",
+        pin_memory=True,
+        non_blocking=True,
+    )
+    copy = torch.compile(
+        _copy_to_pinned_cpu, fullgraph=True, backend="inductor"
+    )
+    out = copy(source)
+    assert out.device.type == "cpu"
+    assert out.is_pinned() == reference.is_pinned()
+    torch.testing.assert_close(out, reference, rtol=0, atol=0)
+    source.zero_()
+    torch.testing.assert_close(out, reference, rtol=0, atol=0)
