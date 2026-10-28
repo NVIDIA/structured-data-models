@@ -17,12 +17,21 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from functools import partial
 from typing import Any, cast
 
 import torch
 from torch import Tensor
+from torch.fx.experimental.symbolic_shapes import statically_known_true
 
 from sdm.cache import Cache
+
+
+def _num_codes(num_classes: int, max_classes: int) -> int:
+    return max(
+        math.ceil(num_classes / (max_classes - 1)),
+        4 * math.ceil(math.log(num_classes, max_classes)),
+    )
 
 
 class ECOC(torch.nn.Module):
@@ -80,12 +89,89 @@ class ECOC(torch.nn.Module):
         Returns:
             Scores of shape ``[..., R_query, K]`` for the query rows: model
             logits within class capacity, otherwise averaged log probabilities.
+
+        Note:
+            With PyTorch 2.14 or newer, full-graph compilation supports class
+            counts learned from input values with gradients disabled, without
+            caching, using the default random generator.
         """
+        if (
+            cache is None
+            and generator is None
+            and torch.compiler.is_compiling()
+            and not torch.is_grad_enabled()
+            and not statically_known_true(num_classes <= self.max_classes)
+            and not statically_known_true(num_classes > self.max_classes)
+        ):
+            # Preserve eager draw order, keeping neural execution in graph.
+            codebooks = torch.ops.sdm.ecoc_codebooks(
+                x, num_classes, self.max_classes, num_members
+            )
+            out = torch.cond(
+                num_classes <= self.max_classes,
+                partial(
+                    self._direct,
+                    model=model,
+                    num_classes=num_classes,
+                    **kwargs,
+                ),
+                partial(
+                    self._extended,
+                    model=model,
+                    num_classes=num_classes,
+                    num_members=num_members,
+                    cache=None,
+                    generator=generator,
+                    codebooks=codebooks,
+                    **kwargs,
+                ),
+                (x, y),
+            )
+            torch._check(out.size(-1) == num_classes)
+            return out
+
         if num_classes <= self.max_classes:
             if cache is not None:
                 kwargs["cache"] = cache
             return model(x, y, **kwargs)[..., :num_classes]
 
+        return self._extended(
+            model=model,
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            num_members=num_members,
+            cache=cache,
+            generator=generator,
+            **kwargs,
+        )
+
+    def _direct(
+        self,
+        x: Tensor,
+        y: Tensor,
+        *,
+        model: torch.nn.Module,
+        num_classes: int,
+        **kwargs: Any,
+    ) -> Tensor:
+        return model(x, y, **kwargs).index_select(
+            -1, torch.arange(num_classes, device=x.device)
+        )
+
+    def _extended(
+        self,
+        x: Tensor,
+        y: Tensor,
+        *,
+        model: torch.nn.Module,
+        num_classes: int,
+        num_members: int,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        codebooks: Tensor | None = None,
+        **kwargs: Any,
+    ) -> Tensor:
         if cache is not None and cache.is_replaying:
             codebook = cast(Tensor, cache["ecoc_codebook"])
             if num_classes != codebook.size(-1):
@@ -94,6 +180,8 @@ class ECOC(torch.nn.Module):
                     f"(expected {codebook.size(-1)}, got {num_classes})"
                 )
             kwargs["cache"] = cast(Cache, cache["ecoc_model"])
+        elif codebooks is not None:
+            codebook = codebooks[0] if num_members == 1 else codebooks
         elif num_members == 1:
             # [T, K]
             codebook = self._draw_codebook(num_classes, x.device, generator)
@@ -145,11 +233,7 @@ class ECOC(torch.nn.Module):
         generator: torch.Generator | None,
     ) -> Tensor:
         rest_idx = self.max_classes - 1
-        num_codes = max(
-            # Give every class its own output in at least one task.
-            math.ceil(num_classes / rest_idx),
-            4 * math.ceil(math.log(num_classes, self.max_classes)),
-        )
+        num_codes = _num_codes(num_classes, self.max_classes)
         # Bound the quadratic distance search for large targets.
         num_draws = 50 if num_classes <= 200 else 1
         codebook = torch.full(
@@ -195,3 +279,58 @@ class ECOC(torch.nn.Module):
             pairwise.size(-1) * num_codes + 1
         ) + pairwise.sum(dim=-1)
         return codebook.index_select(0, score.argmax().view(1)).squeeze(0)
+
+
+torch.library.define(
+    "sdm::ecoc_codebooks",
+    "(Tensor reference, SymInt num_classes, int max_classes, "
+    "SymInt num_members) -> Tensor",
+    tags=(torch.Tag.nondeterministic_seeded,),
+)
+
+
+def _draw_codebooks(
+    reference: Tensor,
+    num_classes: int,
+    max_classes: int,
+    num_members: int,
+) -> Tensor:
+    # Both the number of tasks and the random draw shapes depend on K. Keeping
+    # only sampling opaque preserves eager RNG consumption, including no draws
+    # within capacity, while the model and score reduction remain traceable.
+    if num_classes <= max_classes:
+        return (
+            torch.arange(num_classes, device=reference.device)
+            .expand(num_members, 1, num_classes)
+            .clone()
+        )
+    ecoc = ECOC(max_classes)
+    return torch.stack(
+        [
+            ecoc._draw_codebook(num_classes, reference.device, None)
+            for _ in range(num_members)
+        ]
+    )
+
+
+torch.library.impl("sdm::ecoc_codebooks", "default", _draw_codebooks)
+
+
+@torch.library.register_fake("sdm::ecoc_codebooks")
+def _draw_codebooks_fake(
+    reference: Tensor,
+    num_classes: int,
+    max_classes: int,
+    num_members: int,
+) -> Tensor:
+    if isinstance(num_classes, int):
+        num_codes = (
+            1
+            if num_classes <= max_classes
+            else _num_codes(num_classes, max_classes)
+        )
+    else:
+        num_codes = torch.library.get_ctx().new_dynamic_size(min=1)
+    return reference.new_empty(
+        (num_members, num_codes, num_classes), dtype=torch.long
+    )

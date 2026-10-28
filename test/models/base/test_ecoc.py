@@ -131,3 +131,50 @@ def test_ecoc_members(device: torch.device) -> None:
     cache.freeze()
     replayed = forward(x=x[..., num_context:, :], y=y[..., :0], cache=cache)
     torch.testing.assert_close(replayed, scores)
+
+
+class DynamicClasses(torch.nn.Module):
+    def __init__(self, num_members: int) -> None:
+        super().__init__()
+        self.ecoc = ECOC(10)
+        self.model = MyModel(10)
+        self.num_members = num_members
+
+    def forward(self, x: Tensor, y: Tensor, count: Tensor) -> Tensor:
+        num_classes = count.item()
+        torch._check(num_classes > 0)
+        return self.ecoc(
+            model=self.model,
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            num_members=self.num_members,
+            temperature=0.7,
+        )
+
+
+@pytest.mark.parametrize("num_members", [1, 3])
+@torch._dynamo.config.patch(
+    capture_scalar_outputs=True, capture_dynamic_output_shape_ops=True
+)
+def test_ecoc_dynamic_classes(num_members: int, compilation: None) -> None:
+    model = DynamicClasses(num_members)
+    compiled = torch.compile(model, backend="inductor", fullgraph=True)
+    batch_shape = () if num_members == 1 else (num_members,)
+    x = torch.randn(*batch_shape, 15, 12, dtype=torch.float64)
+    with torch.no_grad():
+        for num_classes in (3, 10, 11, 12, 3, 201):
+            y = (
+                torch.arange(12)
+                .remainder(num_classes)
+                .expand(*batch_shape, 12)
+            )
+            count = torch.tensor(num_classes)
+            # Restore sampling state to compare the exact codebooks and draws.
+            state = torch.random.get_rng_state()
+            expected = model(x, y, count)
+            expected_state = torch.random.get_rng_state()
+            torch.random.set_rng_state(state)
+            actual = compiled(x, y, count)
+            torch.testing.assert_close(actual, expected)
+            assert torch.equal(torch.random.get_rng_state(), expected_state)
