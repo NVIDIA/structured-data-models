@@ -48,32 +48,28 @@ def _stream_sources(kind: str) -> tuple[torch.Tensor, ...]:
     return data, valid
 
 
-def _stream_tensor(
-    kind: str, sources: tuple[torch.Tensor, ...]
-) -> torch.Tensor:
-    if kind == "categorical":
-        return CategoricalTensor(sources[0], (sources[1],))
-    if kind == "columnar":
-        return ColumnarTensor((sources[0], NullableTensor(*sources)))
-    if kind == "nullable":
-        return NullableTensor(*sources)
-    if kind in ("var_len", "string"):
-        cls = StringTensor if kind == "string" else VarLenTensor
-        return cls(*sources, size=(4096,))
-    assert kind == "table"
-    return TableTensor(
-        numerical=NullableTensor(
-            sources[0].view(-1, 1), sources[1].view(-1, 1)
-        )
-    )
-
-
 def _record_stream_tensor(
     kind: str,
     sources: tuple[torch.Tensor, ...],
     stream: torch.cuda.Stream,
 ) -> None:
-    _stream_tensor(kind, sources).record_stream(stream)
+    if kind == "categorical":
+        tensor = CategoricalTensor(sources[0], (sources[1],))
+    elif kind == "columnar":
+        tensor = ColumnarTensor((sources[0], NullableTensor(*sources)))
+    elif kind == "nullable":
+        tensor = NullableTensor(*sources)
+    elif kind in ("var_len", "string"):
+        cls = StringTensor if kind == "string" else VarLenTensor
+        tensor = cls(*sources, size=(4096,))
+    else:
+        assert kind == "table"
+        tensor = TableTensor(
+            numerical=NullableTensor(
+                sources[0].view(-1, 1), sources[1].view(-1, 1)
+            )
+        )
+    tensor.record_stream(stream)
 
 
 @onlyCUDA
@@ -84,15 +80,12 @@ def _record_stream_tensor(
 )
 def test_record_stream_fullgraph_lifetime(kind: str) -> None:
     if not hasattr(torch.ops.streams, "record_stream"):
-        pytest.skip(
-            "graph-owned stream recording requires streams.record_stream"
-        )
+        pytest.skip("requires torch.ops.streams.record_stream")
     sources = _stream_sources(kind)
     expected = tuple(source.cpu() for source in sources)
     outputs = tuple(
         torch.empty_like(value, pin_memory=True) for value in expected
     )
-    specs = tuple((source.shape, source.dtype) for source in sources)
     stream = torch.cuda.Stream()
 
     compiled_record = torch.compile(_record_stream_tensor, fullgraph=True)
@@ -105,8 +98,7 @@ def test_record_stream_fullgraph_lifetime(kind: str) -> None:
             output.copy_(source, non_blocking=True)
     del sources, source
     replacements = [
-        torch.full(shape, 1, dtype=dtype, device="cuda")
-        for shape, dtype in specs
+        torch.full_like(value, 1, device="cuda") for value in expected
     ]
     stream.synchronize()
     for output, value in zip(outputs, expected):
