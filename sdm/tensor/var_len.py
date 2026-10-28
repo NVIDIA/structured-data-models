@@ -249,8 +249,8 @@ class VarLenTensor(Tensor):
         out._data = data
         out._offset = offset
         out._valid = valid
-        # torch.compile tracks inner tensor shapes but not the size of a
-        # nested subclass (e.g. a vocabulary), so keep size in a shape.
+        # Mirror size and stride in an empty tensor's shape so torch.compile
+        # can make them symbolic (it fixes a nested subclass's own size).
         out._layout = offset.new_empty_strided(
             (*size, 0), (*stride, 1), dtype=torch.uint8
         )
