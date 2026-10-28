@@ -253,7 +253,7 @@ class VarLenTensor(Tensor):
         # can make them symbolic. A tensor nested in another one, like a
         # categorical vocabulary, would otherwise keep its first traced size.
         out._layout = offset.new_empty_strided(
-            (*size, 0), (*stride, 1), dtype=torch.uint8
+            size=(*size, 0), stride=(*stride, 1), dtype=torch.uint8
         )
         return out
 

@@ -33,6 +33,16 @@ def test_compiled_var_len_reconstruction(
     assert out.tolist() == tensor.tolist()
 
 
+def test_compiled_strided_layout(compilation: None) -> None:
+    rows = [["a", "bc", "d"], ["e", "", "fg"]]
+    tensor = StringTensor.from_list(rows).t()[1:]  # 2D, strided, offset
+    out = torch.compile(lambda x: x.detach(), backend="aot_eager")(tensor)
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.storage_offset() == tensor.storage_offset()
+    assert out.tolist() == tensor.tolist()
+
+
 def test_dtype_conversion() -> None:
     tensor = VarLenTensor.from_tensor(torch.arange(4).view(2, 2))
     assert repr(tensor) == "VarLenTensor(size=(2, 2), dtype=torch.int64)"
