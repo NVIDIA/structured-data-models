@@ -12,14 +12,7 @@ __lazy_modules__ = {
 from importlib.metadata import PackageNotFoundError, version
 
 from sdm._constants import NaT
-from sdm.stype import (
-    Stype,
-    StypeLike,
-    TextConfig,
-    CategoricalConfig,
-    StypeConfig,
-    infer_stypes,
-)
+from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.task import Task, TaskLike
 from sdm.tensor import (
     VarLenTensor,
@@ -50,9 +43,6 @@ __all__ = [
     "NaT",
     "Stype",
     "StypeLike",
-    "TextConfig",
-    "CategoricalConfig",
-    "StypeConfig",
     "Task",
     "TaskLike",
     "infer_stypes",
