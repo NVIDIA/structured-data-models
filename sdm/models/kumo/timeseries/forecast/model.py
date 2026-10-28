@@ -59,6 +59,15 @@ class KumoForecast(ICLModel):
         cross_channel: Whether to mix variates after encoding.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+
+    Additional Forward Parameters:
+        alpha (float): Blend weight between direct and retrieved forecasts.
+            ``1.0`` uses only the direct forecast, ``0.0`` uses only retrieval.
+            (default: :obj:`1.0`)
+        k (int): Maximum number of historical neighbors to retrieve.
+            (default: :obj:`64`)
+        temperature (float | None): Softmax temperature for weighting retrieved
+            neighbors. (default: :obj:`0.05`)
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -113,7 +122,7 @@ class KumoForecast(ICLModel):
 
         return self
 
-    def forward(  # noqa: D417
+    def forward(
         self,
         x_context: Tensor | TableTensor,
         y_context: Tensor | TableTensor,
@@ -124,14 +133,7 @@ class KumoForecast(ICLModel):
         temperature: float | None = 0.05,
         **kwargs: Any,
     ) -> TableTensor:
-        r"""The in-context learning forward pass.
-
-        Args:
-            alpha: Blend weight between direct and retrieved forecasts.
-                ``1`` uses only the direct forecast, ``0`` uses only retrieval.
-            k: Maximum number of historical neighbors to retrieve.
-            temperature: Softmax temperature for weighting retrieved neighbors.
-        """
+        r""":meta private:"""  # noqa: D415
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
