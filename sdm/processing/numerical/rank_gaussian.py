@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm._memory import split_size
+from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite, _ndtri
 from sdm.processing.numerical.quantile import _batched_interp
@@ -62,7 +62,7 @@ class RankGaussian(Processor):
             device=numerical.device,
         )
         knots = []
-        for chunk in numerical.split(size, dim=-1):
+        for chunk in _split_tensor(numerical, size, dim=-1):
             num_rows = chunk.size(-2)
             max_knots = num_rows if self.max_knots is None else self.max_knots
             columns = chunk.to(dtype).movedim(-1, -2)  # [..., C, N]
@@ -152,8 +152,8 @@ class RankGaussian(Processor):
             device=numerical.device,
         )
         for rows, out in zip(
-            columns.split(size, dim=-1),
-            output.split(size, dim=-2),
+            _split_tensor(columns, size, dim=-1),
+            _split_tensor(output, size, dim=-2),
             strict=True,
         ):
             quantiles = _batched_interp(
