@@ -7,6 +7,7 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
+from torch._dynamo.testing import CompileCounterWithBackend
 
 from sdm import CategoricalTensor, ColumnarTensor, NullableTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
@@ -676,3 +677,29 @@ def test_isnan() -> None:
     assert tensor.isnan().equal(expected)
     assert torch.isfinite(tensor).equal(~expected)
     assert tensor.isfinite().equal(~expected)
+
+
+@pytest.mark.parametrize("dynamic", [None, True])
+def test_compiled_string_categories_follow_input_sizes(
+    compilation: None,
+    dynamic: bool | None,
+) -> None:
+    def make(rows: int, size: int) -> CategoricalTensor:
+        categories = StringTensor.from_list([f"c{i}" for i in range(size)])
+        code = (torch.arange(rows) % size).view(rows, 1)
+        return CategoricalTensor(code, (categories,))
+
+    def fn(
+        x: CategoricalTensor, y: CategoricalTensor
+    ) -> tuple[torch.Tensor, ...]:
+        x, y = (cast(CategoricalTensor, t.unsqueeze(0)) for t in (x, y))
+        return x.categories[0], y.categories[0]
+
+    counter = CompileCounterWithBackend("aot_eager")
+    compiled = torch.compile(fn, backend=counter, dynamic=dynamic)
+    for rows, size in [(8, 4), (8, 4), (5, 3), (12, 6), (7, 5)]:
+        x, y = make(rows, size), make(rows + 1, size - 1)
+        for out, inp in zip(compiled(x, y), (x, y), strict=True):
+            assert out.tolist() == inp.categories[0].tolist()
+    # New row counts and vocabulary sizes reuse one dynamic graph:
+    assert counter.frame_count <= 2
