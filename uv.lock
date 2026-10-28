@@ -2145,6 +2145,9 @@ test-cpu = [
     { name = "pytest-cov" },
     { name = "sentence-transformers" },
 ]
+train = [
+    { name = "scikit-learn" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -2193,6 +2196,7 @@ test-cpu = [
     { name = "pytest-cov" },
     { name = "sentence-transformers", specifier = ">=5.4" },
 ]
+train = [{ name = "scikit-learn" }]
 
 [[package]]
 name = "sympy"

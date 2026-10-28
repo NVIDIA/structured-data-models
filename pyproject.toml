@@ -62,6 +62,9 @@ Repository = "https://github.com/NVIDIA/structured-data-models"
 Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 
 [dependency-groups]
+train = [
+    "scikit-learn",
+]
 test-cpu = [
     "pytest",
     "pytest-cov",
