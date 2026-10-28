@@ -134,7 +134,7 @@ def infer_stypes(
 
     * String columns are inferred as :attr:`~Stype.text` if they contain at
       least 200 distinct string values, a distinct non-null value ratio of at
-      least 5%, and an average of at least ``3`` words per distinct value.
+      least 5%, and an average of at least three words per distinct value.
     * Integer or (non-dictionary) string columns are inferred as
       :attr:`~Stype.id` if its name contains ``"id"`` as a whole word
       (*e.g.*, ``"user_id"``, ``"userId"``, ``"id"``, but not ``"solid"`` or
@@ -156,8 +156,8 @@ def infer_stypes(
             ``"error"`` raises a :class:`TypeError`.
             ``"warn"`` emits a warning and omits the column.
             ``"drop"`` omits the column silently.
-        config: Optional threshold overrides grouped by semantic type (see
-            :class:`StypeConfig`), *e.g.*,``{"text": {"min_unique": 50}}``.
+        config: Optional :class:`~sdm.stype.StypeConfig` overrides grouped by
+            semantic type, *e.g.*, ``{"text": {"min_unique": 50}}``.
 
     Returns:
         Dictionary mapping column names to inferred semantic type.
