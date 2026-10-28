@@ -62,6 +62,9 @@ class VarLenTensor(Tensor):
         size: The shape of the tensor.
         stride: The stride of the tensor.
         storage_offset: The offset into the logical ``offset`` storage.
+        max_length: Upper bound on the length of every stored entry, or
+            :obj:`None` if unknown. Lets compiled operations size buffers
+            without reading lengths from the device. Must not underestimate.
     """
 
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
@@ -72,6 +75,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _max_length: int | None
     _layout: Tensor
 
     # Constructors ############################################################
@@ -84,6 +88,7 @@ class VarLenTensor(Tensor):
         size: Sequence[int],
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
+        max_length: int | None = None,
     ) -> None:
         pass
 
@@ -95,6 +100,7 @@ class VarLenTensor(Tensor):
         size: Sequence[int],
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
+        max_length: int | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
         size = tuple(size)
@@ -222,6 +228,7 @@ class VarLenTensor(Tensor):
             size=size,
             stride=stride,
             storage_offset=storage_offset,
+            max_length=max_length,
             cls=None if "_make_var_len_tensor" in cls.__dict__ else cls,
         )
 
@@ -235,6 +242,7 @@ class VarLenTensor(Tensor):
         size: tuple[int, ...],
         stride: tuple[int, ...],
         storage_offset: int,
+        max_length: int | None,
         cls: type[VarLenTensor] | None = None,
     ) -> VarLenTensor:
         cls = VarLenTensor if cls is None else cls
@@ -250,6 +258,7 @@ class VarLenTensor(Tensor):
         out._data = data
         out._offset = offset
         out._valid = valid
+        out._max_length = max_length
         # Mirror size and stride in an empty tensor's shape so torch.compile
         # can make them symbolic. A tensor nested in another one, like a
         # categorical vocabulary, would otherwise keep its first traced size.
@@ -292,6 +301,7 @@ class VarLenTensor(Tensor):
             size=tensor.size(),
             stride=tensor.stride(),
             storage_offset=int(tensor.storage_offset()),
+            max_length=min(data.numel(), 1),  # Every entry has length 1.
         )
 
     @classmethod
@@ -566,7 +576,7 @@ class VarLenTensor(Tensor):
         attrs = ["_offset", "_data", "_layout"]
         if self._valid is not None:
             attrs.append("_valid")
-        return attrs, (self.__class__, self.storage_offset())
+        return attrs, (self.__class__, self.storage_offset(), self._max_length)
 
     @staticmethod
     def __tensor_unflatten__(
@@ -575,7 +585,7 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
-        cls, storage_offset = ctx
+        cls, storage_offset, max_length = ctx
         layout = inner_tensors["_layout"]
         out = cls(
             data=inner_tensors["_data"],
@@ -584,6 +594,7 @@ class VarLenTensor(Tensor):
             size=layout.size()[:-1],
             stride=layout.stride()[:-1],
             storage_offset=storage_offset,
+            max_length=max_length,
         )
         out._layout = layout
         return out
@@ -596,6 +607,7 @@ class VarLenTensor(Tensor):
             tuple(self.size()),
             tuple(self.stride()),
             int(self.storage_offset()),
+            self._max_length,
         )
         return (self.__class__, args)
 
@@ -740,6 +752,7 @@ def _alias(inp: VarLenTensor) -> VarLenTensor:
         size=inp.size(),
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
+        max_length=inp._max_length,
     )
 
 
@@ -849,6 +862,7 @@ def _to_dtype_layout(
         if memory_format == torch.preserve_format
         else None,
         storage_offset=0,
+        max_length=inp._max_length,
     )
 
 
@@ -958,6 +972,7 @@ def _detach(inp: VarLenTensor) -> VarLenTensor:
         size=inp.size(),
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
+        max_length=inp._max_length,
     )
 
 
@@ -976,6 +991,7 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
         size=inp.size(),
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
+        max_length=inp._max_length,
     )
 
 
@@ -1370,6 +1386,10 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     tensors = tuple(
         cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
     )
+    lengths = tuple(tensor._max_length for tensor in tensors)
+    max_length = (
+        None if None in lengths else max(cast(tuple[int, ...], lengths))
+    )
     data_list, offsets = zip(*(_data_offset(tensor) for tensor in tensors))
     valid: Tensor | None = None
     if any(tensor._valid is not None for tensor in tensors):
@@ -1411,7 +1431,13 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
     if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
         offset[-1] = storage_offset
-        return tensor_cls(data=data, offset=offset, valid=valid, size=size)
+        return tensor_cls(
+            data=data,
+            offset=offset,
+            valid=valid,
+            size=size,
+            max_length=max_length,
+        )
 
     end = torch.cat(end_views, dim=dim)
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
@@ -1419,7 +1445,13 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
     offset, index = _compact(start, end)
 
-    return tensor_cls(data=data[index], offset=offset, valid=valid, size=size)
+    return tensor_cls(
+        data=data[index],
+        offset=offset,
+        valid=valid,
+        size=size,
+        max_length=max_length,
+    )
 
 
 @VarLenTensor.implements(aten.stack.default)
@@ -1469,6 +1501,7 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
         size=view.size(),
         stride=view.stride(),
         storage_offset=0 if view.numel() == 0 else int(storage_offset),
+        max_length=inp._max_length,
     )
 
 
@@ -1558,4 +1591,5 @@ def _materialize(
         size=size,
         stride=stride,
         storage_offset=0,
+        max_length=inp._max_length,
     )

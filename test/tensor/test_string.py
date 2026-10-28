@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pickle
 from typing import cast
 
 import pyarrow as pa
@@ -159,6 +160,8 @@ def test_from_cudf_sliced_values() -> None:
     assert tensor._offset.equal(
         torch.tensor([0, 1, 3, 5, 5], device=tensor.device)
     )
+    # The bound covers the slice, rounded up to 2**k - 1 bytes.
+    assert tensor._max_length == 3
 
 
 @onlyCUDA
@@ -184,6 +187,7 @@ def test_from_cudf_all_empty_values() -> None:
     assert tensor.tolist() == ["", ""]
     assert tensor._data.numel() == 0
     assert tensor._offset.equal(torch.tensor([0, 0, 0], device=tensor.device))
+    assert tensor._max_length == 0
 
 
 @onlyCUDA
@@ -198,6 +202,7 @@ def test_from_cudf_empty_values() -> None:
     assert tensor.tolist() == []
     assert tensor._data.numel() == 0
     assert tensor._offset.equal(torch.tensor([0], device=tensor.device))
+    assert tensor._max_length == 0
 
 
 @pytest.mark.parametrize(
@@ -406,3 +411,54 @@ def test_registers_as_a_pytorch_buffer() -> None:
     module.register_buffer("value", tensor)
 
     assert tuple(module.buffers()) == (tensor,)
+
+
+@pytest.mark.parametrize(
+    ("length", "bound"),
+    [(0, 0), (1, 1), (3, 3), (4, 7), (127, 127), (128, 255)],
+)
+def test_bound_rounds_up(length: int, bound: int) -> None:
+    values = StringTensor.from_list(["a" * length, ""])
+    assert values._max_length == bound
+
+
+@withCUDA
+@pytest.mark.parametrize("bound", [None, 0, 15])
+def test_bound_provenance(
+    compilation: None,
+    device: torch.device,
+    bound: int | None,
+) -> None:
+    texts = ["", None] if bound == 0 else ["abcdefgh", "é"]
+    # A non-null Arrow slice shares storage with a longer, unreachable string.
+    array = pa.array(texts)
+    if bound == 15:
+        array = pa.array(["x" * 40, *texts]).slice(1)
+    values = StringTensor.from_arrow(array, device=device)
+    if bound is None:
+        values = StringTensor(
+            data=values._data,
+            offset=values._offset,
+            valid=values._valid,
+            size=values.size(),
+        )
+    compiled = torch.compile(lambda value: value.detach(), fullgraph=True)
+    for copied, expected in (
+        (values[:], texts),
+        (values[::2], texts[::2]),
+        (values[torch.tensor([1, 0], device=device)], texts[::-1]),
+        (values.clone(), texts),
+        (values.detach(), texts),
+        (values.to(device, copy=True), texts),
+        (compiled(values), texts),
+        (pickle.loads(pickle.dumps(values)), texts),
+    ):
+        copied = cast(StringTensor, copied)
+        assert copied._max_length == bound
+        assert copied.tolist() == expected
+    for suffix in ("", "x" * 16):
+        extra = StringTensor.from_list([suffix], device=device)
+        joined = cast(StringTensor, torch.cat((values, extra)))
+        new_bound = None if bound is None else max(bound, 31 if suffix else 0)
+        assert joined._max_length == new_bound
+        assert joined.tolist() == [*texts, suffix]

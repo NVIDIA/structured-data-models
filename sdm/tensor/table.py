@@ -300,6 +300,7 @@ class TableTensor(Tensor):
                 offset=torch.zeros(1, dtype=torch.int32, device=device),
                 valid=None,
                 size=(*size, 0),
+                max_length=0,
             )
         if id is None:
             id = ColumnarTensor((), size=size, device=device)

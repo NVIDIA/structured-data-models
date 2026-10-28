@@ -34,6 +34,9 @@ class StringTensor(VarLenTensor):
         size: The shape of the tensor.
         stride: The stride of the tensor.
         storage_offset: The offset into the logical ``offset`` storage.
+        max_length: Upper bound on the byte length of every stored string,
+            or :obj:`None` if unknown. Lets compiled operations size buffers
+            without reading lengths from the device. Must not underestimate.
     """
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
@@ -51,6 +54,7 @@ class StringTensor(VarLenTensor):
         size: tuple[int, ...],
         stride: tuple[int, ...],
         storage_offset: int,
+        max_length: int | None,
         cls: type[VarLenTensor] | None = None,
     ) -> VarLenTensor:
         return VarLenTensor._make_var_len_tensor(
@@ -60,6 +64,7 @@ class StringTensor(VarLenTensor):
             size=size,
             stride=stride,
             storage_offset=storage_offset,
+            max_length=max_length,
             cls=StringTensor if cls is None else cls,
         )
 
@@ -131,6 +136,10 @@ class StringTensor(VarLenTensor):
             valid=valid,
             size=size,
             storage_offset=storage_offset,
+            # Inspect CPU offsets before moving buffers.
+            max_length=_length_bound(
+                offset[storage_offset : storage_offset + len(array) + 1]
+            ),
         )
 
     @override
@@ -203,6 +212,7 @@ class StringTensor(VarLenTensor):
                 offset=torch.zeros(1, dtype=torch.int32, device=data.device),
                 valid=None,
                 size=size,
+                max_length=0,
             )
 
         offsets = column.children()[0]  # (base_size + 1,) INT32/INT64 values
@@ -228,6 +238,10 @@ class StringTensor(VarLenTensor):
             valid=valid,
             size=size,
             storage_offset=storage_offset,
+            # Reads one value from the device, once at ingestion.
+            max_length=_length_bound(
+                offset[storage_offset : storage_offset + len(ser) + 1]
+            ),
         )
 
     def to_cudf(self) -> cudf.Series:
@@ -546,3 +560,20 @@ def _sort(
             perm = torch.from_dlpack(perm_ser.astype("int64").to_cupy())
 
     return cast(StringTensor, inp[perm]), perm
+
+
+def _length_bound(offset: Tensor) -> int:
+    """Return an upper bound on the byte length of every stored string.
+
+    ``torch.compile`` treats the bound as a constant and compiles a separate
+    graph for each distinct value. Rounding the longest length up to the
+    next ``2**k - 1`` bytes (1, 3, 7, ..., 127, 255, ...) lets inputs with
+    similar lengths share one graph, at the cost of a bound up to about
+    twice the longest length. Pass only the offsets of the tensor's own
+    strings: views and copies of the tensor cannot reach other strings in
+    a shared buffer, so the bound stays valid for them.
+    """
+    lengths = offset[1:] - offset[:-1]
+    longest = int(lengths.max()) if lengths.numel() > 0 else 0
+    # The smallest 2**k - 1 that is at least `longest`:
+    return 2 ** longest.bit_length() - 1
