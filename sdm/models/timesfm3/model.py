@@ -311,18 +311,18 @@ class _TimesFM3(torch.nn.Module):
         # Refine forecast normalization statistics using predicted medians:
         if self.refinement and horizon > 0:
             median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
-            state = (  # Get context statistics:
-                mean[..., : first + 1, :],
-                std[..., : first + 1, :],
-                count[..., : first + 1, :],
+            state = (  # Get most recent context statistics:
+                mean[..., first : first + 1, :],
+                std[..., first : first + 1, :],
+                count[..., first : first + 1, :],
             )
 
-            means, stds = [state[0]], [state[1]]
+            means, stds = [], []
             for i in range(first, out.size(-3) - 1, O // P):
                 anchor = self.revin.inverse(  # Denormalize output patch:
                     median[..., i, :, :],
-                    mean=state[0][..., -1:, :],
-                    scale=state[1][..., -1:, :],
+                    mean=state[0],
+                    scale=state[1],
                 ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
 
                 for j in range(min(O // P, out.size(-3) - i - 1)):
@@ -335,8 +335,8 @@ class _TimesFM3(torch.nn.Module):
                     means.append(state[0])
                     stds.append(state[1])
 
-            mean = torch.cat(means, dim=-2)
-            std = torch.cat(stds, dim=-2)
+            mean = torch.cat([mean[..., : first + 1, :], *means], dim=-2)
+            std = torch.cat([std[..., : first + 1, :], *stds], dim=-2)
 
         out = self.revin.inverse(
             out,
