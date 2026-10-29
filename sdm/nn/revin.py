@@ -54,7 +54,8 @@ class RevIN(torch.nn.Module):
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
-            mask: Boolean observed-value mask with shape ``[..., R, D]``.
+            mask: Boolean mask with shape ``[..., R, D]``. Values marked
+                ``True`` are excluded.
             correction: Difference between the sample size and sample degrees
                 of freedom.
 
@@ -64,7 +65,7 @@ class RevIN(torch.nn.Module):
         """
         x = x.detach().double()
         if mask is not None:
-            x = x.masked_fill(~mask, torch.nan)
+            x = x.masked_fill(mask, torch.nan)
 
         mean = x.nanmean(dim=-1, keepdim=True)
         var = (x - mean).square().nanmean(dim=-1, keepdim=True)
@@ -93,8 +94,9 @@ class RevIN(torch.nn.Module):
 
         Args:
             x: Tensor with shape ``[..., R, D]``, where ``R`` is the number
-                of patches anaad ``D`` is the number of values per patch.
-            mask: Boolean observed-value mask with the same shape as ``x``.
+                of patches and ``D`` is the number of values per patch.
+            mask: Boolean mask with the same shape as ``x``. Values marked
+                ``True`` are excluded.
             correction: Degrees of freedom subtracted from the observed count.
                 The variance divisor is clamped to at least one.
             state: Previous count, mean, and standard deviation, each with
@@ -109,7 +111,7 @@ class RevIN(torch.nn.Module):
         """
         observed = ~x.isnan()
         if mask is not None:
-            observed = observed & mask
+            observed = observed & ~mask
         observed = observed.flatten(-2)
         values = x.flatten(-2).double().masked_fill(~observed, 0)
         count = observed.cumsum(dim=-1)

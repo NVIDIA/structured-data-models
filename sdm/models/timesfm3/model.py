@@ -278,7 +278,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        count, mean, std = self.revin.running_stats(x, ~mask, correction=0)
+        count, mean, std = self.revin.running_stats(x, mask, correction=0)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)

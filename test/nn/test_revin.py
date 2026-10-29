@@ -30,7 +30,7 @@ def test_revin(device: torch.device, affine_channels: int | None) -> None:
 @withCUDA
 def test_running_stats_update(device: torch.device) -> None:
     x = torch.tensor([[[1.0, 100.0, 2.0, 3.0]]], device=device)
-    mask = torch.tensor([[[True, False, True, True]]], device=device)
+    mask = torch.tensor([[[False, True, False, False]]], device=device)
     state = (
         torch.zeros(1, 1, 1, device=device, dtype=torch.int64),
         torch.zeros(1, 1, 1, device=device, dtype=torch.float64),
@@ -55,7 +55,7 @@ def test_running_stats_fully_masked(device: torch.device) -> None:
     mean = torch.tensor([[[2.0]]], device=device, dtype=torch.float64)
     std = torch.tensor([[[1.0]]], device=device, dtype=torch.float64)
     x = torch.tensor([[[100.0, 200.0]]], device=device)
-    mask = torch.zeros_like(x, dtype=torch.bool)
+    mask = torch.ones_like(x, dtype=torch.bool)
 
     actual = RevIN().running_stats(
         x=x,
@@ -72,7 +72,7 @@ def test_running_stats_fully_masked(device: torch.device) -> None:
 def test_running_stats(device: torch.device) -> None:
     x = torch.tensor([[[[1.0, 3.0], [5.0, 99.0], [7.0, 9.0]]]], device=device)
     mask = torch.tensor(
-        [[[[True, True], [True, False], [False, True]]]],
+        [[[[False, False], [False, True], [True, False]]]],
         device=device,
     )
 
