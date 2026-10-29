@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import abc
-from collections.abc import Iterator, Sequence
-from typing import ClassVar, Generic, Self, TypeVar
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from typing import Any, ClassVar, Generic, Protocol, Self, TypeVar
 
 import torch
 from torch import Tensor
@@ -12,6 +12,17 @@ from sdm import Recipe, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.tensor.mixin import DeviceMixin
+
+
+class _Execution(Protocol):
+    def _check_model_call(self, operation: str) -> None: ...
+    def _prepared_forward(
+        self, forward: Callable[..., Any], **kwargs: Any
+    ) -> Any: ...
+    def _run_core(
+        self, task: Any, model: torch.nn.Module, *args: Any, **kwargs: Any
+    ) -> Tensor: ...
+
 
 T = TypeVar("T", bound=Tensor | DeviceMixin)
 
@@ -30,6 +41,7 @@ class Model(torch.nn.Module, abc.ABC):
         super().__init__()
 
         self._cache: Cache | None = None
+        self._execution: _Execution | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
     @classmethod
@@ -39,7 +51,35 @@ class Model(torch.nn.Module, abc.ABC):
 
     def clear(self) -> None:
         r"""Clear any cached state."""
+        self._check_execution("clear")
         self._cache = None
+
+    def _check_execution(self, operation: str) -> None:
+        if self._execution is not None:
+            self._execution._check_model_call(operation)
+
+    def train(self, mode: bool = True) -> Self:
+        """Set training mode when no executor owns this model."""
+        self._check_execution("train")
+        return super().train(mode)
+
+    def _apply(
+        self, fn: Callable[[Tensor], Tensor], recurse: bool = True
+    ) -> Self:
+        self._check_execution("_apply")
+        return super()._apply(fn, recurse=recurse)
+
+    def load_state_dict(
+        self,
+        state_dict: Mapping[str, Any],
+        strict: bool = True,
+        assign: bool = False,
+    ) -> Any:
+        """Load weights when no executor owns this model."""
+        self._check_execution("load_state_dict")
+        return super().load_state_dict(
+            state_dict, strict=strict, assign=assign
+        )
 
     # Helpers #################################################################
 
@@ -60,6 +100,7 @@ class Model(torch.nn.Module, abc.ABC):
     # Python Builtins #########################################################
 
     def __getstate__(self) -> dict[str, object]:
+        self._check_execution("serialize")
         for stream in self._transfer_streams.values():
             stream.synchronize()
         state = super().__getstate__()
@@ -69,6 +110,7 @@ class Model(torch.nn.Module, abc.ABC):
     def __setstate__(self, state: dict[str, object]) -> None:
         super().__setstate__(state)
         self._transfer_streams = {}
+        self._execution = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

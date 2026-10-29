@@ -135,6 +135,7 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
+        self._check_execution("forward")
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
@@ -257,6 +258,7 @@ class ICLModel(Model):
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
+        self._check_execution("fit")
         if context_only_columns and not self.supports_context_only_columns:
             raise ValueError(
                 f"{self.__class__.__name__!r} does not support context-only "
@@ -321,7 +323,7 @@ class ICLModel(Model):
                     class_values=class_values[batch],
                     categorical_mask=categorical_mask,
                 )
-                self._forward(
+                self._call_prepared(
                     x_context=context.x,
                     y_context=context.y,
                     x_query=None,
@@ -374,6 +376,7 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        self._check_execution("predict")
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -525,6 +528,11 @@ class ICLModel(Model):
         """
 
     # Helpers #################################################################
+
+    def _call_prepared(self, **kwargs: Any) -> TableTensor:
+        if self._execution is not None:
+            return self._execution._prepared_forward(self._forward, **kwargs)
+        return self._forward(**kwargs)
 
     def _forward_members(
         self,
