@@ -141,8 +141,6 @@ class RevIN(torch.nn.Module):
     def forward(self, x: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
         """The forward pass.
 
-        Mean and scale are converted to the input dtype.
-
         Args:
             x: Tensor with shape ``[..., R, D]``.
             mean: The mean with shape ``[..., R, *]``.
@@ -156,8 +154,6 @@ class RevIN(torch.nn.Module):
 
     def inverse(self, x: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
         """Invert the forward pass.
-
-        Mean and scale are converted to the input dtype.
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
