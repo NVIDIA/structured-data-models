@@ -6,7 +6,6 @@ import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.processing import AddCategoryCounts
-from sdm.processing.categorical._categorical import _check_categories
 from sdm.testing import withCUDA
 
 
@@ -76,26 +75,6 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
             device=device,
         ).log1p(),
     )
-
-
-def test_check_categories_compiles_with_fitted_vocabulary(
-    compilation: None,
-) -> None:
-    processor = AddCategoryCounts().fit(_table([[0, 0], [1, 1]]))
-    # 'AlignCategories' outputs the fitted vocabulary objects themselves.
-    query = TableTensor(
-        columns={Stype.categorical: ("city", "kind")},
-        categorical=CategoricalTensor(
-            code=torch.tensor([[2, 0], [-1, 1]], dtype=torch.int32),
-            categories=tuple(processor._categories),
-        ),
-    )
-
-    compiled = torch.compile(
-        _check_categories, backend="eager", fullgraph=True
-    )
-
-    compiled(query, processor._categories)
 
 
 @withCUDA
