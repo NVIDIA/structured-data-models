@@ -76,6 +76,7 @@ class MonotoneQuantiles(torch.nn.Module):
         inc = self.width_factor * self.width.to(x) * F.softplus(x)
         up = inc[..., m + 1 :].cumsum(-1)
         down = inc[..., :m].flip(-1).cumsum(-1).flip(-1)
+
         return torch.cat([median - down, median, median + up], dim=-1)
 
 
