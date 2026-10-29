@@ -1094,6 +1094,7 @@ def test_permute_entries(
     assert actual.device == expected.device
     assert actual.data_offset[1].dtype == expected.data_offset[1].dtype
     assert actual.data_offset[1].diff().equal(expected.data_offset[1].diff())
+    assert not actual._data[actual._offset[-1] :].any()
 
 
 def test_permute_entries_skewed_lengths() -> None:
@@ -1114,32 +1115,12 @@ def test_permute_entries_long_and_short(
     # Mostly long entries, mixed with short, empty and null ones; the last
     # entry ends at the end of the payload.
     values = StringTensor.from_arrow(
-        pa.array(["a" * 41, "bc", None, "", "é" * 59 + "z"])
-    )
-    assert values._valid is not None
-    values = StringTensor(
-        data=values._data.to(device),
-        offset=values._offset.to(device),
-        valid=values._valid.to(device),
-        size=values.shape,
+        pa.array(["a" * 41, "bc", None, "", "é" * 59 + "z"]), device=device
     )
     index = torch.tensor(perm, device=device)
     actual = _permute_entries(values, index)
     assert actual.tolist() == values[index].tolist()
     assert actual._data.numel() == values._data.numel()
-    assert not actual._data[actual._offset[-1] :].any()
-
-
-def test_permute_entries_bool_payload() -> None:
-    values = VarLenTensor(
-        data=torch.tensor([True, False, True, True]),
-        offset=torch.tensor([0, 1, 4]),
-        valid=None,
-        size=(2,),
-    )
-    actual = _permute_entries(values, torch.tensor([1, 0]))
-    assert actual.dtype == torch.bool
-    assert actual.tolist() == [[False, True, True], [True]]
 
 
 def test_permute_entries_fullgraph(compilation: None) -> None:
@@ -1167,26 +1148,31 @@ def test_permute_entries_meta() -> None:
     assert actual.valid.shape == perm.shape
 
 
-@pytest.mark.parametrize("empty", [False, True])
-def test_permute_entries_empty_payload(empty: bool) -> None:
-    values = StringTensor.from_arrow(
-        pa.array([], type=pa.string()) if empty else pa.array(["", None, ""])
-    )
-    perm = torch.tensor([] if empty else [2, 0, 1], dtype=torch.int64)
-    actual = _permute_entries(values, perm)
-    assert actual.tolist() == values[perm].tolist()
-    assert actual._max_length == 0
-
-
-def test_permute_entries_null_payload() -> None:
-    values = StringTensor(
-        data=torch.tensor([97, 255, 98], dtype=torch.uint8),
-        offset=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
-        valid=torch.tensor([True, False, True]),
-        size=(3,),
-    )
-    perm = torch.tensor([1, 2, 0])
-    actual = _permute_entries(values, perm)
-    assert actual.tolist() == values[perm].tolist()
-    assert actual._max_length is None
-    assert actual.data_offset[1].diff().tolist() == [1, 1, 1]
+def test_permute_entries_payloads() -> None:
+    cases = [
+        # Boolean payload.
+        VarLenTensor(
+            data=torch.tensor([True, False, True, True]),
+            offset=torch.tensor([0, 1, 4]),
+            valid=None,
+            size=(2,),
+        ),
+        # A null slot holding a byte, and no length bound.
+        StringTensor(
+            data=torch.tensor([97, 255, 98], dtype=torch.uint8),
+            offset=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
+            valid=torch.tensor([True, False, True]),
+            size=(3,),
+        ),
+        # Empty strings with an empty buffer, and no entries at all.
+        StringTensor.from_arrow(pa.array(["", None, ""])),
+        StringTensor.from_arrow(pa.array([], type=pa.string())),
+    ]
+    for values in cases:
+        perm = torch.arange(values.numel()).roll(1)
+        expected = cast(VarLenTensor, values[perm])
+        actual = _permute_entries(values, perm)
+        assert actual.dtype == values.dtype
+        assert actual.tolist() == expected.tolist()
+        assert actual.data_offset[1].equal(expected.data_offset[1])
+        assert actual._max_length == values._max_length

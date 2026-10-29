@@ -1603,6 +1603,11 @@ def _permute_entries(inp: VarLenTensor, perm: Tensor) -> VarLenTensor:
     A permutation of a view with nonzero stride selects at most the bytes of
     its backing storage, so the output keeps that static capacity regardless
     of individual entry lengths. Bytes after the final offset are zero.
+
+    Eager CUDA copies in tiles, which needs one host read of entry counts;
+    compiled code searches each element's entry, which Inductor fuses into
+    one kernel. A single tiled path for both was 2.7x slower eager on 1M
+    URLs and used up to 2.9x the memory, so the two paths stay separate.
     """
     if inp.stride(0) == 0:
         return cast(VarLenTensor, inp[perm])
