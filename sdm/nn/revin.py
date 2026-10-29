@@ -41,9 +41,9 @@ class RevIN(torch.nn.Module):
                 torch.zeros(affine_channels, 1, **factory_kwargs)
             )
 
+    @staticmethod
     @torch.no_grad()
     def stats(
-        self,
         x: Tensor,  # [..., R, D]
         mask: Tensor | None = None,  # [..., R, D]
         correction: int = 1,
@@ -78,9 +78,9 @@ class RevIN(torch.nn.Module):
         mask = mean.isnan()
         return mean.masked_fill(mask, 0.0), std.masked_fill(mask, 1.0)
 
+    @staticmethod
     @torch.no_grad()
     def running_stats(
-        self,
         x: Tensor,  # [..., R, D]
         mask: Tensor | None = None,  # [..., R, D]
         state: tuple[Tensor, Tensor, Tensor] | None = None,

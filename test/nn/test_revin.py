@@ -14,12 +14,10 @@ from sdm.testing import withCUDA
 @pytest.mark.parametrize("affine_channels", [None, 2])
 def test_revin(device: torch.device, affine_channels: int | None) -> None:
     norm = RevIN(affine_channels, device=device)
-    x = torch.randn(2, 3, 2, 8, device=device)
+    x = torch.randn(2, 3, 2, 8, dtype=torch.double, device=device)
     mean, std = norm.stats(x)
-    torch.testing.assert_close(mean, x.double().mean(dim=-1, keepdim=True))
-    torch.testing.assert_close(
-        std, x.double().std(dim=-1, correction=1, keepdim=True)
-    )
+    torch.testing.assert_close(mean, x.mean(dim=-1, keepdim=True))
+    torch.testing.assert_close(std, x.std(dim=-1, correction=1, keepdim=True))
 
     out = norm(x, mean, std)
     expected = (x - mean.to(x.dtype)) / (std.to(x.dtype) + norm.eps)
@@ -37,7 +35,7 @@ def test_running_stats_update(device: torch.device) -> None:
         torch.zeros(1, 1, 1, device=device, dtype=torch.int64),
     )
 
-    mean, std, count = RevIN().running_stats(
+    mean, std, count = RevIN.running_stats(
         x=x,
         mask=mask,
         correction=0,
@@ -57,7 +55,7 @@ def test_running_stats_fully_masked(device: torch.device) -> None:
     x = torch.tensor([[[100.0, 200.0]]], device=device)
     mask = torch.ones_like(x, dtype=torch.bool)
 
-    actual = RevIN().running_stats(
+    actual = RevIN.running_stats(
         x=x,
         mask=mask,
         correction=0,
@@ -76,7 +74,7 @@ def test_running_stats(device: torch.device) -> None:
         device=device,
     )
 
-    mean, std, count = RevIN().running_stats(x, mask, correction=0)
+    mean, std, count = RevIN.running_stats(x, mask, correction=0)
 
     torch.testing.assert_close(count, count.new_tensor([[[[2], [3], [4]]]]))
     torch.testing.assert_close(
