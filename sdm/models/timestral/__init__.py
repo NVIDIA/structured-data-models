@@ -3,4 +3,6 @@
 
 """Timestral."""
 
-__all__ = []
+__all__ = [
+    "Timestral",
+]

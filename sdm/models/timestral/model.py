@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# ruff: noqa: D205
+
 from __future__ import annotations
 
 import json
@@ -25,46 +27,23 @@ from sdm.models.base import ICLModel
 from sdm.models.timestral.config import LAYER_KIND_AXES, _TimestralConfig
 from sdm.models.timestral.decode import _Decoder, _ffill_with_mask
 from sdm.models.timestral.encoding import _encode_categories
-from sdm.models.timestral.network import _TimestralModel
 
-_REVISIONS = {
-    "5M": "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f",
-    "28M": "180698bbf5a50dda3516aa6419798437fb03a430",
-    "123M": "5a147287addda85f6acd8da3fb8858fe9af7e8f7",
-    "209M": "9874d252ab0aae16f7f7c999f98f98d6ad7d8365",
-}
-_LEVELS = (0.01, 0.05, *[i / 100 for i in range(10, 95, 5)], 0.95, 0.99)
+_LEVELS = (0.01, *[i / 100 for i in range(5, 100, 5)], 0.99)
 
 
 class Timestral(ICLModel):
-    """Multivariate quantile forecasting with Timestral.
-
-    See `Timestral <https://github.com/mistralai/timestral>`_.
-
-    Rows are ordered time steps. Target columns are forecast jointly. Features
-    present in the query are known-future covariates; other features are
-    historical covariates. Categorical features use target encoding for one
-    target and category indices for multiple targets. Missing categories
-    form their own category. Encoding learns from the context only. The
-    default recipe aligns category dictionaries while preserving unseen values.
-
-    Returns 21 numerical columns per target, named ``<target>__q1`` through
-    ``<target>__q99`` at the checkpoint's quantile levels. Missing numerical
-    values are allowed. The most recent 32,768 context steps are used; horizons
-    beyond 1,024 steps use median feedback. The default forecast includes sign
-    averaging and clipping to zero for nonnegative target histories.
-
-    Derived from upstream revision
-    ``a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff``. Pretrained weights use
-    `Modified MIT license <https://huggingface.co/mistralai/Timestral-5M/
-    blob/main/LICENSE>`_
-    terms, including a company revenue restriction.
+    r"""The time series forecasting foundation model from the
+    `"Timestral" <https://arxiv.org/abs/2610.37585>`__ paper.
 
     Args:
-        model_size: Released checkpoint size.
-        pretrained: Whether to load pretrained weights.
-        accept_license: Accept the weights license without a prompt.
-        device: The device.
+        size: The model size, one of ``"small"``, ``"medium"``, or
+            ``"large"``. Defaults to ``"large"``.
+        pretrained: Whether to load pretrained checkpoints.
+        accept_license: Whether to accept the `Modified MIT License
+            <https://huggingface.co/mistralai/Timestral-209M/blob/main/
+            LICENSE>`__ without showing the interactive license prompt.
+        device: The device for model parameters. If ``None``, uses PyTorch's
+            default device.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -79,17 +58,41 @@ class Timestral(ICLModel):
 
     def __init__(
         self,
-        model_size: Literal["5M", "28M", "123M", "209M"] = "5M",
+        size: Literal["tiny", "small", "medium", "large"] = "large",
         pretrained: bool = True,
         accept_license: bool = False,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=Task.regression)
-        repo = f"mistralai/Timestral-{model_size}"
-        revision = _REVISIONS[model_size]
+
+        self.model = _Timestral(device="meta" if pretrained else device)
+
         if pretrained:
+            self._load_from_pretrained(size, accept_license, device=device)
+
+        self.eval()
+
+    @classmethod
+    def default_recipe(cls) -> Recipe:
+        r""":meta private:"""  # noqa: D415
+        return Recipe()
+
+    def _load_from_pretrained(
+        self,
+        size: Literal["tiny", "small", "medium", "large"],
+        device: torch.device | str | None,
+    ) -> Timestral:
+        device = torch.get_default_device() if device is None else device
+
+        model_size, revision = {
+                "tiny": ("5M", "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f"),
+                "small": ("28M", "180698bbf5a50dda3516aa6419798437fb03a430"),
+                "medium": ("123M", "5a147287addda85f6acd8da3fb8858fe9af7e8f7"),
+                "large": ("209M", "9874d252ab0aae16f7f7c999f98f98d6ad7d8365"),
+        }[size]
+
             config_path = download_checkpoint(
-                repo_id=repo,
+                repo_id= f"mistralai/Timestral-{model_size}",
                 filename="config.json",
                 revision=revision,
             )
@@ -273,6 +276,12 @@ class Timestral(ICLModel):
         else:
             categorical = codes.float().masked_fill(codes < 0, torch.nan)
         return torch.cat([numeric, categorical], dim=1)
+
+
+class _TimestralModel(torch.nn.Module):
+    def __init__(self, config: _TimestralConfig) -> None:
+        super().__init__()
+        self.config = config
 
 
 def _remap_checkpoint(
