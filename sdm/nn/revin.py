@@ -49,7 +49,8 @@ class RevIN(torch.nn.Module):
     ) -> tuple[Tensor, Tensor]:  # [..., R, 1]
         """Compute mean and standard deviation over the final dimension.
 
-        NaNs and masked values are excluded.
+        NaNs and masked values are excluded. Mean and standard deviation
+        are computed and returned in float64.
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
@@ -58,9 +59,10 @@ class RevIN(torch.nn.Module):
                 of freedom.
 
         Returns:
-            Mean and standard deviation with shape ``[..., R, 1]``.
+            Mean and standard deviation with shape ``[..., R, 1]`` and
+            dtype ``torch.float64``.
         """
-        x = x.detach()
+        x = x.detach().double()
         if mask is not None:
             x = x.masked_fill(~mask, torch.nan)
 
@@ -68,7 +70,7 @@ class RevIN(torch.nn.Module):
         var = (x - mean).square().nanmean(dim=-1, keepdim=True)
         if correction != 0:
             count = (~x.isnan()).sum(dim=-1, keepdim=True)
-            var = var * (count / (count - correction).clamp(min=1))
+            var = var * (count.double() / (count - correction).clamp(min=1))
         std = var.sqrt()
 
         mask = mean.isnan()
@@ -91,7 +93,7 @@ class RevIN(torch.nn.Module):
 
         Args:
             x: Tensor with shape ``[..., R, D]``, where ``R`` is the number
-                of patches and ``D`` is the number of values per patch.
+                of patches anaad ``D`` is the number of values per patch.
             mask: Boolean observed-value mask with the same shape as ``x``.
             correction: Degrees of freedom subtracted from the observed count.
                 The variance divisor is clamped to at least one.
