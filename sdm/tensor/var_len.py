@@ -71,6 +71,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _layout: Tensor
 
     # Constructors ############################################################
 
@@ -248,6 +249,12 @@ class VarLenTensor(Tensor):
         out._data = data
         out._offset = offset
         out._valid = valid
+        # Mirror size and stride in an empty tensor's shape so torch.compile
+        # can make them symbolic. A tensor nested in another one, like a
+        # categorical vocabulary, would otherwise keep its first traced size.
+        out._layout = offset.new_empty_strided(
+            size=(*size, 0), stride=(*stride, 1), dtype=torch.uint8
+        )
         return out
 
     @classmethod
@@ -555,16 +562,10 @@ class VarLenTensor(Tensor):
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         # Offsets first avoid a torch.compile symbolic-shape check failure.
-        attrs = ["_offset", "_data"]
+        attrs = ["_offset", "_data", "_layout"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (
-            self.__class__,
-            self.storage_offset(),
-            tuple(self.size()),
-            tuple(self.stride()),
-        )
-        return attrs, ctx
+        return attrs, (self.__class__, self.storage_offset())
 
     @staticmethod
     def __tensor_unflatten__(
@@ -573,15 +574,18 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
-        cls, storage_offset, _, _ = ctx
-        return cls(
+        cls, storage_offset = ctx
+        layout = inner_tensors["_layout"]
+        out = cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             valid=inner_tensors.get("_valid"),
-            size=outer_size,
-            stride=outer_stride,
+            size=layout.size()[:-1],
+            stride=layout.stride()[:-1],
             storage_offset=storage_offset,
         )
+        out._layout = layout
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
