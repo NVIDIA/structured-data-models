@@ -21,7 +21,7 @@ from sdm.tensor.io import (
     combine_arrow_chunks,
     to_arrow,
 )
-from sdm.tensor.mixin import _record_stream_op
+from sdm.tensor.mixin import _record_compiled_stream
 
 aten = torch.ops.aten
 
@@ -634,7 +634,7 @@ class VarLenTensor(Tensor):
                 return handler(*args, **(kwargs or {}))
 
         if str(func) == "streams.record_stream.default":
-            return _record_stream_op(func, *args, **(kwargs or {}))
+            return _record_compiled_stream(func, *args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"

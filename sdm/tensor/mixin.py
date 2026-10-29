@@ -124,11 +124,11 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
     return device
 
 
-def _record_stream_op(
+def _record_compiled_stream(
     op: Callable[[Tensor, int], None], tensor: Any, stream_index: int
 ) -> None:
-    # Dynamo represents streams as graph-owned indices. Forward the builtin
-    # operation to backing tensors without resolving the stream in Python.
+    """Forward compiled stream recording to each backing tensor."""
+    # Keep Dynamo's stream index opaque instead of resolving it in Python.
     attrs, _ = tensor.__tensor_flatten__()
     for name in attrs:
         op(getattr(tensor, name), stream_index)
