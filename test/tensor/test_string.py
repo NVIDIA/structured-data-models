@@ -450,12 +450,15 @@ def test_bound_provenance(
         (values.clone(), texts),
         (values.detach(), texts),
         (values.to(device, copy=True), texts),
-        (compiled(values), texts),
         (pickle.loads(pickle.dumps(values)), texts),
     ):
         copied = cast(StringTensor, copied)
         assert copied._max_length == bound
         assert copied.tolist() == expected
+    # Compiled outputs carry no bound, so new bounds do not recompile.
+    compiled_values = cast(StringTensor, compiled(values))
+    assert compiled_values._max_length is None
+    assert compiled_values.tolist() == texts
     for suffix in ("", "x" * 16):
         extra = StringTensor.from_list([suffix], device=device)
         joined = cast(StringTensor, torch.cat((values, extra)))

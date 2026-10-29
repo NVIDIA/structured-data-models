@@ -35,8 +35,9 @@ class StringTensor(VarLenTensor):
         stride: The stride of the tensor.
         storage_offset: The offset into the logical ``offset`` storage.
         max_length: Upper bound on the byte length of every stored string,
-            or :obj:`None` if unknown. Lets compiled operations size buffers
+            or :obj:`None` if unknown. Lets eager operations size buffers
             without reading lengths from the device. Must not underestimate.
+            Compiled tensor operations see :obj:`None` and never recompile.
     """
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.

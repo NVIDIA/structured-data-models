@@ -63,8 +63,9 @@ class VarLenTensor(Tensor):
         stride: The stride of the tensor.
         storage_offset: The offset into the logical ``offset`` storage.
         max_length: Upper bound on the length of every stored entry, or
-            :obj:`None` if unknown. Lets compiled operations size buffers
+            :obj:`None` if unknown. Lets eager operations size buffers
             without reading lengths from the device. Must not underestimate.
+            Compiled tensor operations see :obj:`None` and never recompile.
     """
 
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
@@ -576,7 +577,9 @@ class VarLenTensor(Tensor):
         attrs = ["_offset", "_data", "_layout"]
         if self._valid is not None:
             attrs.append("_valid")
-        return attrs, (self.__class__, self.storage_offset(), self._max_length)
+        # The length bound stays eager: compiled operations see ``None``.
+        # As context, each new query bound would compile another graph.
+        return attrs, (self.__class__, self.storage_offset())
 
     @staticmethod
     def __tensor_unflatten__(
@@ -585,7 +588,7 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
-        cls, storage_offset, max_length = ctx
+        cls, storage_offset = ctx
         layout = inner_tensors["_layout"]
         out = cls(
             data=inner_tensors["_data"],
@@ -594,7 +597,6 @@ class VarLenTensor(Tensor):
             size=layout.size()[:-1],
             stride=layout.stride()[:-1],
             storage_offset=storage_offset,
-            max_length=max_length,
         )
         out._layout = layout
         return out
