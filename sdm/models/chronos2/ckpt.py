@@ -6,15 +6,7 @@ import torch
 from torch import Tensor
 
 
-def remap_ckpt(
-    ckpt: dict[str, Tensor], dtype: torch.dtype | None = None
-) -> dict[str, Tensor]:
-    """Map the released Chronos-2 checkpoint to SDM components.
-
-    Args:
-        ckpt: Upstream model state dictionary.
-        dtype: Parameter dtype. RoPE frequencies remain in float32.
-    """
+def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
     out = {"reg_token": ckpt["shared.weight"][1:2]}
     for source, target in (
         ("input_patch_embedding", "patch_embedding"),
@@ -51,15 +43,9 @@ def remap_ckpt(
         out[f"{target}.1.weight"] = ckpt[f"{prefix}.2.mlp.wi.weight"]
         out[f"{target}.3.weight"] = ckpt[f"{prefix}.2.mlp.wo.weight"]
     out["icl_block.norm.weight"] = ckpt["encoder.final_layer_norm.weight"]
-    if dtype is not None:
-        out = {key: value.to(dtype) for key, value in out.items()}
 
-    inv_freq = 1.0 / (
-        10_000
-        ** (
-            torch.arange(0, 64, 2, device=out["reg_token"].device).float() / 64
-        )
-    )
+    freq = torch.arange(0, 64, 2, device=out["reg_token"].device).float()
+    inv_freq = 1.0 / (10_000 ** (freq / 64))
     for layer in range(12):
         for transform in ("query_transform", "key_transform"):
             key = f"icl_block.time_blocks.{layer}.attn.{transform}.inv_freq"
