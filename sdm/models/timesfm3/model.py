@@ -305,9 +305,7 @@ class _TimesFM3(torch.nn.Module):
 
         x = self.patch_embedding(x)  # [..., C, N, D]
         out = self.icl_block(x, patch_mask=patch_mask)  # [..., C, N, O * Q]
-        # Restore forecasts in float32 under mixed precision.
-        out = out.float()
-        out = out.unflatten(-1, (self.output_patch_size, -1))
+        out = out.unflatten(-1, (self.output_patch_size, -1)).float()
         first = mid // P - 1
 
         # Refine forecast normalization statistics using predicted medians:
