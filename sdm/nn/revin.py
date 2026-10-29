@@ -106,20 +106,28 @@ class RevIN(torch.nn.Module):
         """
         D = x.size(-1)
         mask = x.isnan() if mask is None else x.isnan() | mask
-        mask = mask.flatten(-2)  # [..., R * D]
-        x = x.flatten(-2).double().masked_fill(mask, 0)  # [..., R * D]
-        count = (~mask).cumsum(dim=-1)
-        mean = x.cumsum(dim=-1) / count.clamp(min=1)
+        x = x.masked_fill(mask, 0).double()
 
-        # Welford increments accumulate squared deviations over time.
-        prev = torch.nn.functional.pad(mean[..., :-1], (1, 0))
-        inc = ((x - prev) * (x - mean)).masked_fill(mask, 0)
-        m2 = inc.cumsum(dim=-1)
+        if x.size(-2) == 1:
+            count = (~mask).sum(dim=-1, keepdim=True)
+            mean = x.sum(dim=-1, keepdim=True) / count.clamp(min=1)
+            m2 = (x - mean).square()
+            m2 = m2.masked_fill(mask, 0).sum(dim=-1, keepdim=True)
+        else:
+            mask = mask.flatten(-2)  # [..., R * D]
+            x = x.flatten(-2)  # [..., R * D]
+            count = (~mask).cumsum(dim=-1)
+            mean = x.cumsum(dim=-1) / count.clamp(min=1)
 
-        # Keep statistics at the final value of each patch.
-        count = count[..., D - 1 :: D].unsqueeze(-1).clone()
-        mean = mean[..., D - 1 :: D].unsqueeze(-1).clone()
-        m2 = m2[..., D - 1 :: D].unsqueeze(-1)
+            # Welford increments accumulate squared deviations over time.
+            prev = torch.nn.functional.pad(mean[..., :-1], (1, 0))
+            inc = ((x - prev) * (x - mean)).masked_fill(mask, 0)
+            m2 = inc.cumsum(dim=-1)
+
+            # Keep statistics at the final value of each patch.
+            count = count[..., D - 1 :: D].unsqueeze(-1).clone()
+            mean = mean[..., D - 1 :: D].unsqueeze(-1).clone()
+            m2 = m2[..., D - 1 :: D].unsqueeze(-1)
 
         if state is not None:
             state_mean, state_std, state_count = state
