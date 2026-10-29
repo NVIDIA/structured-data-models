@@ -125,11 +125,7 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
 
 
 def _record_compiled_stream(tensor: Any, stream_index: int) -> None:
-    """Keep each stored tensor's memory alive while the stream uses it.
-
-    Capturing ``record_stream()`` inside a compiled graph requires PyTorch 2.12
-    or later.
-    """
+    """Keep each stored tensor's memory alive while the stream uses it."""
     tensor_names, _ = tensor.__tensor_flatten__()
     for tensor_name in tensor_names:
         stored_tensor = getattr(tensor, tensor_name)
