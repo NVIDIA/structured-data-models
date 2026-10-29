@@ -328,7 +328,8 @@ class _KumoForecast(torch.nn.Module):
         return self.decode(encoded, mean, scale)
 
     def decode(self, encoded: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
-        return self.revin.inverse(self.head(encoded.flatten(-2)), mean, scale)
+        out = self.head(encoded.flatten(-2)).float()
+        return self.revin.inverse(out, mean, scale)
 
     def encode_memory(
         self,

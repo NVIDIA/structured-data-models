@@ -117,8 +117,8 @@ class RevIN(torch.nn.Module):
         m2 = inc.cumsum(dim=-1)
 
         # Keep statistics at the final value of each patch.
-        count = count[..., D - 1 :: D].unsqueeze(-1)
-        mean = mean[..., D - 1 :: D].unsqueeze(-1)
+        count = count[..., D - 1 :: D].unsqueeze(-1).clone()
+        mean = mean[..., D - 1 :: D].unsqueeze(-1).clone()
         m2 = m2[..., D - 1 :: D].unsqueeze(-1)
 
         if state is not None:
