@@ -32,12 +32,12 @@ def test_running_stats_update(device: torch.device) -> None:
     x = torch.tensor([[[1.0, 100.0, 2.0, 3.0]]], device=device)
     mask = torch.tensor([[[False, True, False, False]]], device=device)
     state = (
+        torch.zeros(1, 1, 1, device=device, dtype=torch.float64),
+        torch.zeros(1, 1, 1, device=device, dtype=torch.float64),
         torch.zeros(1, 1, 1, device=device, dtype=torch.int64),
-        torch.zeros(1, 1, 1, device=device, dtype=torch.float64),
-        torch.zeros(1, 1, 1, device=device, dtype=torch.float64),
     )
 
-    count, mean, std = RevIN().running_stats(
+    mean, std, count = RevIN().running_stats(
         x=x,
         mask=mask,
         correction=0,
@@ -61,10 +61,10 @@ def test_running_stats_fully_masked(device: torch.device) -> None:
         x=x,
         mask=mask,
         correction=0,
-        state=(count, mean, std),
+        state=(mean, std, count),
     )
 
-    for output, expected in zip(actual, (count, mean, std)):
+    for output, expected in zip(actual, (mean, std, count)):
         torch.testing.assert_close(output, expected)
 
 
@@ -76,7 +76,7 @@ def test_running_stats(device: torch.device) -> None:
         device=device,
     )
 
-    count, mean, std = RevIN().running_stats(x, mask, correction=0)
+    mean, std, count = RevIN().running_stats(x, mask, correction=0)
 
     torch.testing.assert_close(count, count.new_tensor([[[[2], [3], [4]]]]))
     torch.testing.assert_close(

@@ -278,7 +278,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        count, mean, std = self.revin.running_stats(x, mask, correction=0)
+        mean, std, count = self.revin.running_stats(x, mask, correction=0)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)
@@ -313,9 +313,9 @@ class _TimesFM3(torch.nn.Module):
             median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
             # Get most recent context statistics:
             state = (
-                count[..., first : first + 1, :],
                 mean[..., first : first + 1, :],
                 std[..., first : first + 1, :],
+                count[..., first : first + 1, :],
             )
 
             means = [mean[..., : first + 1, :]]
@@ -323,8 +323,8 @@ class _TimesFM3(torch.nn.Module):
             for i in range(first, out.size(-3) - 1, O // P):
                 anchor = self.revin.inverse(  # Denormalize output patch:
                     median[..., i, :, :],
-                    mean=state[1],
-                    scale=state[2],
+                    mean=state[0],
+                    scale=state[1],
                 ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
 
                 for j in range(min(O // P, out.size(-3) - i - 1)):
@@ -334,8 +334,8 @@ class _TimesFM3(torch.nn.Module):
                         correction=0,
                         state=state,
                     )
-                    means.append(state[1])
-                    stds.append(state[2])
+                    means.append(state[0])
+                    stds.append(state[1])
 
             mean = torch.cat(means, dim=-2)
             std = torch.cat(stds, dim=-2)

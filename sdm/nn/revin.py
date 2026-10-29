@@ -99,13 +99,13 @@ class RevIN(torch.nn.Module):
                 ``True`` are excluded.
             correction: Degrees of freedom subtracted from the observed count.
                 The variance divisor is clamped to at least one.
-            state: Previous count, mean, and standard deviation, each with
+            state: Previous mean, standard deviation, and count, each with
                 shape ``[..., 1, 1]``, to continue accumulation. Use the
                 final patch returned by a previous call with the same
                 ``correction``. If ``None``, start without observations.
 
         Returns:
-            Cumulative observed count, mean, and standard deviation, each
+            Cumulative mean, standard deviation, and observed count, each
             with shape ``[..., R, 1]``. Counts have dtype ``torch.int64``;
             means and standard deviations have dtype ``torch.float64``.
         """
@@ -131,7 +131,7 @@ class RevIN(torch.nn.Module):
         mean = mean[..., end].unsqueeze(-1)
         m2 = m2[..., end].unsqueeze(-1)
         if state is not None:
-            state_count, state_mean, state_std = state
+            state_mean, state_std, state_count = state
             total_count = state_count + count
             weight = count.double() / total_count.clamp(min=1)
             delta = mean - state_mean
@@ -143,7 +143,7 @@ class RevIN(torch.nn.Module):
             mean = state_mean + delta * weight
             count = total_count
         std = (m2 / (count - correction).clamp(min=1)).clamp(min=0).sqrt()
-        return count, mean, std
+        return mean, std, count
 
     def forward(self, x: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
         """The forward pass.
