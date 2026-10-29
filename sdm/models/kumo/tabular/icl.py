@@ -97,21 +97,19 @@ class ICLBlock(torch.nn.Module):
                 )
 
                 if cache is not None and cache.is_recording:
-                    x, (key, value) = result
-                    kv_heads = self.kv_heads
-                    if kv_heads is not None and kv_heads < key.size(-2):
-                        key, value = _copy_key_value(
-                            key=key[..., :kv_heads, :],
-                            value=value[..., :kv_heads, :],
-                        )
-                    cache[cache_key] = KVCacheEntry(key, value)
-                    del key, value
+                    x, entry = result
+                    cache[cache_key] = (
+                        entry.select_heads(self.kv_heads)
+                        if self.kv_heads is not None
+                        else entry
+                    )
+                    del entry
                 else:
                     x = result
                 del result
                 continue
 
-            x_context, (key, value) = layer(
+            x_context, entry = layer(
                 query=x[..., :0, :] if last_layer else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
                 return_key_value=True,
@@ -121,11 +119,8 @@ class ICLBlock(torch.nn.Module):
                 if last_layer
                 else x[..., :R_train, :],
             )
-            key_value = KVCacheEntry(
-                key=key[..., : self.kv_heads, :].contiguous(),
-                value=value[..., : self.kv_heads, :].contiguous(),
-            )
-            del key, value
+            key_value = entry.select_heads(self.kv_heads)
+            del entry
             x_query = layer(
                 query=x[..., R_train:, :],
                 key_value=key_value,
@@ -137,16 +132,3 @@ class ICLBlock(torch.nn.Module):
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
-
-
-def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
-    return (
-        key.clone(memory_format=torch.contiguous_format),
-        value.clone(memory_format=torch.contiguous_format),
-    )
-
-
-# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
-if hasattr(torch.compiler, "nested_compile_region"):
-    # Compile cache copies separately to free each layer's full K/V tensors.
-    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)
