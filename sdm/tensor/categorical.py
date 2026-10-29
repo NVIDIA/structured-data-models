@@ -465,7 +465,7 @@ class CategoricalTensor(Tensor):
             return handler(*args, **(kwargs or {}))
 
         if str(func) == "streams.record_stream.default":
-            return _record_compiled_stream(func, *args, **(kwargs or {}))
+            return _record_compiled_stream(*args, **(kwargs or {}))
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._code, args)

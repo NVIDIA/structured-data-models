@@ -634,7 +634,7 @@ class VarLenTensor(Tensor):
                 return handler(*args, **(kwargs or {}))
 
         if str(func) == "streams.record_stream.default":
-            return _record_compiled_stream(func, *args, **(kwargs or {}))
+            return _record_compiled_stream(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"

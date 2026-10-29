@@ -124,11 +124,9 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
     return device
 
 
-def _record_compiled_stream(
-    op: Callable[[Tensor, int], None], tensor: Any, stream_index: int
-) -> None:
-    """Forward compiled stream recording to each backing tensor."""
-    # Keep Dynamo's stream index opaque instead of resolving it in Python.
-    attrs, _ = tensor.__tensor_flatten__()
-    for name in attrs:
-        op(getattr(tensor, name), stream_index)
+def _record_compiled_stream(tensor: Any, stream_index: int) -> None:
+    """Keep each stored tensor's memory alive while the stream uses it."""
+    tensor_names, _ = tensor.__tensor_flatten__()
+    for tensor_name in tensor_names:
+        stored_tensor = getattr(tensor, tensor_name)
+        torch.ops.streams.record_stream.default(stored_tensor, stream_index)
