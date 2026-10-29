@@ -143,8 +143,8 @@ class RevIN(torch.nn.Module):
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
-            mean: The mean with shape ``[..., R, *]``.
-            scale: The scale with shape ``[..., R, *]``.
+            mean: The mean with shape ``[..., R, 1]``.
+            scale: The scale with shape ``[..., R, 1]``.
         """
         mean, scale = mean.to(x.dtype), scale.to(x.dtype)
         out = (x - mean) / (scale + self.eps)
@@ -157,8 +157,8 @@ class RevIN(torch.nn.Module):
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
-            mean: The mean with shape ``[..., R, *]``.
-            scale: The scale with shape ``[..., R, *]``.
+            mean: The mean with shape ``[..., R, 1]``.
+            scale: The scale with shape ``[..., R, 1]``.
         """
         mean, scale = mean.to(x.dtype), scale.to(x.dtype)
         if self.weight is not None and self.bias is not None:
