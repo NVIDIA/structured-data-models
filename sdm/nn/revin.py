@@ -106,7 +106,7 @@ class RevIN(torch.nn.Module):
         """
         D = x.size(-1)
         mask = x.isnan() if mask is None else x.isnan() | mask
-        x = x.double().masked_fill(mask, 0)
+        x = x.masked_fill(mask, 0).double()
 
         if x.size(-2) == 1:
             count = (~mask).sum(dim=-1, keepdim=True)
