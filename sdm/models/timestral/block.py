@@ -4,14 +4,80 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: D101
+# ruff: noqa: D101, D102
 
+from collections.abc import Sequence
 from typing import Any
 
 import torch
-from torch.nn import Linear, Sequential, Sigmoid
+import torch.nn.functional as F
+from torch import Tensor
+from torch.nn import Linear, Sequential, Sigmoid, SiLU
 
 from sdm.nn import RMSNorm, RotaryEmbedding, SwiGLU, TransformerBlock
+
+
+class ResidualBlock(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        bias: bool = True,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.mlp = Sequential(
+            Linear(in_channels, hidden_channels, bias, **factory_kwargs),
+            SiLU(),
+            Linear(hidden_channels, out_channels, bias, **factory_kwargs),
+        )
+        self.res = Linear(in_channels, out_channels, bias, **factory_kwargs)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.mlp(x) + self.res(x)
+
+
+class MonotoneQuantiles(torch.nn.Module):
+    width: Tensor
+
+    def __init__(
+        self,
+        levels: Sequence[float],
+        width_factor: float = 3.0,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.width_factor = width_factor
+        self.median_index = list(levels).index(0.5)
+
+        widths = [
+            levels[i + 1] - levels[i]
+            if i < self.median_index
+            else levels[i] - levels[i - 1]
+            if i > self.median_index
+            else 0.0
+            for i in range(len(levels))
+        ]
+        self.register_buffer(
+            "width",
+            torch.tensor(widths, device=device, dtype=dtype),
+            persistent=False,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        m = self.median_index
+        median = x[..., m : m + 1]
+
+        inc = self.width_factor * self.width.to(x) * F.softplus(x)
+        up = inc[..., m + 1 :].cumsum(-1)
+        down = inc[..., :m].flip(-1).cumsum(-1).flip(-1)
+
+        return torch.cat([median - down, median, median + up], dim=-1)
 
 
 class TimestralTransformerBlock(TransformerBlock):
