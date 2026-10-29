@@ -27,13 +27,6 @@ from torch.fx.experimental.symbolic_shapes import statically_known_true
 from sdm.cache import Cache
 
 
-def _num_codes(num_classes: int, max_classes: int) -> int:
-    return max(
-        math.ceil(num_classes / (max_classes - 1)),
-        4 * math.ceil(math.log(num_classes, max_classes)),
-    )
-
-
 class ECOC(torch.nn.Module):
     """Extend a classifier with `error-correcting output codes <https://arxiv.org/abs/cs/9501101>`_.
 
@@ -233,7 +226,11 @@ class ECOC(torch.nn.Module):
         generator: torch.Generator | None,
     ) -> Tensor:
         rest_idx = self.max_classes - 1
-        num_codes = _num_codes(num_classes, self.max_classes)
+        num_codes = max(
+            # Give every class its own output in at least one task.
+            math.ceil(num_classes / rest_idx),
+            4 * math.ceil(math.log(num_classes, self.max_classes)),
+        )
         # Bound the quadratic distance search for large targets.
         num_draws = 50 if num_classes <= 200 else 1
         codebook = torch.full(
@@ -281,14 +278,11 @@ class ECOC(torch.nn.Module):
         return codebook.index_select(0, score.argmax().view(1)).squeeze(0)
 
 
-torch.library.define(
+@torch.library.custom_op(
     "sdm::ecoc_codebooks",
-    "(Tensor reference, SymInt num_classes, int max_classes, "
-    "SymInt num_members) -> Tensor",
+    mutates_args=(),
     tags=(torch.Tag.nondeterministic_seeded,),
 )
-
-
 def _draw_codebooks(
     reference: Tensor,
     num_classes: int,
@@ -299,10 +293,9 @@ def _draw_codebooks(
     # only sampling opaque preserves eager RNG consumption, including no draws
     # within capacity, while the model and score reduction remain traceable.
     if num_classes <= max_classes:
-        return (
-            torch.arange(num_classes, device=reference.device)
-            .expand(num_members, 1, num_classes)
-            .clone()
+        # Unused by the within-capacity branch; sampling must consume no RNG.
+        return reference.new_empty(
+            (num_members, 1, num_classes), dtype=torch.long
         )
     ecoc = ECOC(max_classes)
     return torch.stack(
@@ -313,24 +306,14 @@ def _draw_codebooks(
     )
 
 
-torch.library.impl("sdm::ecoc_codebooks", "default", _draw_codebooks)
-
-
-@torch.library.register_fake("sdm::ecoc_codebooks")
+@_draw_codebooks.register_fake
 def _draw_codebooks_fake(
     reference: Tensor,
     num_classes: int,
     max_classes: int,
     num_members: int,
 ) -> Tensor:
-    if isinstance(num_classes, int):
-        num_codes = (
-            1
-            if num_classes <= max_classes
-            else _num_codes(num_classes, max_classes)
-        )
-    else:
-        num_codes = torch.library.get_ctx().new_dynamic_size(min=1)
+    num_codes = torch.library.get_ctx().new_dynamic_size(min=1)
     return reference.new_empty(
         (num_members, num_codes, num_classes), dtype=torch.long
     )
