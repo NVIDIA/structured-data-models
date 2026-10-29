@@ -20,7 +20,7 @@ from sdm.models.timestral.scaler import (
     _denormalize_quantiles,
     _instance_norm_stats,
 )
-from sdm.nn import CausalPatchNorm, MonotoneQuantiles, ResidualMLP
+from sdm.nn import MonotoneQuantiles, ResidualMLP, RevIN
 
 ROLE_TARGET = 0
 ROLE_PAST_COV = 1
@@ -86,7 +86,7 @@ class _TimestralModel(nn.Module):
         super().__init__()
         self.config = config
         c = config
-        self.norm = CausalPatchNorm(c.patch_size, c.minimum_scale, c.use_asinh)
+        self.norm = RevIN(eps=0)
         self.representation = _PatchRepresentation(c.patch_size, c.d_model)
         self.transformer = ICLBlock(
             channels=c.d_model,
@@ -100,7 +100,25 @@ class _TimestralModel(nn.Module):
     def scale(
         self, inputs: Tensor, observed: Tensor
     ) -> tuple[Tensor, Tensor, Tensor]:
-        return self.norm(inputs, observed)
+        x = inputs.unflatten(-1, (-1, self.config.patch_size))
+        mask = ~observed.unflatten(-1, (-1, self.config.patch_size))
+        mean, scale, _ = self.norm.running_stats(x, mask, correction=1)
+        mean = mean.to(inputs.dtype)
+        scale = scale.clamp_min(self.config.minimum_scale).to(inputs.dtype)
+
+        dtype = torch.promote_types(inputs.dtype, torch.float32)
+        out = self.norm(
+            x=x.to(dtype),
+            mean=mean,
+            scale=scale.to(dtype).clamp_min(torch.finfo(dtype).eps),
+        ).masked_fill(mask, 0)
+        if self.config.use_asinh:
+            out = out.asinh()
+        return (
+            out.flatten(-2).to(inputs.dtype),
+            mean.expand_as(x).flatten(-2),
+            scale.expand_as(x).flatten(-2),
+        )
 
     def _known_cov_scaling(
         self,

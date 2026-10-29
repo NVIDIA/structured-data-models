@@ -11,7 +11,6 @@ from sdm.nn.quantile import MonotoneQuantiles
 from sdm.nn.softplus import SoftplusScale
 from sdm.nn.rms_norm import RMSNorm
 from sdm.nn.revin import RevIN
-from sdm.nn.causal_norm import CausalPatchNorm
 from sdm.nn.scaling import QueryScaling, QASSMax, LogScale, GatedLogScale
 from sdm.nn.attention import SDPA, Attention, TransformerBlock
 from sdm.nn.set_transformer import InducedTransformerBlock
@@ -26,7 +25,6 @@ __all__ = [
     "SoftplusScale",
     "RMSNorm",
     "RevIN",
-    "CausalPatchNorm",
     "QueryScaling",
     "QASSMax",
     "LogScale",

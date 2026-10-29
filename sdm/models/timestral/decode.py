@@ -122,8 +122,13 @@ class _Decoder:
             inputs.masked_fill(not_obs, float("inf")).amin(-1, keepdim=True),
             posinf=0.0,
         )
-        _, scale = self.model.norm.stats(inputs, observation_mask)
-        anchor_scale = scale[..., -1:] * self.quantile_real_cap_k
+        _, scale, _ = self.model.norm.running_stats(
+            x=inputs.unsqueeze(-2),
+            mask=not_obs.unsqueeze(-2),
+            correction=1,
+        )
+        scale = scale.squeeze(-2).clamp_min(self.config.minimum_scale)
+        anchor_scale = scale.to(inputs.dtype) * self.quantile_real_cap_k
         return quantiles.clamp(
             (ctx_min - anchor_scale).unsqueeze(-1),
             (ctx_max + anchor_scale).unsqueeze(-1),
