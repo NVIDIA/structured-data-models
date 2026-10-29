@@ -3,6 +3,7 @@
 
 import os
 
+import torch
 from torch import Tensor
 
 from sdm import TableTensor
@@ -24,11 +25,17 @@ def _check_categorical_codes(table: TableTensor) -> None:
     categorical = table.categorical
     for index, category in enumerate(_iter_categories(categorical)):
         codes = categorical.code[..., index]
-        if (codes >= category.numel()).any():
-            raise ValueError(
-                f"Categorical column {columns[index]!r} contains a code "
-                "outside its category vocabulary."
+        message = (
+            f"Categorical column {columns[index]!r} contains a code "
+            "outside its category vocabulary."
+        )
+        if torch.compiler.is_compiling():
+            torch._assert_async(
+                _check_category_code_bounds(codes, category.numel(), message),
+                message,
             )
+        elif (codes >= category.numel()).any():
+            raise ValueError(message)
 
 
 def _check_categories(
@@ -61,3 +68,19 @@ def _check_categories(
                 "Use 'AlignCategories' before this processor for "
                 "independently tensorized inputs."
             )
+
+
+@torch.library.custom_op("sdm::check_category_code_bounds", mutates_args=())
+def _check_category_code_bounds(
+    codes: Tensor, num_categories: int, message: str
+) -> Tensor:
+    if (codes >= num_categories).any():
+        raise ValueError(message)
+    return torch.ones((), dtype=torch.bool, device="cpu")
+
+
+@_check_category_code_bounds.register_fake
+def _check_category_code_bounds_fake(
+    codes: Tensor, num_categories: int, message: str
+) -> Tensor:
+    return torch.empty((), dtype=torch.bool, device="cpu")
