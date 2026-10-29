@@ -71,7 +71,7 @@ def _advancing_block_frames(
     sinh_median: Tensor,
     minimum_scale: float,
 ) -> tuple[Tensor, Tensor]:
-    _, n_pred, ps = sinh_median.shape
+    n_pred = sinh_median.size(-2)
     state = RevIN.running_stats(
         x=context.unsqueeze(-2),
         mask=~observation_mask.unsqueeze(-2),

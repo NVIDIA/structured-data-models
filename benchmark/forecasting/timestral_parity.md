@@ -27,6 +27,12 @@ Scaled error is `abs(actual - reference) / (1 + abs(reference))`. The long-horiz
 
 Only 5M was checked against pretrained weights. The 28M, 123M, and 209M variants use pinned configurations and checkpoint loading but have not been parity-tested. Parity is scoped to float32; lower precision is unvalidated.
 
+## Shared normalization
+
+Timestral uses `RevIN.running_stats(correction=1)` for causal context normalization and advancing forecast statistics, and `RevIN.stats(correction=0)` for known-future covariates. The model keeps its scale floor, binary-covariate handling, missing-value replacement, and `asinh` transform. The separate `CausalPatchNorm` module and private Welford implementations have been removed.
+
+After merging main at `50ff254e8`, all 15 cases pass again through public `forward` and fitted `predict`, using the same pinned upstream source and 5M checkpoint. CPU passes `atol=rtol=2e-5`; CUDA passes `atol=rtol=1e-4`. For horizons up to 65 steps, maximum absolute errors are `3.24e-5` on CPU and `2.19e-5` on CUDA. For the 1,030-step horizon, maximum scaled errors are `1.81e-5` on CPU and `1.91e-5` on CUDA; maximum absolute errors are `0.0801` and `0.0671`, respectively. The runtime measurements below predate this normalization change.
+
 The integration needs no upstream package at runtime. Optional pretrained pytest comparisons skip when upstream or cached 5M weights are unavailable. The ordinary public-contract and neural-block tests use random weights and run offline. SDM represents categorical values with category indices; for multivariate targets those indices become the raw numerical covariates, matching upstream when supplied the same codes.
 
 The default recipe uses `AlignCategories(min_frequency=0, unknown="append")` to align independently tensorized vocabularies. Context codes and unused dictionary entries are retained; new query categories are appended to the returned vocabulary without changing fitted state. Numeric vocabularies use tensor lookups; string vocabularies use SDM's batched relational join, with cuDF on CUDA when installed and the existing CPU fallback otherwise. Forecast tensor execution and target encoding stay on the input device.
