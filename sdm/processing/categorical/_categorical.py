@@ -53,6 +53,10 @@ def _check_categories(
     for index, (actual, expected) in enumerate(
         zip(_iter_categories(categorical), categories)
     ):
+        # 'AlignCategories' outputs the fitted vocabulary objects themselves,
+        # so skip the comparison, which compiled code cannot evaluate.
+        if actual is expected:
+            continue
         expected = expected.to(device=actual.device)
         if not actual.equal(expected):
             raise ValueError(
