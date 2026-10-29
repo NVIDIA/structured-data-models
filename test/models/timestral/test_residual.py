@@ -3,13 +3,13 @@
 
 import torch
 
-from sdm.nn import ResidualMLP
+from sdm.models.timestral.block import ResidualBlock
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_residual_mlp(device: torch.device) -> None:
-    model = ResidualMLP(3, 7, 5, device=device)
+def test_residual_block(device: torch.device) -> None:
+    model = ResidualBlock(3, 7, 5, device=device)
     x = torch.randn(2, 4, 3, device=device, requires_grad=True)
     out = model(x)
     assert out.size() == (2, 4, 5)

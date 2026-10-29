@@ -5,6 +5,7 @@
 import torch
 from torch import Tensor, nn
 
+from sdm.models.timestral.block import MonotoneQuantiles, ResidualBlock
 from sdm.models.timestral.config import _TimestralConfig
 from sdm.models.timestral.icl import ICLBlock
 from sdm.models.timestral.masks import (
@@ -20,7 +21,7 @@ from sdm.models.timestral.scaler import (
     _denormalize_quantiles,
     _instance_norm_stats,
 )
-from sdm.nn import MonotoneQuantiles, ResidualMLP, RevIN
+from sdm.nn import RevIN
 
 ROLE_TARGET = 0
 ROLE_PAST_COV = 1
@@ -31,7 +32,7 @@ class _PatchRepresentation(nn.Module):
     def __init__(self, patch_size: int, d_model: int) -> None:
         super().__init__()
         self.patch_size = patch_size
-        self.patch_proj = ResidualMLP(
+        self.patch_proj = ResidualBlock(
             in_channels=2 * patch_size,
             hidden_channels=4 * d_model,
             out_channels=d_model,
@@ -45,7 +46,7 @@ class _PatchRepresentation(nn.Module):
         values = scaled.reshape(r, n, self.patch_size)
         missing = (~observed).reshape(r, n, self.patch_size).to(scaled.dtype)
         x = torch.cat([values, missing], dim=-1).to(
-            self.patch_proj.hidden_lin.weight.dtype
+            self.patch_proj.mlp[0].weight.dtype
         )
         return self.patch_proj(x)
 
@@ -61,7 +62,7 @@ class _QuantileHead(nn.Module):
         )
         self.patch_size = config.patch_size
         self.num_quantiles = config.num_quantiles
-        self.projection = ResidualMLP(
+        self.projection = ResidualBlock(
             in_channels=config.d_model,
             hidden_channels=4 * config.d_model,
             out_channels=config.patch_size * config.num_quantiles,

@@ -3,7 +3,7 @@
 
 import torch
 
-from sdm.nn import MonotoneQuantiles
+from sdm.models.timestral.block import MonotoneQuantiles
 from sdm.testing import withCUDA
 
 

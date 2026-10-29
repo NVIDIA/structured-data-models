@@ -303,9 +303,9 @@ def _remap_checkpoint(
     column_every = config.column_every
     for key, value in state.items():
         key = (
-            key.replace("hidden_layer", "hidden_lin")
-            .replace("output_layer", "out_lin")
-            .replace("residual_layer", "residual_lin")
+            key.replace("hidden_layer", "mlp.0")
+            .replace("output_layer", "mlp.2")
+            .replace("residual_layer", "res")
         )
         if ".wQKV." in key:
             # Upstream interleaves heads within each head channel.
