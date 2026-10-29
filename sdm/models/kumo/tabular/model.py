@@ -112,6 +112,7 @@ class KumoTabular(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    supports_offload: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -180,6 +181,7 @@ class KumoTabular(ICLModel):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        offload: Literal["cpu"] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -214,6 +216,7 @@ class KumoTabular(ICLModel):
                 y=y,
                 categorical_mask=categorical_mask,
                 cache=cache,
+                offload=offload,
             )
             return TableTensor(
                 columns={
@@ -231,6 +234,7 @@ class KumoTabular(ICLModel):
             cache=cache,
             generator=generator,
             categorical_mask=categorical_mask,
+            offload=offload,
         )
         if cache is not None and cache.is_replaying:
             columns = cast(tuple[str, ...], cache["class_columns"])
@@ -304,8 +308,15 @@ class _KumoTabular(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y, categorical_mask, cache=cache)
+        x = self.row_embedding(
+            x,
+            y,
+            categorical_mask,
+            cache=cache,
+            offload=offload,
+        )
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
 

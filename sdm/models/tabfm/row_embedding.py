@@ -17,7 +17,7 @@
 
 # ruff: noqa: D101, D102
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor
@@ -31,6 +31,7 @@ from torch.nn import (
     Sequential,
 )
 
+from sdm._token_buffer import TokenBuffer, add_labels, run_column_layers
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabfm.block import TabFMTransformerBlock
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -142,6 +143,7 @@ class RowEmbedding(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
         *B, R, C = x.size()
@@ -149,32 +151,123 @@ class RowEmbedding(torch.nn.Module):
         K = self.readout_token.size(-2)
         D = self.channels
 
-        buffer: Tensor | None = None
-        if torch.is_grad_enabled():
-            x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
-        else:
-            buffer = torch.empty(
-                (*B, R, K + C, D),
-                device=x.device,
-                dtype=torch.get_autocast_dtype(x.device.type)
-                if torch.is_autocast_enabled(x.device.type)
-                else x.dtype,
-            )
-            buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
-            x = self.cell_embedding(
-                x,
-                categorical_mask,
-                batch_size_limit="auto",
-                out=buffer[..., K:, :],
-            )
-
+        y_emb: Tensor | None = None  # [..., R_train, D]
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
+                y_emb = self.y_emb(y)
             else:
                 assert self.y_mlp is not None
-                y_emb = self.y_mlp(y.unsqueeze(-1)).unsqueeze(-2)
-            x[..., :R_train, :, :] += y_emb.to(x.dtype)
+                y_emb = self.y_mlp(y.unsqueeze(-1))
+
+        if torch.is_grad_enabled():
+            if offload is not None:
+                raise RuntimeError(
+                    "'offload' is only supported when gradients are disabled"
+                )
+            return self._forward_autograd(
+                x=x,
+                y_emb=y_emb,
+                categorical_mask=categorical_mask,
+                train_size=R_train,
+                cache=cache,
+            )
+
+        buffer = TokenBuffer(
+            (*B, R, K + C, D),
+            dtype=torch.get_autocast_dtype(x.device.type)
+            if torch.is_autocast_enabled(x.device.type)
+            else x.dtype,
+            device=x.device,
+            offload=offload,
+        )
+
+        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
+            tokens[..., :K, :] = self.readout_token.to(tokens.dtype)
+            self.cell_embedding(
+                x[..., rows, :],
+                categorical_mask,
+                batch_size_limit="auto",
+                out=tokens[..., K:, :],
+            )
+            if y_emb is not None:
+                add_labels(tokens[..., K:, :], y_emb, rows)
+
+        with buffer:
+            buffer.rows(embed, load=False)
+            y_emb = None
+
+            readout = buffer.readout(K)  # [..., R, K, D]
+            for i, (col_layers, col_proj, row_layers, row_norm) in enumerate(
+                zip(
+                    self.col_blocks,
+                    self.col_projections,
+                    self.row_blocks,
+                    self.row_norms,
+                )
+            ):
+                # Later repeats also attend over readout tokens column-wise.
+                run_column_layers(
+                    buffer,
+                    [
+                        (f"row_embedding.col_layer{i}.{j}", col_layer)
+                        for j, col_layer in enumerate(col_layers)
+                    ],
+                    tokens=slice(K if i == 0 else 0, K + C),
+                    key_rows=[slice(R_train)] * len(col_layers),
+                    cache=cache,
+                    epilogue=lambda cells, col_proj=col_proj: cells.copy_(
+                        col_proj(cells)
+                    ),
+                )
+
+                last = i == len(self.row_blocks) - 1
+
+                def update(
+                    tokens: Tensor,  # [..., N, K + C, D]
+                    rows: slice,
+                    row_layers: ModuleList = row_layers,
+                    row_norm: torch.nn.Module = row_norm,
+                    last: bool = last,
+                ) -> None:
+                    x = tokens
+                    for j, row_layer in enumerate(row_layers):
+                        if last and j == len(row_layers) - 1:
+                            x = row_layer(
+                                query=x[..., :K, :],
+                                key_value=x,
+                                batch_size_limit="auto",
+                                out=readout[..., rows, :, :],
+                            )
+                        else:
+                            x = row_layer(
+                                query=x,
+                                key_value=x,
+                                batch_size_limit="auto",
+                                out=x,
+                            )
+                    x.copy_(row_norm(x))
+
+                buffer.rows(update, store=not last)
+
+        return readout.flatten(-2)
+
+    def _forward_autograd(
+        self,
+        x: Tensor,  # [..., R, C]
+        y_emb: Tensor | None,  # [..., R_train, D]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        train_size: int,
+        cache: Cache | None,
+    ) -> Tensor:  # [..., R, K * D]
+        *B, R, _ = x.size()
+        R_train = train_size
+        K = self.readout_token.size(-2)
+        D = self.channels
+
+        x = self.cell_embedding(x, categorical_mask)  # [..., R, C, D]
+        if y_emb is not None:
+            x[..., :R_train, :, :] += y_emb.unsqueeze(-2).to(x.dtype)
 
         for i, (col_layers, col_proj, row_layers, row_norm) in enumerate(
             zip(
@@ -195,7 +288,6 @@ class RowEmbedding(torch.nn.Module):
                     else x[..., :R_train, :],
                     return_key_value=cache is not None and cache.is_recording,
                     batch_size_limit="auto",
-                    out=None if buffer is None else x,
                 )  # [..., C, R, D]
 
                 if cache is not None and cache.is_recording:
@@ -204,21 +296,17 @@ class RowEmbedding(torch.nn.Module):
                     x = result
                 del result
 
-            if buffer is None:
-                x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
-                if i == 0:  # Prepend readout tokens before row-wise attention.
-                    x = torch.cat(
-                        [
-                            self.readout_token.to(x.dtype)
-                            .view(*(1,) * len(B), 1, K, D)
-                            .expand(*B, R, K, D),
-                            x,  # [..., R, C, D]
-                        ],
-                        dim=-2,
-                    )  # [..., R, K + C, D]
-            else:
-                x.copy_(col_proj(x))  # NOTE Double peak memory.
-                x = buffer  # [..., R, K + C, D]
+            x = col_proj(x.transpose(-2, -3))  # [..., R, C, D]
+            if i == 0:  # Prepend readout tokens before row-wise attention.
+                x = torch.cat(
+                    [
+                        self.readout_token.to(x.dtype)
+                        .view(*(1,) * len(B), 1, K, D)
+                        .expand(*B, R, K, D),
+                        x,  # [..., R, C, D]
+                    ],
+                    dim=-2,
+                )  # [..., R, K + C, D]
 
             # Row-wise attention (B * R as the batch axis).
             for j, row_layer in enumerate(row_layers):
@@ -230,12 +318,8 @@ class RowEmbedding(torch.nn.Module):
                     query=query,  # [..., R, K + C, D] or [..., R, K, D]
                     key_value=x,  # [..., R, K + C, D]
                     batch_size_limit="auto",
-                    out=None if buffer is None else query,
                 )  # [..., R, K + C, D] or [..., R, K, D]
 
-            if buffer is None:
-                x = row_norm(x)
-            else:
-                x.copy_(row_norm(x))  # NOTE Double peak memory.
+            x = row_norm(x)
 
         return x.flatten(-2)

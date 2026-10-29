@@ -7,12 +7,13 @@
 # ruff: noqa: D101, D102
 
 import math
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, ModuleList, Parameter
 
+from sdm._token_buffer import TokenBuffer, add_labels, run_column_layers
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
@@ -104,18 +105,41 @@ class RowEmbedding(torch.nn.Module):
         num_classes: int | None = None,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
+        offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R, K * D]
+        if offload is not None and train_mask is not None:
+            raise ValueError("'offload' does not support 'train_mask'")
+
         *B, R, C = x.size()
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
-        train_mask: Any = slice(R_train) if train_mask is None else train_mask
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
         index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
-        x = x[..., index]  # [..., R, C, G]
+
+        # Context rows each column layer attends to:
+        key_rows: list[Any] = []
+        if cache is None or not cache.is_replaying:
+            rows = slice(R_train) if train_mask is None else train_mask
+            for _ in self.col_layers:
+                if max_keys is None or R_train <= max_keys:
+                    key_rows.append(rows)
+                    continue
+                perm = torch.randperm(
+                    R_train,
+                    device=x.device,
+                    generator=generator,
+                )[:max_keys]
+                key_rows.append(
+                    perm
+                    if train_mask is None
+                    else train_mask.nonzero().squeeze(-1)[perm]
+                )
+        else:
+            key_rows = [None] * len(self.col_layers)
 
         num_digits = 1
         if (
@@ -128,63 +152,130 @@ class RowEmbedding(torch.nn.Module):
             if y.numel() > 0:
                 y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
 
-        buffer: Tensor | None = None
-        if torch.is_grad_enabled():
-            x = self.lin(x)  # [..., R, C, D]
-            if num_digits > 1:
-                if y.numel() > 0:
-                    x = x.repeat(num_digits, *(1,) * x.dim())
-                else:
-                    x = x.expand(num_digits, *x.size())
-        else:
-            buffer = torch.empty(
-                ((num_digits,) if num_digits > 1 else ())
-                + (*x.size()[:-3], R, K + C, D),
-                device=x.device,
-                dtype=torch.get_autocast_dtype(x.device.type)
-                if torch.is_autocast_enabled(x.device.type)
-                else x.dtype,
-            )
-            if num_digits > 1:
-                self.lin(x, out=buffer[0, ..., K:, :])
-                buffer[1:, ..., K:, :] = buffer[:1, ..., K:, :]
-                x = buffer[..., K:, :]
-            else:
-                x = self.lin(x, out=buffer[..., K:, :])  # [..., R, C, D]
-
+        y_emb: Tensor | None = None  # [..., R_train, D]
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
+                y_emb = self.y_emb(y)
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
+                y_emb = self.y_lin(y.unsqueeze(-1))
 
-            x[..., train_mask, :, :] += y_emb.to(x.dtype)
+        if torch.is_grad_enabled():
+            if offload is not None:
+                raise RuntimeError(
+                    "'offload' is only supported when gradients are disabled"
+                )
+            return self._forward_autograd(
+                x=x[..., index],
+                y_emb=y_emb,
+                train_mask=slice(R_train)
+                if train_mask is None
+                else train_mask,
+                key_rows=key_rows,
+                num_digits=num_digits,
+                cache=cache,
+            )
+
+        buffer = TokenBuffer(
+            ((num_digits,) if num_digits > 1 else ()) + (*B, R, K + C, D),
+            dtype=torch.get_autocast_dtype(x.device.type)
+            if torch.is_autocast_enabled(x.device.type)
+            else x.dtype,
+            device=x.device,
+            offload=offload,
+        )
+
+        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
+            cells = tokens[..., K:, :]
+            if num_digits > 1:
+                self.lin(x[..., rows, :][..., index], out=cells[0])
+                cells[1:] = cells[:1]
+            else:
+                self.lin(x[..., rows, :][..., index], out=cells)
+            if y_emb is None:
+                return
+            if train_mask is None:
+                add_labels(cells, y_emb, rows)
+            else:
+                cells[..., train_mask, :, :] += y_emb.unsqueeze(-2).to(
+                    cells.dtype
+                )
+
+        with buffer:
+            buffer.rows(embed, load=False)
+            y_emb = None
+
+            run_column_layers(
+                buffer,
+                [
+                    (f"row_embedding.col_layer{i}", col_layer)
+                    for i, col_layer in enumerate(self.col_layers)
+                ],
+                tokens=slice(K, K + C),
+                key_rows=key_rows,
+                cache=cache,
+            )
+
+        if num_digits > 1:  # Average over mixed-radix digits.
+            buffer = TokenBuffer.from_tensor(buffer.tensor.mean(dim=0))
+
+        with buffer:
+            readout = buffer.readout(K)  # [..., R, K, D]
+
+            def update(
+                tokens: Tensor,  # [..., N, K + C, D]
+                rows: slice,
+            ) -> None:
+                tokens[..., :K, :] = self.readout_token.to(tokens.dtype)
+                for i, row_layer in enumerate(self.row_layers):
+                    last = i == len(self.row_layers) - 1
+                    row_layer(
+                        query=tokens[..., :K, :] if last else tokens,
+                        key_value=tokens,  # [..., N, K + C, D]
+                        batch_size_limit="auto",
+                        out=readout[..., rows, :, :] if last else tokens,
+                    )
+
+            buffer.rows(update, store=False)
+
+        return self.norm(readout).view(*B, R, K * D)  # [..., R, K * D]
+
+    def _forward_autograd(
+        self,
+        x: Tensor,  # [..., R, C, G]
+        y_emb: Tensor | None,  # [..., R_train, D]
+        *,
+        train_mask: Any,
+        key_rows: list[Any],
+        num_digits: int,
+        cache: Cache | None,
+    ) -> Tensor:  # [..., R, K * D]
+        *B, R, _, _ = x.size()
+        D = self.lin.out_features
+        K = self.readout_token.size(-2)
+
+        x = self.lin(x)  # [..., R, C, D]
+        if num_digits > 1:
+            if y_emb is not None:
+                x = x.repeat(num_digits, *(1,) * x.dim())
+            else:
+                x = x.expand(num_digits, *x.size())
+
+        if y_emb is not None:
+            x[..., train_mask, :, :] += y_emb.unsqueeze(-2).to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis).
         x = x.transpose(-2, -3)  # [..., C, R, D]
-        for i, col_layer in enumerate(self.col_layers):
+        for i, (col_layer, rows) in enumerate(zip(self.col_layers, key_rows)):
             key = f"row_embedding.col_layer{i}"
-            if cache is not None and cache.is_replaying:
-                key_value = cast(KVCacheEntry, cache[key])
-            else:
-                key_value = x[..., train_mask, :]
-                if max_keys is not None and key_value.size(-2) > max_keys:
-                    index = torch.randperm(
-                        key_value.size(-2),
-                        device=key_value.device,
-                        generator=generator,
-                    )[:max_keys]
-                    key_value = key_value[..., index, :]
-
             result = col_layer(
                 query=x,  # [..., C, R, D]
-                key_value=key_value,  # [..., C, R_train, D]
+                key_value=cast(KVCacheEntry, cache[key])
+                if cache is not None and cache.is_replaying
+                else x[..., rows, :],  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
-                out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
-            del key_value
 
             if cache is not None and cache.is_recording:
                 x, cache[key] = result
@@ -195,21 +286,13 @@ class RowEmbedding(torch.nn.Module):
         x = x.transpose(-2, -3)  # [..., R, C, D]
 
         if num_digits > 1:  # Average over mixed-radix digits.
-            if buffer is not None:
-                buffer = buffer.mean(dim=0)  #  [..., R, K + C, D]
-            else:
-                x = x.mean(dim=0)  # [..., R, C, D]
+            x = x.mean(dim=0)  # [..., R, C, D]
 
         # Prepend readout tokens before row-wise attention.
         readout_token = self.readout_token.to(x.dtype)
         readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
         readout_token = readout_token.expand(*B, R, K, D)
-
-        if buffer is not None:
-            buffer[..., :, :K, :] = readout_token
-            x = buffer
-        else:
-            x = torch.cat([readout_token, x], dim=-2)  # [..., R, K + C, D]
+        x = torch.cat([readout_token, x], dim=-2)  # [..., R, K + C, D]
 
         # Row-wise attention (B * R as the batch axis).
         for i, row_layer in enumerate(self.row_layers):
@@ -217,11 +300,6 @@ class RowEmbedding(torch.nn.Module):
                 query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
                 batch_size_limit="auto",
-                out=None
-                if torch.is_grad_enabled()
-                else x[..., :K, :]
-                if i == len(self.row_layers) - 1
-                else x,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]

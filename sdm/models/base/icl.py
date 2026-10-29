@@ -4,7 +4,7 @@
 import abc
 import copy
 from collections.abc import Hashable, Iterable, Mapping, Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -57,6 +57,9 @@ class ICLModel(Model):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
+    #: Whether this model supports offloading intermediate activations.
+    supports_offload: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -100,6 +103,7 @@ class ICLModel(Model):
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        offload: Literal["cpu"] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
@@ -129,12 +133,24 @@ class ICLModel(Model):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            offload: Where to store the largest intermediate activations,
+                such as the per-cell embeddings of row embedding layers.
+                Offloading requires inputs on a CUDA device. ``None`` stores
+                them on the device of the inputs. ``"cpu"`` stores them in
+                pinned host memory and streams them through the device in
+                chunks. This lowers peak device memory at the cost of
+                additional host-device transfers, which overlap with compute
+                to limit the slowdown. Offloading also requires
+                :attr:`supports_offload`, disabled gradients,
+                ``estimator_batch_size=1``, and no more target classes than
+                the model predicts natively.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
+        self._validate_offload(offload, x_query.device)
         callbacks = () if callbacks is None else callbacks
         requires_grad = self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
@@ -189,14 +205,18 @@ class ICLModel(Model):
                 related_tables=related_query_tables,
             )
 
-        outs = self._forward_members(
-            contexts=contexts,
-            queries=queries,
-            estimator_batch_size=estimator_batch_size,
-            callbacks=callbacks,
-            generator=generator,
-            **kwargs,
-        )
+        try:
+            outs = self._forward_members(
+                contexts=contexts,
+                queries=queries,
+                estimator_batch_size=estimator_batch_size,
+                callbacks=callbacks,
+                generator=generator,
+                offload=offload,
+                **kwargs,
+            )
+        finally:
+            _release_offload_memory(offload)
 
         # Regression: invert target before stacking estimator outputs.
         if contexts[0].y.numerical.size(-1) > 0:
@@ -224,6 +244,7 @@ class ICLModel(Model):
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        offload: Literal["cpu"] | None = None,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -255,8 +276,19 @@ class ICLModel(Model):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            offload: Where to store the largest intermediate activations
+                while fitting, such as the per-cell embeddings of row
+                embedding layers. Offloading requires inputs on a CUDA
+                device. ``None`` stores them on the device of the inputs.
+                ``"cpu"`` stores them in pinned host memory and streams them
+                through the device in chunks. This lowers peak device memory
+                at the cost of additional host-device transfers, which
+                overlap with compute to limit the slowdown. Offloading also
+                requires :attr:`supports_offload`, ``estimator_batch_size=1``,
+                and no more target classes than the model predicts natively.
             kwargs: Additional keyword arguments passed to the model.
         """
+        self._validate_offload(offload, x.device)
         if context_only_columns and not self.supports_context_only_columns:
             raise ValueError(
                 f"{self.__class__.__name__!r} does not support context-only "
@@ -301,53 +333,58 @@ class ICLModel(Model):
             kwargs=kwargs,
             num_batches=len(batches),
         )
-        for i, batch in enumerate(batches):
-            with inference_mode("no_grad"):
-                context = _stack_context(contexts[batch])
-                categorical_mask = _categorical_mask(contexts[batch])
-                batch_cache = Cache(
-                    x_schemas=tuple(
-                        context.x.schema for context in contexts[batch]
-                    ),
-                    y_schema=context.y.schema,
-                    related_tables_schema=context.related_tables.schema
-                    if context.related_tables is not None
-                    else None,
-                    classes=(
-                        context.y.categorical.categories[0]
-                        if context.y.categorical.size(-1) > 0
-                        else None
-                    ),
-                    class_values=class_values[batch],
-                    categorical_mask=categorical_mask,
-                )
-                self._forward(
-                    x_context=context.x,
-                    y_context=context.y,
-                    x_query=None,
-                    x_context_only=context.x_context_only,
-                    related_context_tables=context.related_tables,
-                    related_query_tables=None,
-                    cache=batch_cache,
-                    generator=generator,
-                    categorical_mask=categorical_mask,
-                    **kwargs,
-                )
-
-            if x.is_cuda and len(contexts) > 1:
-                try:  # Copy to pinned CPU memory:
-                    batch_cache = batch_cache._apply_tensor(
-                        lambda tensor: torch.ops.aten._to_copy.default(
-                            tensor,
-                            device="cpu",
-                            pin_memory=True,
-                            non_blocking=True,  # Required for `pin_memory`.
-                        )
+        try:
+            for i, batch in enumerate(batches):
+                with inference_mode("no_grad"):
+                    context = _stack_context(contexts[batch])
+                    categorical_mask = _categorical_mask(contexts[batch])
+                    batch_cache = Cache(
+                        x_schemas=tuple(
+                            context.x.schema for context in contexts[batch]
+                        ),
+                        y_schema=context.y.schema,
+                        related_tables_schema=context.related_tables.schema
+                        if context.related_tables is not None
+                        else None,
+                        classes=(
+                            context.y.categorical.categories[0]
+                            if context.y.categorical.size(-1) > 0
+                            else None
+                        ),
+                        class_values=class_values[batch],
+                        categorical_mask=categorical_mask,
                     )
-                finally:
-                    torch.cuda.current_stream(x.device).synchronize()
+                    self._forward(
+                        x_context=context.x,
+                        y_context=context.y,
+                        x_query=None,
+                        x_context_only=context.x_context_only,
+                        related_context_tables=context.related_tables,
+                        related_query_tables=None,
+                        cache=batch_cache,
+                        generator=generator,
+                        categorical_mask=categorical_mask,
+                        offload=offload,
+                        **kwargs,
+                    )
 
-            cache[i] = batch_cache
+                if x.is_cuda and len(contexts) > 1:
+                    try:  # Copy to pinned CPU memory:
+                        batch_cache = batch_cache._apply_tensor(
+                            lambda tensor: torch.ops.aten._to_copy.default(
+                                tensor,
+                                device="cpu",
+                                pin_memory=True,
+                                # Required for `pin_memory`:
+                                non_blocking=True,
+                            )
+                        )
+                    finally:
+                        torch.cuda.current_stream(x.device).synchronize()
+
+                cache[i] = batch_cache
+        finally:
+            _release_offload_memory(offload)
 
         self._cache = cache.freeze()
 
@@ -485,9 +522,14 @@ class ICLModel(Model):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        offload: Literal["cpu"] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         r"""Run the model on preprocessed tables of one estimator batch.
+
+        :meth:`forward` calls this without a cache, :meth:`fit` records the
+        context into a cache, and :meth:`predict` replays that cache with
+        new queries.
 
         Tables carry shape ``[E, ..., R, D]`` when ``E > 1`` estimators run
         together and ``[..., R, D]`` otherwise. Column names and category
@@ -514,6 +556,10 @@ class ICLModel(Model):
                 numerical feature columns that were categorical before
                 preprocessing. Passed on recording, replaying and uncached
                 calls alike.
+            offload: Where to store the largest intermediate activations, as
+                in :meth:`forward`. Only passed to models with
+                :attr:`supports_offload`. Always ``None`` when replaying a
+                cache, *i.e.*, in :meth:`predict`.
             kwargs: Additional keyword arguments passed by the caller.
 
         Returns:
@@ -525,6 +571,22 @@ class ICLModel(Model):
         """
 
     # Helpers #################################################################
+
+    def _validate_offload(
+        self,
+        offload: Literal["cpu"] | None,
+        device: torch.device,
+    ) -> None:
+        if offload is None:
+            return
+        if not self.supports_offload:
+            raise ValueError(
+                f"{self.__class__.__name__!r} does not support 'offload'"
+            )
+        if device.type != "cuda":
+            raise ValueError(
+                f"'offload' requires inputs on a CUDA device (got {device})"
+            )
 
     def _forward_members(
         self,
@@ -763,6 +825,12 @@ class ICLModel(Model):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+
+def _release_offload_memory(offload: Literal["cpu"] | None) -> None:
+    # The pinned allocator otherwise keeps offloaded buffers cached for reuse.
+    if offload == "cpu":
+        torch._C._host_emptyCache()
 
 
 def _stack(tables: Sequence[TableTensor]) -> TableTensor:

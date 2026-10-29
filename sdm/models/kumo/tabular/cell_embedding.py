@@ -37,29 +37,40 @@ class CellEmbedding(TabFMCellEmbedding):
             dtype=dtype,
         )
 
+    def impute_mean(
+        self,
+        x: Tensor,  # [..., R, C]
+        *,
+        train_size: int | None = None,
+        cache: Cache | None = None,
+    ) -> Tensor:  # [..., 1, C]
+        if cache is not None and cache.is_replaying:
+            return cast(Tensor, cache["cell_impute_mean"])
+
+        assert train_size is not None
+        impute_mean = x[..., :train_size, :].nanmean(dim=-2, keepdim=True)
+        impute_mean = impute_mean.masked_fill(impute_mean.isnan(), 0.0)
+        if cache is not None and cache.is_recording:
+            cache["cell_impute_mean"] = impute_mean
+        return impute_mean
+
     def forward(  # type: ignore
         self,
         x: Tensor,  # [..., R, C]
         categorical_mask: Tensor,  # [..., C]
         *,
         train_size: int | None = None,
+        impute_mean: Tensor | None = None,  # [..., 1, C]
         num_columns: Tensor | None = None,  # [...]
         cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor:  # [..., R, C, D]
         missing = x.isnan()
-
-        if cache is not None and cache.is_replaying:
-            impute_mean = cast(Tensor, cache["cell_impute_mean"])
-        else:
-            assert train_size is not None
-            impute_mean = x[..., :train_size, :].nanmean(dim=-2, keepdim=True)
-            impute_mean = impute_mean.masked_fill(impute_mean.isnan(), 0.0)
-
-        if cache is not None and cache.is_recording:
-            cache["cell_impute_mean"] = impute_mean
-
+        if impute_mean is None:
+            impute_mean = self.impute_mean(
+                x, train_size=train_size, cache=cache
+            )
         x = torch.where(missing, impute_mean, x)
 
         return super().forward(

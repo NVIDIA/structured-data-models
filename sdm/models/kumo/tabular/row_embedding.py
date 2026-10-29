@@ -3,12 +3,13 @@
 
 # ruff: noqa: D101, D102
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor
 from torch.nn import Embedding, Linear, ModuleList, Parameter
 
+from sdm._token_buffer import TokenBuffer, add_labels, run_column_layers
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
@@ -114,6 +115,7 @@ class RowEmbedding(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_columns: Tensor | None = None,
+        offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
         *B, R, C = x.size()
@@ -126,57 +128,129 @@ class RowEmbedding(torch.nn.Module):
             else (K + num_columns).unsqueeze(-1).to(torch.int32)
         )
 
-        buffer: Tensor | None = None
-        if torch.is_grad_enabled():
-            x = self.cell_embedding(
-                x=x,
-                categorical_mask=categorical_mask,
-                train_size=R_train,
-                num_columns=num_columns,
-                cache=cache,
-            )  # [..., R, C, D]
-        else:
-            buffer = torch.empty(
-                (*B, R, K + C, D),
-                device=x.device,
-                dtype=torch.get_autocast_dtype(x.device.type)
-                if torch.is_autocast_enabled(x.device.type)
-                else x.dtype,
-            )
-            buffer[..., :K, :] = self.readout_token.to(buffer.dtype)
-            x = self.cell_embedding(
-                x=x,
-                categorical_mask=categorical_mask,
-                train_size=R_train,
-                num_columns=num_columns,
-                cache=cache,
-                batch_size_limit="auto",
-                out=buffer[..., K:, :],
-            )
-
+        y_emb: Tensor | None = None  # [..., R_train, D]
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
+                y_emb = self.y_emb(y)
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
-            x[..., :R_train, :, :] += y_emb.to(x.dtype)
+                y_emb = self.y_lin(y.unsqueeze(-1))
 
-        if buffer is not None:
-            x = x.transpose(-2, -3)  # [..., C, R, D]
+        if torch.is_grad_enabled():
+            if offload is not None:
+                raise RuntimeError(
+                    "'offload' is only supported when gradients are disabled"
+                )
+            return self._forward_autograd(
+                x=x,
+                y_emb=y_emb,
+                categorical_mask=categorical_mask,
+                train_size=R_train,
+                cache=cache,
+                num_columns=num_columns,
+                row_key_lengths=row_key_lengths,
+            )
+
+        impute_mean = self.cell_embedding.impute_mean(
+            x,
+            train_size=R_train,
+            cache=cache,
+        )
+        buffer = TokenBuffer(
+            (*B, R, K + C, D),
+            dtype=torch.get_autocast_dtype(x.device.type)
+            if torch.is_autocast_enabled(x.device.type)
+            else x.dtype,
+            device=x.device,
+            offload=offload,
+        )
+
+        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
+            tokens[..., :K, :] = self.readout_token.to(tokens.dtype)
+            self.cell_embedding(
+                x=x[..., rows, :],
+                categorical_mask=categorical_mask,
+                impute_mean=impute_mean,
+                num_columns=num_columns,
+                batch_size_limit="auto",
+                out=tokens[..., K:, :],
+            )
+            if y_emb is not None:
+                add_labels(tokens[..., K:, :], y_emb, rows)
+
+        with buffer:
+            buffer.rows(embed, load=False)
+            y_emb = None
+
+            readout = buffer.readout(K)  # [..., R, K, D]
+            for i, (col_block, row_block) in enumerate(
+                zip(self.col_blocks, self.row_blocks)
+            ):
+                run_column_layers(
+                    buffer,
+                    [(f"row_embedding.col_block{i}", col_block)],
+                    tokens=slice(K, K + C),
+                    key_rows=[slice(R_train)],
+                    cache=cache,
+                )
+
+                last = i == len(self.row_blocks) - 1
+
+                def update(
+                    tokens: Tensor,  # [..., N, K + C, D]
+                    rows: slice,
+                    row_block: torch.nn.Module = row_block,
+                    last: bool = last,
+                ) -> None:
+                    row_block(
+                        query=tokens[..., :K, :] if last else tokens,
+                        key_value=tokens,
+                        seqused_key_value=row_key_lengths,
+                        batch_size_limit="auto",
+                        out=readout[..., rows, :, :] if last else tokens,
+                    )
+
+                buffer.rows(update, store=not last)
+
+        return self.norm(readout).flatten(-2)
+
+    def _forward_autograd(
+        self,
+        x: Tensor,  # [..., R, C]
+        y_emb: Tensor | None,  # [..., R_train, D]
+        categorical_mask: Tensor,  # [..., C]
+        *,
+        train_size: int,
+        cache: Cache | None,
+        num_columns: Tensor | None,
+        row_key_lengths: Tensor | None,
+    ) -> Tensor:  # [..., R, K * D]
+        *B, R, _ = x.size()
+        R_train = train_size
+        K = self.readout_token.size(-2)
+        D = self.channels
+
+        x = self.cell_embedding(
+            x=x,
+            categorical_mask=categorical_mask,
+            train_size=R_train,
+            num_columns=num_columns,
+            cache=cache,
+        )  # [..., R, C, D]
+        if y_emb is not None:
+            x[..., :R_train, :, :] += y_emb.unsqueeze(-2).to(x.dtype)
 
         for i, (col_block, row_block) in enumerate(
             zip(self.col_blocks, self.row_blocks)
         ):
-            if buffer is None:
-                if i > 0:
-                    readout_token, x = x.split([K, x.size(-2) - K], dim=-2)
-                    readout_token = readout_token.clone()
-                else:
-                    readout_token = self.readout_token
-                    readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
-                    readout_token = readout_token.expand(*B, R, K, D)
-                x = x.transpose(-2, -3)  # [..., C, R, D]
+            if i > 0:
+                readout_token, x = x.split([K, x.size(-2) - K], dim=-2)
+                readout_token = readout_token.clone()
+            else:
+                readout_token = self.readout_token
+                readout_token = readout_token.view(*(1,) * len(B), 1, K, D)
+                readout_token = readout_token.expand(*B, R, K, D)
+            x = x.transpose(-2, -3)  # [..., C, R, D]
 
             key = f"row_embedding.col_block{i}"
             result = col_block(
@@ -186,39 +260,22 @@ class RowEmbedding(torch.nn.Module):
                 else x[..., :R_train, :],
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
-                out=None if buffer is None else x,
             )
-
             if cache is not None and cache.is_recording:
                 x, cache[key] = result
             else:
                 x = result
             del result
 
-            if buffer is None:
-                x = torch.cat(
-                    [readout_token.to(x.dtype), x.transpose(-2, -3)],
-                    dim=-2,
-                )
-                x = row_block(
-                    query=x[..., :K, :]
-                    if i == len(self.row_blocks) - 1
-                    else x,
-                    key_value=x,
-                    seqused_key_value=row_key_lengths,
-                    batch_size_limit="auto",
-                )
-            else:
-                buffer = row_block(
-                    query=buffer[..., :K, :]
-                    if i == len(self.row_blocks) - 1
-                    else buffer,
-                    key_value=buffer,
-                    seqused_key_value=row_key_lengths,
-                    batch_size_limit="auto",
-                    out=buffer[..., :K, :]
-                    if i == len(self.row_blocks) - 1
-                    else buffer,
-                )
+            x = torch.cat(
+                [readout_token.to(x.dtype), x.transpose(-2, -3)],
+                dim=-2,
+            )
+            x = row_block(
+                query=x[..., :K, :] if i == len(self.row_blocks) - 1 else x,
+                key_value=x,
+                seqused_key_value=row_key_lengths,
+                batch_size_limit="auto",
+            )
 
-        return self.norm(buffer if buffer is not None else x).flatten(-2)
+        return self.norm(x).flatten(-2)

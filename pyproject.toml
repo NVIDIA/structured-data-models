@@ -204,6 +204,7 @@ ignorelist = ["id"]
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 banned-module-level-imports = [
+    "cuda",
     "cudf",
     "cupy",
     "graphviz",
@@ -245,6 +246,7 @@ banned-module-level-imports = [
 
 [tool.ty.analysis]
 allowed-unresolved-imports = [
+    "cuda.**",
     "cudf.**",
     "cupy.**",
     "pyg_lib.**",

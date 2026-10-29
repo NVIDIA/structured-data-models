@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -82,6 +82,7 @@ class TabFM(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    supports_offload: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -158,6 +159,7 @@ class TabFM(ICLModel):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        offload: Literal["cpu"] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 1]
 
@@ -193,7 +195,13 @@ class TabFM(ICLModel):
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
 
         task = Task.classification if classes is not None else Task.regression
-        out = self.models[task](x, y, categorical_mask, cache=cache)
+        out = self.models[task](
+            x,
+            y,
+            categorical_mask,
+            cache=cache,
+            offload=offload,
+        )
 
         if classes is None:
             return TableTensor(
@@ -257,6 +265,13 @@ class _TabFM(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         cache: Cache | None = None,
+        offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R_test, 1 or num_classes]
-        x = self.row_embedding(x, y, categorical_mask, cache=cache)
+        x = self.row_embedding(
+            x,
+            y,
+            categorical_mask,
+            cache=cache,
+            offload=offload,
+        )
         return self.icl_block(x, y, cache=cache)
