@@ -13,9 +13,9 @@ from sdm.testing import withCUDA
 def test_revin(device: torch.device, affine_channels: int | None) -> None:
     norm = RevIN(affine_channels, device=device)
     x = torch.randn(2, 3, 2, 8, device=device)
-    mean, std = norm.compute_stats(x)
+    mean, std = norm.stats(x)
     torch.testing.assert_close(mean, x.mean(dim=-1, keepdim=True))
-    torch.testing.assert_close(std, x.std(dim=-1, correction=0, keepdim=True))
+    torch.testing.assert_close(std, x.std(dim=-1, correction=1, keepdim=True))
 
     out = norm(x, mean, std)
     expected = (x - mean) / (std + norm.eps)

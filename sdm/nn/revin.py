@@ -41,28 +41,35 @@ class RevIN(torch.nn.Module):
                 torch.zeros(affine_channels, 1, **factory_kwargs)
             )
 
-    def compute_stats(
+    def stats(
         self,
-        x: Tensor,  # [..., C, R]
-        mask: Tensor | None = None,  # [..., C, R]
-    ) -> tuple[Tensor, Tensor]:  # [..., C, 1]
+        x: Tensor,  # [..., R, D]
+        mask: Tensor | None = None,  # [..., R, D]
+        correction: int = 1,
+    ) -> tuple[Tensor, Tensor]:  # [..., R, 1]
         """Compute mean and standard deviation over the final dimension.
 
         NaNs and masked values are excluded.
 
         Args:
-            x: Tensor with shape ``[..., C, R]``.
-            mask: Boolean observed-value mask with shape ``[..., C, R]``.
+            x: Tensor with shape ``[..., R, D]``.
+            mask: Boolean observed-value mask with shape ``[..., R, D]``.
+            correction: Difference between the sample size and sample degrees
+                of freedom.
 
         Returns:
-            Mean and standard deviation with shape ``[..., C, 1]``.
+            Mean and standard deviation with shape ``[..., R, 1]``.
         """
         x = x.detach()
         if mask is not None:
             x = x.masked_fill(~mask, torch.nan)
 
         mean = x.nanmean(dim=-1, keepdim=True)
-        std = (x - mean).square().nanmean(dim=-1, keepdim=True).sqrt()
+        var = (x - mean).square().nanmean(dim=-1, keepdim=True)
+        if correction != 0:
+            count = (~x.isnan()).sum(dim=-1, keepdim=True)
+            var = var * (count / (count - correction).clamp(min=1))
+        std = var.sqrt()
 
         mask = mean.isnan()
         return mean.masked_fill(mask, 0.0), std.masked_fill(mask, 1.0)
@@ -71,9 +78,9 @@ class RevIN(torch.nn.Module):
         """The forward pass.
 
         Args:
-            x: Tensor with shape ``[..., C, R]``.
-            mean: The mean with shape ``[..., C, 1]``.
-            scale: The scale with shape ``[..., C, 1]``.
+            x: Tensor with shape ``[..., R, D]``.
+            mean: The mean with shape ``[..., R, *]``.
+            scale: The scale with shape ``[..., R, *]``.
         """
         out = (x - mean) / (scale + self.eps)
         if self.weight is not None and self.bias is not None:
@@ -84,10 +91,9 @@ class RevIN(torch.nn.Module):
         """Invert the forward pass.
 
         Args:
-            x: Normalized values or forecasts. With affine parameters, shape
-            x: Tensor with shape ``[..., C, R]``.
-            mean: The mean with shape ``[..., C, 1]``.
-            scale: The scale with shape ``[..., C, 1]``.
+            x: Tensor with shape ``[..., R, D]``.
+            mean: The mean with shape ``[..., R, *]``.
+            scale: The scale with shape ``[..., R, *]``.
         """
         if self.weight is not None and self.bias is not None:
             x = (x - self.bias) / (self.weight + self.eps * self.eps)

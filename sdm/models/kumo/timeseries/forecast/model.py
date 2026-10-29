@@ -362,7 +362,7 @@ class _KumoForecast(torch.nn.Module):
         self,
         x: Tensor,  # [..., C, R]
     ) -> tuple[Tensor, Tensor, Tensor]:
-        mean, scale = self.revin.compute_stats(x)
+        mean, scale = self.revin.stats(x, correction=0)
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
