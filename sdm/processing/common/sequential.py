@@ -29,7 +29,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if len(self) == 0:
-            return tuple(Stype)
+            return Stype.all()
         return self._merge_stypes(self)
 
     def append(self, processor: object) -> Self:
@@ -46,7 +46,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), processor)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._fitted = False
+        self._update_fitted(False)
         return self
 
     def prepend(self, processor: object) -> Self:
@@ -69,7 +69,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.add_module(str(len(self)), child)
 
         self.requires_fit = any(child.requires_fit for child in self)
-        self._fitted = False
+        self._update_fitted(False)
         return self
 
     def extend(self, processors: Iterable[object]) -> Self:
@@ -126,7 +126,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for child in reversed(list(self)):
+        for child in reversed(list(self.children())):
             if not isinstance(child, EnsembleInvertibleMixin):
                 raise AttributeError(
                     f"{child.__class__.__name__!r} object has no "

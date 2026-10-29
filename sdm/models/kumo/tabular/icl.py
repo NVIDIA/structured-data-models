@@ -98,9 +98,12 @@ class ICLBlock(torch.nn.Module):
 
                 if cache is not None and cache.is_recording:
                     x, (key, value) = result
-                    if self.kv_heads is not None:
-                        key = key[..., : self.kv_heads, :].contiguous()
-                        value = value[..., : self.kv_heads, :].contiguous()
+                    kv_heads = self.kv_heads
+                    if kv_heads is not None and kv_heads < key.size(-2):
+                        key, value = _copy_key_value(
+                            key=key[..., :kv_heads, :],
+                            value=value[..., :kv_heads, :],
+                        )
                     cache[cache_key] = KVCacheEntry(key, value)
                     del key, value
                 else:
@@ -134,3 +137,16 @@ class ICLBlock(torch.nn.Module):
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
+
+
+def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
+    return (
+        key.clone(memory_format=torch.contiguous_format),
+        value.clone(memory_format=torch.contiguous_format),
+    )
+
+
+# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
+if hasattr(torch.compiler, "nested_compile_region"):
+    # Compile cache copies separately to free each layer's full K/V tensors.
+    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)

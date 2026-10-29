@@ -28,8 +28,8 @@ def test_drop_stypes_removes_configured_stypes(
 
     output = sp.DropStypes(*stypes).fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ()
-    assert output.columns[Stype.categorical] == ("cat_0",)
+    assert output.numerical_columns == ()
+    assert output.categorical_columns == ("cat_0",)
     assert torch.equal(output.categorical.code, table.categorical.code)
 
 

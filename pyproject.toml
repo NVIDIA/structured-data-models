@@ -62,6 +62,11 @@ Homepage = "https://github.com/NVIDIA/structured-data-models"
 Repository = "https://github.com/NVIDIA/structured-data-models"
 Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 
+[project.optional-dependencies]
+prior = [
+    "scikit-learn",
+]
+
 [dependency-groups]
 test-cpu = [
     "pytest",
@@ -141,6 +146,9 @@ include = ["examples/**", "benchmark/**"]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
 unresolved-attribute = "ignore"
+
+[tool.ty.overrides.analysis]
+replace-imports-with-any = ["autogluon.**", "tabarena.**"]
 
 [[tool.ty.overrides]]
 include = ["sdm/_kernels/triton/**"]

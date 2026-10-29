@@ -6,7 +6,7 @@ import math
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import TableTensor
 from sdm.processing import PCA
 
 
@@ -16,7 +16,7 @@ def test_basic(shape: tuple[int, ...]) -> None:
     table = TableTensor.from_tensor(data)
     output = PCA(num_components=2).fit_transform(table)
     assert output.numerical.size() == (*shape[:-1], 2)
-    assert output.columns[Stype.numerical] == ("pca_0", "pca_1")
+    assert output.numerical_columns == ("pca_0", "pca_1")
 
 
 def test_pca_projects_onto_fitted_dominant_direction() -> None:

@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
@@ -70,6 +71,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _layout: Tensor
 
     # Constructors ############################################################
 
@@ -212,8 +214,31 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
+        return cls._make_var_len_tensor(
+            data=data,
+            offset=offset,
+            valid=valid,
+            size=size,
+            stride=stride,
+            storage_offset=storage_offset,
+            cls=None if "_make_var_len_tensor" in cls.__dict__ else cls,
+        )
+
+    # Avoid Dynamo reading _valid before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_var_len_tensor(
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        size: tuple[int, ...],
+        stride: tuple[int, ...],
+        storage_offset: int,
+        cls: type[VarLenTensor] | None = None,
+    ) -> VarLenTensor:
+        cls = VarLenTensor if cls is None else cls
         out = Tensor._make_wrapper_subclass(
-            cls,
+            cls=cls,
             size=size,
             strides=stride,
             storage_offset=storage_offset,
@@ -221,11 +246,15 @@ class VarLenTensor(Tensor):
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
-
         out._data = data
         out._offset = offset
         out._valid = valid
-
+        # Mirror size and stride in an empty tensor's shape so torch.compile
+        # can make them symbolic. A tensor nested in another one, like a
+        # categorical vocabulary, would otherwise keep its first traced size.
+        out._layout = offset.new_empty_strided(
+            size=(*size, 0), stride=(*stride, 1), dtype=torch.uint8
+        )
         return out
 
     @classmethod
@@ -478,24 +507,20 @@ class VarLenTensor(Tensor):
     # Properties ##############################################################
 
     @property
+    def _logical_storage_offset(self) -> int:
+        """Expose the logical view offset as traceable Python metadata."""
+        # torch.compile can read this integer as an attribute, but rejects
+        # the direct storage_offset() call on this tensor subclass.
+        return cast(int, self.storage_offset())
+
+    @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
         r"""Return contiguous data and normalized offsets.
 
         Returns:
             ``(data, offset)`` tuple.
         """
-        if not self.is_contiguous():
-            raise RuntimeError(
-                f"Can't access 'data_offset' for non-contiguous "
-                f"{self.__class__.__name__!r}"
-            )
-
-        start = int(self.storage_offset())
-        offset = self._offset[start : start + self.numel() + 1]
-        data = self._data[offset[0] : offset[-1]]
-        if offset.is_cpu and int(offset[0]) == 0:
-            return data, offset
-        return data, offset - offset[0]
+        return _data_offset(self)
 
     @property
     def valid(self) -> Tensor | None:
@@ -505,15 +530,7 @@ class VarLenTensor(Tensor):
             Boolean mask with shape ``self.size()`` indicating valid,
             non-null tensor elements, or ``None`` when all elements are valid.
         """
-        if self._valid is None:
-            return None
-
-        return torch.as_strided(
-            self._valid,
-            size=self.size(),
-            stride=self.stride(),
-            storage_offset=int(self.storage_offset()),
-        )
+        return _valid(self)
 
     @property
     def is_nullable(self) -> bool:
@@ -544,11 +561,11 @@ class VarLenTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_data", "_offset"]
+        # Offsets first avoid a torch.compile symbolic-shape check failure.
+        attrs = ["_offset", "_data", "_layout"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
-        return attrs, ctx
+        return attrs, (self.__class__, self.storage_offset())
 
     @staticmethod
     def __tensor_unflatten__(
@@ -558,14 +575,17 @@ class VarLenTensor(Tensor):
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
         cls, storage_offset = ctx
-        return cls(
+        layout = inner_tensors["_layout"]
+        out = cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             valid=inner_tensors.get("_valid"),
-            size=outer_size,
-            stride=outer_stride,
+            size=layout.size()[:-1],
+            stride=layout.stride()[:-1],
             storage_offset=storage_offset,
         )
+        out._layout = layout
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -586,6 +606,13 @@ class VarLenTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        if (
+            (func is torch.equal or func is Tensor.equal)
+            and not kwargs
+            and len(args) == 2
+            and type(args[0]) is type(args[1])
+        ):
+            return cls.HANDLED_FUNCTIONS[aten.equal.default](*args)
         if func is torch.isfinite or func is Tensor.isfinite:
             assert isinstance(args[0], VarLenTensor)
             return _isfinite(args[0])
@@ -662,7 +689,7 @@ class VarLenTensor(Tensor):
                 for i in range(size[0])
             ]
 
-        values = self.to_arrow().to_pylist()
+        values = type(self).to_arrow(self).to_pylist()
         return reshape(values, tuple(self.size()))
 
     @override
@@ -679,8 +706,7 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.valid is not None:
-            out += f", null_count={int((~self.valid).sum())}"
+        out += self._null_count_repr()
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
@@ -689,6 +715,13 @@ class VarLenTensor(Tensor):
             out += ", requires_grad=True"
         out += ")"
         return out
+
+    def _null_count_repr(self) -> str:
+        valid = self.valid
+        # During compilation, the mask may have a shape but no values to count.
+        if valid is None or valid.is_meta or is_fake(valid):
+            return ""
+        return f", null_count={int((~valid).sum())}"
 
 
 @VarLenTensor.implements(aten.alias.default)
@@ -976,6 +1009,38 @@ def _isfinite(inp: VarLenTensor) -> Tensor:
     return valid.clone()
 
 
+def _valid(inp: VarLenTensor) -> Tensor | None:
+    if inp._valid is None:
+        return None
+
+    # `as_strided` offsets are absolute, but `_valid` may be a view:
+    storage_offset = inp._valid.storage_offset() + int(inp.storage_offset())
+    return torch.as_strided(
+        inp._valid,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=storage_offset,
+    )
+
+
+def _data_offset(inp: VarLenTensor) -> tuple[Tensor, Tensor]:
+    if not inp.is_contiguous():
+        raise RuntimeError(
+            f"Can't access 'data_offset' for non-contiguous "
+            f"{inp.__class__.__name__!r}"
+        )
+
+    start = int(inp.storage_offset())
+    offset = inp._offset[start : start + inp.numel() + 1]
+    if inp._data.numel() == 0:
+        # An empty payload has only zero offsets, already normalized.
+        return inp._data, offset
+    data = inp._data[offset[0] : offset[-1]]
+    if offset.is_cpu and int(offset[0]) == 0:
+        return data, offset
+    return data, offset - offset[0]
+
+
 @VarLenTensor.implements(aten.equal.default)
 def _equal(inp: VarLenTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
@@ -983,7 +1048,7 @@ def _equal(inp: VarLenTensor, other: Tensor) -> bool:
     if inp.size() != other.size():
         return False
 
-    valid1, valid2 = inp.valid, other.valid
+    valid1, valid2 = _valid(inp), _valid(other)
     if valid1 is not None and valid2 is not None:
         if not valid1.equal(valid2):
             return False
@@ -1001,8 +1066,8 @@ def _equal(inp: VarLenTensor, other: Tensor) -> bool:
         other.contiguous() if valid2 is None else other[valid2],
     )
 
-    data1, offset1 = inp.data_offset
-    data2, offset2 = other.data_offset
+    data1, offset1 = _data_offset(inp)
+    data2, offset2 = _data_offset(other)
 
     if not offset1.equal(offset2):
         return False
@@ -1301,7 +1366,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     tensors = tuple(
         cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
     )
-    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
+    data_list, offsets = zip(*(_data_offset(tensor) for tensor in tensors))
     valid: Tensor | None = None
     if any(tensor._valid is not None for tensor in tensors):
         valid_views = tuple(
@@ -1381,22 +1446,25 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
 
 
 def _layout_view(inp: VarLenTensor) -> Tensor:
+    # `as_strided` offsets are absolute, but `_offset` may be a view:
+    storage_offset = inp._offset.storage_offset() + int(inp.storage_offset())
     return torch.as_strided(
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=storage_offset,
     )
 
 
 def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
+    storage_offset = view.storage_offset() - inp._offset.storage_offset()
     return inp.__class__(
         data=inp._data,
         offset=inp._offset,
         valid=inp._valid,
         size=view.size(),
         stride=view.stride(),
-        storage_offset=0 if view.numel() == 0 else int(view.storage_offset()),
+        storage_offset=0 if view.numel() == 0 else int(storage_offset),
     )
 
 
@@ -1435,12 +1503,7 @@ def _materialize(
     non_blocking: bool = False,
 ) -> VarLenTensor:
     # Use PyTorch's own memory-format semantics to materialize data:
-    start = torch.as_strided(
-        inp._offset,
-        size=inp.size(),
-        stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
-    )
+    start = _layout_view(inp)
     start = function(start)
     assert start.storage_offset() == 0
     assert _span_len(start.size(), start.stride()) == start.numel()
@@ -1449,7 +1512,9 @@ def _materialize(
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()) + 1,
+        storage_offset=(
+            inp._offset.storage_offset() + int(inp.storage_offset()) + 1
+        ),
     )
     end = function(end)
     assert end.storage_offset() == 0
@@ -1470,14 +1535,8 @@ def _materialize(
         stride=(1,),
         storage_offset=end.storage_offset(),
     )
-    valid: Tensor | None = None
-    if inp._valid is not None:
-        valid = torch.as_strided(
-            inp._valid,
-            size=inp.size(),
-            stride=inp.stride(),
-            storage_offset=int(inp.storage_offset()),
-        )
+    valid = _valid(inp)
+    if valid is not None:
         valid = function(valid).contiguous().view(-1)
 
     offset, index = _compact(start, end)

@@ -3,6 +3,15 @@
 This project contains code or documentation derived from the following third-party projects.
 Runtime, test, and documentation dependencies are declared in [`pyproject.toml`](pyproject.toml)/[`uv.lock`](uv.lock), and example/benchmark dependencies are resolved separately and are not bundled with this repository.
 
+## scikit-learn
+
+- Source: https://github.com/scikit-learn/scikit-learn
+- License: BSD 3-Clause
+- Copyright: Copyright (c) 2007-2026 The scikit-learn developers.
+- License terms: https://github.com/scikit-learn/scikit-learn/blob/main/COPYING
+
+`scikit-learn` is an optional dependency installed with `structured-data-models[prior]`; its source code is not bundled with this repository.
+
 ## TabICLv2
 
 - Source: https://github.com/soda-inria/tabicl

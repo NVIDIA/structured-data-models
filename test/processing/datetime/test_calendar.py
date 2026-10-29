@@ -7,7 +7,7 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import NaT, Stype, TableTensor
+from sdm import NaT, TableTensor
 from sdm.processing import AddCalendarFields
 
 
@@ -36,8 +36,8 @@ def test_add_calendar_fields(encoding: Literal["raw", "cyclic"]) -> None:
     output = encoder.transform(table)
 
     if encoding == "raw":
-        assert output.columns[Stype.datetime] == ("dt_0",)
-        assert output.columns[Stype.numerical] == (
+        assert output.datetime_columns == ("dt_0",)
+        assert output.numerical_columns == (
             "dt_0__minute",
             "dt_0__hour",
             "dt_0__weekday",
@@ -57,8 +57,8 @@ def test_add_calendar_fields(encoding: Literal["raw", "cyclic"]) -> None:
             equal_nan=True,
         )
     else:
-        assert output.columns[Stype.datetime] == ("dt_0",)
-        assert output.columns[Stype.numerical] == (
+        assert output.datetime_columns == ("dt_0",)
+        assert output.numerical_columns == (
             "dt_0__minute__sin",
             "dt_0__minute__cos",
             "dt_0__hour__sin",

@@ -8,6 +8,7 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleInvertibleMixin,
 )
+from sdm.processing.target import TargetAwareEnsembleProcessor
 from sdm.processing.series import SeriesEnsembleProcessor
 from sdm.processing.common import (
     Identity,
@@ -35,6 +36,7 @@ from sdm.processing.numerical import (
     RankGaussian,
     Standardize,
     RobustScale,
+    MinMaxScale,
     FlipSign,
     DropConstantColumns,
     PCA,
@@ -50,7 +52,12 @@ from sdm.processing.categorical import (
     AddCategoryCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import AverageEstimators, Softmax, SortQuantiles
+from sdm.processing.output import (
+    AverageEstimators,
+    Softmax,
+    SortQuantiles,
+    ClipNonnegative,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
@@ -58,6 +65,7 @@ __all__ = [
     "InvertibleMixin",
     "EnsembleProcessor",
     "EnsembleInvertibleMixin",
+    "TargetAwareEnsembleProcessor",
     "SeriesEnsembleProcessor",
     "EnsembleProcessorAdapter",
     "Identity",
@@ -83,6 +91,7 @@ __all__ = [
     "RankGaussian",
     "Standardize",
     "RobustScale",
+    "MinMaxScale",
     "FlipSign",
     "DropConstantColumns",
     "PCA",
@@ -98,5 +107,6 @@ __all__ = [
     "AverageEstimators",
     "Softmax",
     "SortQuantiles",
+    "ClipNonnegative",
     "Recipe",
 ]

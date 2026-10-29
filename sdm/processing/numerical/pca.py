@@ -36,28 +36,24 @@ class PCA(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
 
-        if table.numerical.size(-1) == 0:
-            raise ValueError(
-                f"{self.__class__.__name__!r} requires 'table' to have "
-                f"numerical features"
-            )
+        if table.numerical.size(-1) <= self.num_components:
+            return
 
         self._set_buffer("mean", table.numerical.mean(dim=-2, keepdim=True))
         _, _, vh = torch.linalg.svd(
             table.numerical - self.mean,
             full_matrices=False,
         )
-        num_components = min(
-            self.num_components,
-            table.numerical.size(-2),
-            table.numerical.size(-1),
-        )
+        num_components = min(self.num_components, table.numerical.size(-2))
         self._set_buffer(
             name="components",
             value=vh[..., :num_components, :].transpose(-2, -1),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if table.numerical.size(-1) <= self.num_components:
+            return table
+
         x = (table.numerical - self.mean) @ self.components
         out = TableTensor(
             columns={Stype.numerical: [f"pca_{i}" for i in range(x.size(-1))]},
@@ -66,4 +62,10 @@ class PCA(Processor):
         return cast(
             TableTensor,
             torch.cat([table.drop_stypes(Stype.numerical), out], dim=-1),
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"num_components={self.num_components})"
         )

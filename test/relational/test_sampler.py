@@ -36,16 +36,16 @@ def test_sampler(relational_data: RelationalData) -> None:
         num_neighbors=[10, 10],
     )
 
-    assert task_table.columns[Stype.id] == ("user_id", "__example__")
+    assert task_table.id_columns == ("user_id", "__example__")
     assert task_table.id[..., 0].equal(torch.tensor([3, 2, 1, 0]))
     assert task_table.id[..., 1].equal(torch.tensor([0, 1, 2, 3]))
 
     tables = related_tables.tables
     assert len(tables) == 3
-    assert tables["users"].columns[Stype.id] == ("user_id", "__example__")
+    assert tables["users"].id_columns == ("user_id", "__example__")
     assert tables["users"].id[..., 0].equal(torch.tensor([3, 2, 1, 0]))
     assert tables["users"].id[..., 1].equal(torch.tensor([0, 1, 2, 3]))
-    assert tables["orders"].columns[Stype.id] == (
+    assert tables["orders"].id_columns == (
         "user_id",
         "item_id",
         "__example__",
@@ -60,7 +60,7 @@ def test_sampler(relational_data: RelationalData) -> None:
         "B",
     ]
     assert tables["orders"].id[..., 2].equal(torch.tensor([0, 0, 0, 2, 3, 3]))
-    assert tables["items"].columns[Stype.id] == ("item_id", "__example__")
+    assert tables["items"].id_columns == ("item_id", "__example__")
     assert tables["items"].id[..., 0].tolist() == ["A", "B", "C", "A", "B"]
     assert tables["items"].id[..., 1].equal(torch.tensor([0, 0, 2, 3, 3]))
 
@@ -139,7 +139,7 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
         num_neighbors=[2, 2],
     )
 
-    assert task_table.columns[Stype.id] == ("user_id", "__example__")
+    assert task_table.id_columns == ("user_id", "__example__")
     assert task_table.id[..., 0].equal(torch.tensor([[3, 2], [0, 1]]))
     assert task_table.id[..., 1].equal(torch.tensor([[0, 1], [0, 1]]))
 
@@ -150,7 +150,7 @@ def test_batch_sampler(relational_data: RelationalData) -> None:
     users = related_tables.tables["users"]
     for member_id, expected in enumerate(([3, 2], [0, 1])):
         user = users[member_id]
-        assert user.columns[Stype.id] == ("user_id", "__example__")
+        assert user.id_columns == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor(expected))
         assert user.id[..., 1].equal(torch.tensor([0, 1]))
 
@@ -185,7 +185,7 @@ def test_expanded_sampler(relational_data: RelationalData) -> None:
         if block.size(-1) > 0
     )
 
-    assert task_table.columns[Stype.id] == ("user_id", "__example__")
+    assert task_table.id_columns == ("user_id", "__example__")
     assert task_table.id[..., 0].equal(torch.tensor([[3, 2], [3, 2]]))
     assert task_table.id[..., 1].equal(torch.tensor([[0, 1], [0, 1]]))
 
@@ -200,7 +200,7 @@ def test_expanded_sampler(relational_data: RelationalData) -> None:
     )
     for user in users._iter_groups():
         user = user.squeeze(0)
-        assert user.columns[Stype.id] == ("user_id", "__example__")
+        assert user.id_columns == ("user_id", "__example__")
         assert user.id[..., 0].equal(torch.tensor([3, 2]))
         assert user.id[..., 1].equal(torch.tensor([0, 1]))
 

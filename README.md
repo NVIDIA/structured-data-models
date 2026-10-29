@@ -17,7 +17,7 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3)), built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3), [`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly), *etc*), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -51,10 +51,14 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 - **[`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
-**Times Series Foundation Models:**
+**Times Series Forecasting Foundation Models:**
 
-- **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Chen *et al.*: [New NVIDIA NV-Tesseract Time Series Models Advance Dataset Processing and Anomaly Detection](https://developer.nvidia.com/blog/new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-anomaly-detection) ('25)
+- **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Gautam *et al.*: [Memory-Augmented Forecasting: Scalability and Generalization Across Temporal Domains](https://ieeexplore.ieee.org/abstract/document/11402442) (IEEE BigData '25)
 - **[`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3)** from Jain *et al.*: [TimesFM-3: A Zero-Shot Foundation Model for Multivariate Forecasting](https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting) ('26)
+
+**Times Series Anomaly Detection Foundation Models:**
+
+- **[`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly)** from Gautam *et al.*: [NV-Tesseract-AD: Curriculum-Enhanced Conditional Diffusion for Multivariate Time-Series Anomaly Detection](https://arxiv.org/abs/2610.12754) (CoRR '26)
 
 ## Quick Tour
 
