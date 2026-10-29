@@ -76,7 +76,9 @@ train_recipe = model.default_recipe()
 train_recipe.output = sp.Identity()  # No post-processing.
 ```
 
-The rest of the recipe stays, and its stochastic processors, *e.g.*, {py:class}`~sdm.processing.common.ShuffleColumns` and {py:class}`~sdm.processing.categorical.ShuffleCategories`, draw a new order at every step, which acts as data augmentation.
+The feature and target pipelines stay unchanged: they turn raw columns into the inputs that the pretrained model expects, and evaluation and inference use them too.
+Some of their processors are random: {py:class}`~sdm.processing.common.ShuffleColumns` reorders the feature columns, and {py:class}`~sdm.processing.categorical.ShuffleCategories` relabels the classes, which gives each estimator a different view of the same task at inference (see Ensembling in [In-Context Learning](icl)).
+During training, each step draws a new view, so the model cannot rely on a column's position or a class's label; this acts as data augmentation, like random crops and flips for images.
 
 For regression with {py:class}`~sdm.models.KumoTabular`, also remove sign flipping ({py:class}`~sdm.processing.numerical.FlipSign`) from the target pipeline.
 A flipped target reverses the predicted quantiles, which the default output pipeline re-sorts via {py:class}`~sdm.processing.output.SortQuantiles`, but the identity output does not:
