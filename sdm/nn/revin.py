@@ -41,6 +41,7 @@ class RevIN(torch.nn.Module):
                 torch.zeros(affine_channels, 1, **factory_kwargs)
             )
 
+    @torch.no_grad()
     def stats(
         self,
         x: Tensor,  # [..., R, D]
@@ -50,7 +51,8 @@ class RevIN(torch.nn.Module):
         """Compute mean and standard deviation over the final dimension.
 
         NaNs and masked values are excluded. Mean and standard deviation
-        are computed and returned in float64.
+        are computed and returned in
+        :external+torch:ref:`torch.float64 <dtype-doc>`.
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
@@ -60,13 +62,12 @@ class RevIN(torch.nn.Module):
                 of freedom.
 
         Returns:
-            Mean and standard deviation with shape ``[..., R, 1]`` and
-            dtype ``torch.float64``.
+            Mean and standard deviation with shape ``[..., R, 1]``.
         """
-        x = x.detach().double()
         if mask is not None:
             x = x.masked_fill(mask, torch.nan)
 
+        x = x.double()
         mean = x.nanmean(dim=-1, keepdim=True)
         var = (x - mean).square().nanmean(dim=-1, keepdim=True)
         if correction != 0:
@@ -82,70 +83,58 @@ class RevIN(torch.nn.Module):
         self,
         x: Tensor,  # [..., R, D]
         mask: Tensor | None = None,  # [..., R, D]
-        correction: int = 1,
         state: tuple[Tensor, Tensor, Tensor] | None = None,
+        correction: int = 1,
     ) -> tuple[Tensor, Tensor, Tensor]:  # [..., R, 1]
-        """Compute cumulative statistics through each patch.
+        """Compute cumulative statistics over patched sequences.
 
-        Each patch uses all observed values through its final value. NaNs
-        and masked values are excluded. Means and standard deviations are
-        computed and returned in float64. Prefixes without observations
-        return zero mean and standard deviation.
+        NaNs and masked values are excluded. Mean and standard deviation
+        are computed and returned in
+        :external+torch:ref:`torch.float64 <dtype-doc>`.
 
         Args:
-            x: Tensor with shape ``[..., R, D]``, where ``R`` is the number
-                of patches and ``D`` is the number of values per patch.
-            mask: Boolean mask with the same shape as ``x``. Values marked
+            x: Tensor with shape ``[..., R, D]``.
+            mask: Boolean mask with shape ``[..., R, D]``. Values marked
                 ``True`` are excluded.
+            state: Previous mean, standard deviation, and count for streaming
+                statistics.
             correction: Degrees of freedom subtracted from the observed count.
-                The variance divisor is clamped to at least one.
-            state: Previous mean, standard deviation, and count returned by
-                a call with the same ``correction``. Only the final patch
-                initializes accumulation. If ``None``, start without
-                observations.
 
         Returns:
             Cumulative mean, standard deviation, and observed count for the
-            supplied patches only, each with shape ``[..., R, 1]``.
-            Counts have dtype ``torch.int64``;
-            means and standard deviations have dtype ``torch.float64``.
+            supplied sequence, each with shape ``[..., R, 1]``.
         """
-        observed = ~x.isnan()
-        if mask is not None:
-            observed = observed & ~mask
-        observed = observed.flatten(-2)
-        values = x.flatten(-2).double().masked_fill(~observed, 0)
-        count = observed.cumsum(dim=-1)
-        mean = values.cumsum(dim=-1) / count.clamp(min=1)
+        D = x.size(-1)
+        mask = x.isnan() if mask is None else x.isnan() | mask
+        mask = mask.flatten(-2)  # [..., R * D]
+        x = x.flatten(-2).double().masked_fill(mask, 0)  # [..., R * D]
+        count = (~mask).cumsum(dim=-1)
+        mean = x.cumsum(dim=-1) / count.clamp(min=1)
 
         # Welford increments accumulate squared deviations over time.
-        previous = torch.nn.functional.pad(mean[..., :-1], (1, 0))
-        increments = ((values - previous) * (values - mean)).masked_fill(
-            ~observed,
-            0,
-        )
-        m2 = increments.cumsum(dim=-1)
+        prev = torch.nn.functional.pad(mean[..., :-1], (1, 0))
+        inc = ((x - prev) * (x - mean)).masked_fill(mask, 0)
+        m2 = inc.cumsum(dim=-1)
 
         # Keep statistics at the final value of each patch.
-        end = slice(x.size(-1) - 1, None, x.size(-1))
-        count = count[..., end].unsqueeze(-1)
-        mean = mean[..., end].unsqueeze(-1)
-        m2 = m2[..., end].unsqueeze(-1)
+        count = count[..., D - 1 :: D].unsqueeze(-1)
+        mean = mean[..., D - 1 :: D].unsqueeze(-1)
+        m2 = m2[..., D - 1 :: D].unsqueeze(-1)
+
         if state is not None:
             state_mean, state_std, state_count = state
             state_mean = state_mean[..., -1:, :]
             state_std = state_std[..., -1:, :]
             state_count = state_count[..., -1:, :]
+
             total_count = state_count + count
             weight = count.double() / total_count.clamp(min=1)
             delta = mean - state_mean
-            m2 = (
-                m2
-                + state_std.square() * (state_count - correction).clamp(min=1)
-                + delta.square() * state_count * weight
-            )
+            m2 += state_std.square() * (state_count - correction).clamp(min=1)
+            m2 += delta.square() * state_count * weight
             mean = state_mean + delta * weight
             count = total_count
+
         std = (m2 / (count - correction).clamp(min=1)).clamp(min=0).sqrt()
         return mean, std, count
 
