@@ -42,7 +42,7 @@ class CellEmbedding(TabFMCellEmbedding):
         x: Tensor,  # [..., R, C]
         categorical_mask: Tensor,  # [..., C]
         *,
-        train_size: int | None = None,
+        train_size: int | Tensor | None = None,
         num_columns: Tensor | None = None,  # [...]
         cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -54,7 +54,13 @@ class CellEmbedding(TabFMCellEmbedding):
             impute_mean = cast(Tensor, cache["cell_impute_mean"])
         else:
             assert train_size is not None
-            impute_mean = x[..., :train_size, :].nanmean(dim=-2, keepdim=True)
+            if isinstance(train_size, Tensor):
+                context = torch.arange(x.size(-2), device=x.device)
+                context = context < train_size[..., None]
+                observed = x.masked_fill(~context[..., None], torch.nan)
+            else:
+                observed = x[..., :train_size, :]
+            impute_mean = observed.nanmean(dim=-2, keepdim=True)
             impute_mean = impute_mean.masked_fill(impute_mean.isnan(), 0.0)
 
         if cache is not None and cache.is_recording:
