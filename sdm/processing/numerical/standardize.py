@@ -21,6 +21,9 @@ class Standardize(Processor, InvertibleMixin):
     invertible. NaN and infinite values are ignored when fitting statistics
     and preserved during the transform.
 
+    Inverse transformation supports multiple consecutive outputs per fitted
+    column, such as quantile predictions.
+
     Args:
         eps: Value added to each fitted standard deviation.
     """
@@ -84,7 +87,16 @@ class Standardize(Processor, InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         dtype = table.numerical.dtype
-        numerical = (table.numerical * self.scale).add_(self.mean)
+        numerical = table.numerical
+        if self.scale.ndim and numerical.size(-1) != self.scale.size(-1):
+            numerical = numerical.unflatten(-1, (self.scale.size(-1), -1))
+            numerical = (
+                (numerical * self.scale.unsqueeze(-1))
+                .add_(self.mean.unsqueeze(-1))
+                .flatten(-2)
+            )
+        else:
+            numerical = (numerical * self.scale).add_(self.mean)
         return table.replace_blocks(numerical=numerical.to(dtype=dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:
