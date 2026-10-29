@@ -6,7 +6,13 @@ import sdm.processing as sp
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
     return sp.Recipe(
-        features=[sp.Standardize(), sp.Asinh()],
-        target=[sp.Standardize(), sp.Asinh()],
+        features=[
+            sp.Standardize(),
+            sp.Asinh(),
+        ],
+        target=[
+            sp.Standardize(),
+            sp.Asinh(),
+        ],
         output=sp.AverageEstimators(),
     )

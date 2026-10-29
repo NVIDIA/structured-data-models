@@ -54,8 +54,6 @@ def remap_ckpt(
     if dtype is not None:
         out = {key: value.to(dtype) for key, value in out.items()}
 
-    # The released architecture has 64 channels per head. These derived
-    # float32 constants are absent from the upstream checkpoint.
     inv_freq = 1.0 / (
         10_000
         ** (
