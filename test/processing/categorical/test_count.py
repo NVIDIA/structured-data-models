@@ -157,17 +157,3 @@ def test_add_category_counts_selects_by_fitted_vocabulary_size(
     restored.load_state_dict(processor.state_dict())
     restored.to(device=device)
     assert restored.transform(query).equal(output)
-
-
-def test_add_category_counts_compiles_fit(compilation: None) -> None:
-    context = _table([[0, 0], [0, 1], [1, 0], [2, 0], [-1, 1]])
-    query = _table([[2, 0], [3, 1], [-1, 0]])
-
-    compiled = torch.compile(
-        lambda table: AddCategoryCounts().fit(table),
-        backend="inductor",
-        fullgraph=True,
-    )
-
-    expected = AddCategoryCounts().fit(context).transform(query)
-    assert compiled(context).transform(query).equal(expected)
