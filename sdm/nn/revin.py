@@ -99,14 +99,15 @@ class RevIN(torch.nn.Module):
                 ``True`` are excluded.
             correction: Degrees of freedom subtracted from the observed count.
                 The variance divisor is clamped to at least one.
-            state: Previous mean, standard deviation, and count, each with
-                shape ``[..., 1, 1]``, to continue accumulation. Use the
-                final patch returned by a previous call with the same
-                ``correction``. If ``None``, start without observations.
+            state: Previous mean, standard deviation, and count returned by
+                a call with the same ``correction``. Only the final patch
+                initializes accumulation. If ``None``, start without
+                observations.
 
         Returns:
-            Cumulative mean, standard deviation, and observed count, each
-            with shape ``[..., R, 1]``. Counts have dtype ``torch.int64``;
+            Cumulative mean, standard deviation, and observed count for the
+            supplied patches only, each with shape ``[..., R, 1]``.
+            Counts have dtype ``torch.int64``;
             means and standard deviations have dtype ``torch.float64``.
         """
         observed = ~x.isnan()
@@ -132,6 +133,9 @@ class RevIN(torch.nn.Module):
         m2 = m2[..., end].unsqueeze(-1)
         if state is not None:
             state_mean, state_std, state_count = state
+            state_mean = state_mean[..., -1:, :]
+            state_std = state_std[..., -1:, :]
+            state_count = state_count[..., -1:, :]
             total_count = state_count + count
             weight = count.double() / total_count.clamp(min=1)
             delta = mean - state_mean
