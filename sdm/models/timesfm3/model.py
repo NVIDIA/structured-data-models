@@ -37,8 +37,6 @@ from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
     crossfade_patches,
     gather_future_patches,
-    get_running_stats,
-    update_running_stats,
 )
 from sdm.nn import RevIN
 from sdm.tensor.table import TableSchema
@@ -280,7 +278,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        count, mean, std = get_running_stats(x, mask)
+        count, mean, std = self.revin.running_stats(x, ~mask, correction=0)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)
@@ -288,9 +286,9 @@ class _TimesFM3(torch.nn.Module):
         # Exclude future information for context only features and targets:
         future_mask[..., C:, :, :] = True
 
-        scale = std.where(std >= 1e-6, 1.0).unsqueeze(-1)
-        x = self.revin(x, mean.unsqueeze(-1), scale)
-        future_x = self.revin(future_x, mean.unsqueeze(-1), scale)
+        scale = std.where(std >= 1e-6, 1.0)
+        x = self.revin(x, mean, scale)
+        future_x = self.revin(future_x, mean, scale)
         x[mask] = 0.0
         future_x[future_mask] = 0.0
 
@@ -307,48 +305,47 @@ class _TimesFM3(torch.nn.Module):
 
         x = self.patch_embedding(x)  # [..., C, N, D]
         out = self.icl_block(x, patch_mask=patch_mask)  # [..., C, N, O * Q]
+        # Restore forecasts in float32 under mixed precision.
+        out = out.float()
         out = out.unflatten(-1, (self.output_patch_size, -1))
         first = mid // P - 1
 
         # Refine forecast normalization statistics using predicted medians:
         if self.refinement and horizon > 0:
             median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
-            mask = torch.zeros_like(median[..., 0, 0, :], dtype=torch.bool)
-
             # Get most recent context statistics:
-            carry_count = count[..., first]
-            carry_mean = mean[..., first]
-            carry_std = std[..., first]
+            state = (
+                count[..., first : first + 1, :],
+                mean[..., first : first + 1, :],
+                std[..., first : first + 1, :],
+            )
 
-            means, stds = [], []
+            means = [mean[..., : first + 1, :]]
+            stds = [std[..., : first + 1, :]]
             for i in range(first, out.size(-3) - 1, O // P):
                 anchor = self.revin.inverse(  # Denormalize output patch:
                     median[..., i, :, :],
-                    carry_mean[..., None, None],
-                    carry_std[..., None, None],
+                    mean=state[1],
+                    scale=state[2],
                 ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
 
                 for j in range(min(O // P, out.size(-3) - i - 1)):
                     # Update running statistics:
-                    carry_count, carry_mean, carry_std = update_running_stats(
-                        count=carry_count,
-                        mean=carry_mean,
-                        std=carry_std,
-                        x=anchor[..., j, :],
-                        mask=mask,
+                    state = self.revin.running_stats(
+                        x=anchor[..., j : j + 1, :],
+                        correction=0,
+                        state=state,
                     )
-                    means.append(carry_mean)
-                    stds.append(carry_std)
+                    means.append(state[1])
+                    stds.append(state[2])
 
-            means = [mean[..., : first + 1], torch.stack(means, dim=-1)]
-            mean = torch.cat(means, dim=-1)
-            stds = [std[..., : first + 1], torch.stack(stds, dim=-1)]
-            std = torch.cat(stds, dim=-1)
+            mean = torch.cat(means, dim=-2)
+            std = torch.cat(stds, dim=-2)
 
         out = self.revin.inverse(
             out,
-            mean[..., None, None],
-            scale=std[..., None, None],
+            mean=mean.unsqueeze(-1),
+            scale=std.unsqueeze(-1),
         ).clamp(-1e20, 1e20)
 
         # Narrow target output patches:

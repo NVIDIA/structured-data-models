@@ -74,14 +74,84 @@ class RevIN(torch.nn.Module):
         mask = mean.isnan()
         return mean.masked_fill(mask, 0.0), std.masked_fill(mask, 1.0)
 
+    @torch.no_grad()
+    def running_stats(
+        self,
+        x: Tensor,  # [..., R, D]
+        mask: Tensor | None = None,  # [..., R, D]
+        correction: int = 1,
+        state: tuple[Tensor, Tensor, Tensor] | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor]:  # [..., R, 1]
+        """Compute cumulative statistics through each patch.
+
+        Each patch uses all observed values through its final value. NaNs
+        and masked values are excluded. Means and standard deviations are
+        computed and returned in float64. Prefixes without observations
+        return zero mean and standard deviation.
+
+        Args:
+            x: Tensor with shape ``[..., R, D]``, where ``R`` is the number
+                of patches and ``D`` is the number of values per patch.
+            mask: Boolean observed-value mask with the same shape as ``x``.
+            correction: Degrees of freedom subtracted from the observed count.
+                The variance divisor is clamped to at least one.
+            state: Previous count, mean, and standard deviation, each with
+                shape ``[..., 1, 1]``, to continue accumulation. Use the
+                final patch returned by a previous call with the same
+                ``correction``. If ``None``, start without observations.
+
+        Returns:
+            Cumulative observed count, mean, and standard deviation, each
+            with shape ``[..., R, 1]``. Counts have dtype ``torch.int64``;
+            means and standard deviations have dtype ``torch.float64``.
+        """
+        observed = ~x.isnan()
+        if mask is not None:
+            observed = observed & mask
+        observed = observed.flatten(-2)
+        values = x.flatten(-2).double().masked_fill(~observed, 0)
+        count = observed.cumsum(dim=-1)
+        mean = values.cumsum(dim=-1) / count.clamp(min=1)
+
+        # Welford increments accumulate squared deviations over time.
+        previous = torch.nn.functional.pad(mean[..., :-1], (1, 0))
+        increments = ((values - previous) * (values - mean)).masked_fill(
+            ~observed,
+            0,
+        )
+        m2 = increments.cumsum(dim=-1)
+
+        # Keep statistics at the final value of each patch.
+        end = slice(x.size(-1) - 1, None, x.size(-1))
+        count = count[..., end].unsqueeze(-1)
+        mean = mean[..., end].unsqueeze(-1)
+        m2 = m2[..., end].unsqueeze(-1)
+        if state is not None:
+            state_count, state_mean, state_std = state
+            total_count = state_count + count
+            weight = count.double() / total_count.clamp(min=1)
+            delta = mean - state_mean
+            m2 = (
+                m2
+                + state_std.square() * (state_count - correction).clamp(min=1)
+                + delta.square() * state_count * weight
+            )
+            mean = state_mean + delta * weight
+            count = total_count
+        std = (m2 / (count - correction).clamp(min=1)).clamp(min=0).sqrt()
+        return count, mean, std
+
     def forward(self, x: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
         """The forward pass.
+
+        Mean and scale are converted to the input dtype.
 
         Args:
             x: Tensor with shape ``[..., R, D]``.
             mean: The mean with shape ``[..., R, *]``.
             scale: The scale with shape ``[..., R, *]``.
         """
+        mean, scale = mean.to(x.dtype), scale.to(x.dtype)
         out = (x - mean) / (scale + self.eps)
         if self.weight is not None and self.bias is not None:
             out = out * self.weight + self.bias
@@ -90,11 +160,14 @@ class RevIN(torch.nn.Module):
     def inverse(self, x: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
         """Invert the forward pass.
 
+        Mean and scale are converted to the input dtype.
+
         Args:
             x: Tensor with shape ``[..., R, D]``.
             mean: The mean with shape ``[..., R, *]``.
             scale: The scale with shape ``[..., R, *]``.
         """
+        mean, scale = mean.to(x.dtype), scale.to(x.dtype)
         if self.weight is not None and self.bias is not None:
             x = (x - self.bias) / (self.weight + self.eps * self.eps)
         return x * (scale + self.eps) + mean
