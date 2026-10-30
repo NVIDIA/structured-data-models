@@ -33,7 +33,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
     "--model",
     choices=tuple(MODEL_CONFIGS),
-    default="timesfm3",
+    default="chronos2",
     help="SDM model to benchmark.",
 )
 parser.add_argument(

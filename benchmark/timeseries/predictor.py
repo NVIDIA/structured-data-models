@@ -115,7 +115,7 @@ class SDMPredictor(Predictor):
             pred = torch.cat(preds, dim=-2)[..., : y.size(-1), :]
             pred = pred.permute(0, 3, 1, 2).cpu().numpy()  # [B, Q, R, C]
             levels = out.numerical_columns[: pred.shape[1]]
-            levels = [str(float(f"0.{q.split('q')[-1]}")) for q in levels]
+            levels = [str(int(q.rsplit("q", 1)[-1]) / 100) for q in levels]
 
             for entry, pred_i in zip(batch, pred):
                 if entry["target"].ndim == 1:

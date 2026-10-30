@@ -13,6 +13,15 @@ pip install --no-deps "git+https://github.com/SalesforceAIResearch/gift-eval.git
 
 ## Run
 
+- **`Chronos2`**:
+
+  ```bash
+  python -m benchmark.timeseries.gift_eval.main --model chronos2
+  ```
+
+  `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass.
+  Unlike the official `float32` evaluation, we use `bfloat16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
+
 - **`TimesFM3`**:
 
   ```bash
