@@ -32,13 +32,15 @@ class TokenBuffer:
     on separate streams, so copies of neighboring chunks overlap with compute.
 
     Args:
-        size: The buffer size ``[..., R, T, D]``. Offloading requires leading
-            dimensions of size one, *i.e.*, a single estimator and no class
-            decomposition.
+        size: The buffer size ``[..., R, T, D]`` of ``R`` rows with ``T``
+            tokens of ``D`` channels each. Offloading requires leading
+            dimensions of size one, *i.e.*, a single estimator and no more
+            target classes than the model predicts natively.
         dtype: The buffer dtype.
         device: The compute device.
-        offload: Where to keep the buffer: ``None`` keeps it on ``device`` and
-            ``"cpu"`` keeps it in pinned host memory.
+        offload: Where to store the buffer: ``None`` stores it on ``device``
+            and ``"cpu"`` stores it in pinned host memory, which requires a
+            CUDA ``device``.
     """
 
     def __init__(
@@ -64,8 +66,7 @@ class TokenBuffer:
         if math.prod(B) != 1:
             raise ValueError(
                 "'offload' requires 'estimator_batch_size=1' and no more "
-                "target classes than the model predicts natively (got "
-                f"buffer size {self.size})"
+                "target classes than the model predicts natively"
             )
         self._pitch = R * D * dtype.itemsize
         set_pinned_max_round_threshold(mb=1)
@@ -87,7 +88,7 @@ class TokenBuffer:
 
     @classmethod
     def from_tensor(cls, tensor: Tensor) -> Self:
-        r"""Wraps a column-major ``[..., T, R, D]`` device tensor."""
+        r"""Wrap a column-major ``[..., T, R, D]`` device tensor."""
         buffer = cls.__new__(cls)
         *B, T, R, D = tensor.size()
         buffer.size = torch.Size((*B, R, T, D))
@@ -135,7 +136,7 @@ class TokenBuffer:
         load: bool = True,
         store: bool = True,
     ) -> None:
-        r"""Updates rows in place.
+        r"""Update rows in place, in chunks of ``N`` rows.
 
         Args:
             compute: Called as ``compute(tokens, rows)`` with ``tokens`` of
@@ -178,11 +179,12 @@ class TokenBuffer:
         compute: Callable[[Tensor], object],
         tokens: slice,
     ) -> None:
-        r"""Updates the token columns ``tokens`` in place.
+        r"""Update the token columns ``tokens`` in place, in chunks.
 
         Args:
-            compute: Called on chunks of consecutive token columns, in order,
-                with ``cells`` of shape ``[..., N, R, D]``.
+            compute: Called as ``compute(cells)`` on chunks of ``N``
+                consecutive token columns, in order, with ``cells`` of shape
+                ``[..., N, R, D]``.
             tokens: The token columns to update.
         """
         if self.offload is None:
@@ -293,7 +295,7 @@ def run_column_layers(
     cache: Cache | None,
     epilogue: Callable[[Tensor], object] | None = None,
 ) -> None:
-    r"""Runs consecutive column layers over ``buffer`` in a single pass.
+    r"""Run consecutive column layers over ``buffer`` in a single pass.
 
     Records or replays each layer's key/value projections under its cache key.
 
@@ -349,7 +351,7 @@ def add_labels(
     y_emb: Tensor,  # [..., R_train, D]
     rows: slice,
 ) -> None:
-    r"""Adds label embeddings to the context rows among ``rows``."""
+    r"""Add label embeddings to the context rows among ``rows``."""
     stop = min(rows.stop, y_emb.size(-2))
     if stop > rows.start:
         cells[..., : stop - rows.start, :, :] += y_emb[

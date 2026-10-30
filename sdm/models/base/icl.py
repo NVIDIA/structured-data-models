@@ -135,15 +135,13 @@ class ICLModel(Model):
                 pre-processing and model execution.
             offload: Where to store the largest intermediate activations,
                 such as the per-cell embeddings of row embedding layers.
-                Offloading requires inputs on a CUDA device. ``None`` stores
-                them on the device of the inputs. ``"cpu"`` stores them in
-                pinned host memory and streams them through the device in
-                chunks. This lowers peak device memory at the cost of
-                additional host-device transfers, which overlap with compute
-                to limit the slowdown. Offloading also requires
-                :attr:`supports_offload`, disabled gradients,
-                ``estimator_batch_size=1``, and no more target classes than
-                the model predicts natively.
+                ``None`` stores them on the device of the inputs. ``"cpu"``
+                stores them in pinned host memory and streams them through
+                the device in chunks. This lowers peak device memory at the
+                cost of host-device transfers, which overlap with compute.
+                Offloading requires :attr:`supports_offload`, inputs on a
+                CUDA device, disabled gradients, ``estimator_batch_size=1``,
+                and no more target classes than the model predicts natively.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
@@ -278,14 +276,14 @@ class ICLModel(Model):
                 pre-processing and model execution.
             offload: Where to store the largest intermediate activations
                 while fitting, such as the per-cell embeddings of row
-                embedding layers. Offloading requires inputs on a CUDA
-                device. ``None`` stores them on the device of the inputs.
-                ``"cpu"`` stores them in pinned host memory and streams them
-                through the device in chunks. This lowers peak device memory
-                at the cost of additional host-device transfers, which
-                overlap with compute to limit the slowdown. Offloading also
-                requires :attr:`supports_offload`, ``estimator_batch_size=1``,
-                and no more target classes than the model predicts natively.
+                embedding layers. ``None`` stores them on the device of the
+                inputs. ``"cpu"`` stores them in pinned host memory and
+                streams them through the device in chunks. This lowers peak
+                device memory at the cost of host-device transfers, which
+                overlap with compute. :meth:`predict` does not offload.
+                Offloading requires :attr:`supports_offload`, inputs on a
+                CUDA device, ``estimator_batch_size=1``, and no more target
+                classes than the model predicts natively.
             kwargs: Additional keyword arguments passed to the model.
         """
         self._validate_offload(offload, x.device)
