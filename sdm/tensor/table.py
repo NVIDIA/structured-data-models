@@ -138,14 +138,6 @@ class TableTensor(Tensor):
     while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
-    :meth:`~torch.Tensor.masked_fill` accepts a boolean tensor whose last
-    dimension follows numerical, categorical, datetime, text, then identifier
-    columns, in each block's column order. Masks broadcast over rows and batch
-    dimensions. Filling with NaN marks cells as missing; other scalar values
-    follow the corresponding block's value semantics. Categorical fills refer
-    to existing category values, not codes. Numeric fills cannot replace text
-    or variable-length cells with non-missing values.
-
     .. testcode:: drop_stypes, select_columns, drop_columns
 
         import torch
@@ -1521,32 +1513,48 @@ def _masked_fill(
     mask: Tensor,
     value: float | complex | Tensor,
 ) -> TableTensor:
-    if mask.dtype != torch.bool:
-        raise RuntimeError("masked_fill expects a boolean mask")
-    if isinstance(value, Tensor) and value.dim() != 0:
-        raise RuntimeError("masked_fill expects a scalar fill value")
-    size = torch.broadcast_shapes(inp.shape, mask.shape)
-    if size[-1] != inp.size(-1):
-        raise RuntimeError("masked_fill cannot expand the column dimension")
-    mask = mask.expand(size)
+    broadcast_columns = mask.dim() == 0 or mask.size(-1) == 1
+    if not broadcast_columns and mask.size(-1) != inp.size(-1):
+        raise RuntimeError(
+            f"Can't expand the column dimension of '{inp.__class__.__name__}'"
+        )
+    size = inp.shape
+    if mask.dim() > 0 and mask.shape[:-1] != size[:-1]:
+        size = torch.broadcast_shapes(size, mask.shape)
 
     blocks: dict[Stype, Tensor] = {}
     offset = 0
     for stype, block in inp.items():
         width = block.size(-1)
-        block_mask = mask[..., offset : offset + width]
-        offset += width
         if width == 0:
-            blocks[stype] = block.expand(*size[:-1], 0)
+            blocks[stype] = (
+                block if size == inp.shape else block.expand(*size[:-1], 0)
+            )
             continue
+        block_mask = (
+            mask if broadcast_columns else mask[..., offset : offset + width]
+        )
+        offset += width
 
         fill = value
         if stype == Stype.datetime:
-            if isinstance(value, Tensor):
+            if isinstance(value, Tensor) and value.is_floating_point():
                 fill = torch.where(value.isnan(), NaT, value)
-            elif value != value:
+            elif not isinstance(value, Tensor) and value != value:
                 fill = NaT
-        blocks[stype] = block.masked_fill(block_mask, fill)
+        if (
+            type(block) is Tensor
+            and isinstance(fill, Tensor)
+            and fill.dtype == block.dtype
+        ):
+            if fill.dim() != 0:
+                raise RuntimeError("Expected 'value' to be zero-dimensional")
+            blocks[stype] = torch.where(block_mask, fill, block)
+        else:
+            blocks[stype] = block.masked_fill(block_mask, fill)
+
+    if inp.size(-1) == 0:
+        blocks[Stype.numerical] = inp.numerical.masked_fill(mask, value)
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),

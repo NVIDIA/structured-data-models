@@ -43,9 +43,6 @@ class ColumnarTensor(Tensor):
     Each of the ``C`` columns is stored independently and may use a different
     tensor subclass or dtype.
 
-    :meth:`~torch.Tensor.masked_fill` broadcasts the mask and fills each column
-    using its own value semantics.
-
     Args:
         columns: Per-column values.
         size: The shape of the tensor ``[...]``.
@@ -633,23 +630,38 @@ def _masked_fill(
     mask: Tensor,
     value: float | complex | Tensor,
 ) -> ColumnarTensor:
-    if mask.dtype != torch.bool:
-        raise RuntimeError("masked_fill expects a boolean mask")
-    if isinstance(value, Tensor) and value.dim() != 0:
-        raise RuntimeError("masked_fill expects a scalar fill value")
-    size = torch.broadcast_shapes(inp.shape, mask.shape)
-    if size[-1] != inp.size(-1):
-        raise RuntimeError("masked_fill cannot expand the column dimension")
-    mask = mask.expand(size)
+    broadcast_columns = mask.dim() == 0 or mask.size(-1) == 1
+    if not broadcast_columns and mask.size(-1) != inp.size(-1):
+        raise RuntimeError(
+            f"Can't expand the column dimension of '{inp.__class__.__name__}'"
+        )
+    size = inp.shape
+    if mask.dim() > 0 and mask.shape[:-1] != size[:-1]:
+        size = torch.broadcast_shapes(size, mask.shape)
+    shared_mask = (
+        mask.squeeze(-1) if broadcast_columns and mask.dim() > 0 else mask
+    )
     columns = []
     for i, column in enumerate(inp._columns):
         if (
             (isinstance(value, Tensor) or value != value)
-            and not column.is_floating_point()
             and not isinstance(column, NullableTensor | VarLenTensor)
+            and not column.is_floating_point()
         ):
             column = NullableTensor.from_tensor(column)
-        columns.append(column.masked_fill(mask[..., i], value))
+        column_mask = shared_mask if broadcast_columns else mask[..., i]
+        if (
+            type(column) is Tensor
+            and isinstance(value, Tensor)
+            and value.dtype == column.dtype
+        ):
+            if value.dim() != 0:
+                raise RuntimeError("Expected 'value' to be zero-dimensional")
+            columns.append(torch.where(column_mask, value, column))
+        else:
+            columns.append(column.masked_fill(column_mask, value))
+    if not columns:
+        return inp._from_empty(inp._empty.masked_fill(mask, value))
     return inp.__class__(
         columns=columns,
         size=size[:-1],

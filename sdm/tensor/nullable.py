@@ -42,9 +42,6 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
 class NullableTensor(Tensor):
     r"""A :class:`torch.Tensor` for nullable values.
 
-    :meth:`~torch.Tensor.masked_fill` replaces selected values and marks them
-    valid, or marks them missing when filled with NaN.
-
     Args:
         data: Tensor containing the values.
         valid: Boolean mask indicating valid, non-null values.
@@ -667,18 +664,21 @@ def _masked_fill(
     mask: Tensor,
     value: float | complex | Tensor,
 ) -> NullableTensor:
-    if mask.dtype != torch.bool:
-        raise RuntimeError("masked_fill expects a boolean mask")
     if isinstance(value, Tensor):
-        data = inp._data.masked_fill(mask, value.nan_to_num(nan=0))
-        valid = torch.where(mask, ~value.isnan(), inp._valid)
+        if value.dtype == inp._data.dtype:
+            if value.dim() != 0:
+                raise RuntimeError("Expected 'value' to be zero-dimensional")
+            data = torch.where(mask, value, inp._data)
+            valid = inp._valid | mask
+        else:
+            data = inp._data.masked_fill(mask, value.nan_to_num(nan=0))
+            valid = torch.where(mask, ~value.isnan(), inp._valid)
     elif value != value:
-        data, mask = torch.broadcast_tensors(inp._data, mask)
-        data = data.clone()
         valid = inp._valid & ~mask
+        data = inp._data.expand(valid.shape).clone()
     else:
         data = inp._data.masked_fill(mask, value)
-        valid = torch.where(mask, True, inp._valid)
+        valid = inp._valid | mask
     return inp.__class__(data, valid)
 
 

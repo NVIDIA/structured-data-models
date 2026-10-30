@@ -54,10 +54,6 @@ class CategoricalTensor(Tensor):
     Code values are direct indices into the corresponding category vector.
     Negative indices represent missing values.
 
-    :meth:`~torch.Tensor.masked_fill` fills with existing category values,
-    preserving the category vectors. NaN fills mark cells as missing.
-    Unknown values raise an error for columns containing masked cells.
-
     .. testcode::
 
         import torch
@@ -554,17 +550,17 @@ def _masked_fill(
     mask: Tensor,
     value: float | complex | Tensor,
 ) -> CategoricalTensor:
-    if mask.dtype != torch.bool:
-        raise RuntimeError("masked_fill expects a boolean mask")
     if isinstance(value, Tensor) and value.dim() != 0:
-        raise RuntimeError("masked_fill expects a scalar fill value")
+        raise RuntimeError("Expected 'value' to be zero-dimensional")
     mask, code = torch.broadcast_tensors(mask, inp.code)
     if code.size(-1) != inp.size(-1):
-        raise RuntimeError("masked_fill cannot expand the column dimension")
+        raise RuntimeError(
+            f"Can't expand the column dimension of '{inp.__class__.__name__}'"
+        )
     if not isinstance(value, Tensor) and value != value:
         return inp.__class__(code.masked_fill(mask, -1), inp.categories)
     if inp.size(-1) == 0:
-        return inp.__class__(code.clone(), inp.categories)
+        return inp.__class__(code.masked_fill(mask, -1), inp.categories)
 
     missing = torch.as_tensor(value, device=inp.device).isnan()
     fills = []

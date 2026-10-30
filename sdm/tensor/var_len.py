@@ -43,9 +43,6 @@ class VarLenTensor(Tensor):
     Values are stored in a flat contiguous ``data`` tensor and indexed by an
     ``offset`` tensor.
 
-    :meth:`~torch.Tensor.masked_fill` accepts NaN to mark entire cells as
-    missing. Non-missing scalar fills cannot replace variable-length values.
-
     .. testcode::
 
         import torch
@@ -1000,26 +997,41 @@ def _masked_fill(
     value: float | complex | Tensor,
 ) -> VarLenTensor:
     if mask.dtype != torch.bool:
-        raise RuntimeError("masked_fill expects a boolean mask")
+        raise RuntimeError("Expected 'mask' to have dtype 'torch.bool'")
     if isinstance(value, Tensor) and value.dim() != 0:
-        raise RuntimeError("masked_fill expects a scalar fill value")
-    torch._assert_async(
-        torch.as_tensor(value, device=inp.device).isnan(),
-        "Numeric masked_fill values cannot fill variable-length cells; "
-        "use NaN for missing values",
-    )
+        raise RuntimeError("Expected 'value' to be zero-dimensional")
+    if isinstance(value, Tensor):
+        torch._assert_async(
+            value.isnan() | ~mask.any(),
+            "Can't fill variable-length cells with a non-missing scalar",
+        )
+    elif value == value:
+        torch._assert_async(
+            ~mask.any(),
+            "Can't fill variable-length cells with a non-missing scalar",
+        )
     size = torch.broadcast_shapes(inp.shape, mask.shape)
-    out = cast(
-        VarLenTensor,
-        inp.expand(size).clone(memory_format=torch.contiguous_format),
-    )
-    valid = ~mask.expand(size)
-    if out._valid is not None:
-        valid = valid & out._valid.view(size)
+    if (
+        size == inp.shape
+        and inp.is_contiguous()
+        and int(inp.storage_offset()) == 0
+        and inp._offset.numel() == inp.numel() + 1
+    ):
+        data, offset = inp._data.clone(), inp._offset.clone()
+        valid = _valid(inp)
+    else:
+        out = cast(
+            VarLenTensor,
+            inp.expand(size).clone(memory_format=torch.contiguous_format),
+        )
+        data, offset, valid = out._data, out._offset, out.valid
+    present = ~mask.expand(size)
+    if valid is not None:
+        present.logical_and_(valid)
     return inp.__class__(
-        data=out._data,
-        offset=out._offset,
-        valid=valid.reshape(-1),
+        data=data,
+        offset=offset,
+        valid=present.reshape(-1),
         size=size,
     )
 

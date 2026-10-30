@@ -253,7 +253,7 @@ def test_invalid_masks(mask: Tensor) -> None:
 
 def test_nonscalar_fill() -> None:
     table = TableTensor(numerical=torch.ones(2, 1))
-    with pytest.raises(RuntimeError, match="scalar fill value"):
+    with pytest.raises(RuntimeError, match="zero-dimensional"):
         table.masked_fill(torch.ones(2, 1, dtype=torch.bool), torch.ones(2))
 
 
@@ -261,6 +261,46 @@ def test_text_rejects_numeric_fill() -> None:
     tensor = StringTensor.from_list(["a", "b"])
     with pytest.raises(RuntimeError, match="variable-length cells"):
         tensor.masked_fill(torch.tensor([True, False]), 0)
+
+
+@withCUDA
+@pytest.mark.parametrize("tensor_value", [False, True])
+def test_numeric_fill_leaves_unselected_text(
+    device: torch.device, tensor_value: bool
+) -> None:
+    table = TableTensor(
+        numerical=torch.tensor([[1.0], [2.0]], device=device),
+        text=StringTensor.from_list([["a"], ["b"]], device=device),
+    )
+    value = torch.tensor(0.0, device=device) if tensor_value else 0
+    out = table.masked_fill(
+        torch.tensor([[True, False], [False, False]], device=device), value
+    )
+    assert isinstance(out, TableTensor)
+    assert out.numerical[:, 0].tolist() == [0.0, 2.0]
+    assert out.text[:, 0].tolist() == ["a", "b"]
+
+
+@withCUDA
+def test_text_fill_copies_payload(device: torch.device) -> None:
+    text = StringTensor.from_list(["a", None, "c"], device=device)
+    out = text.masked_fill(
+        torch.tensor([False, True, True], device=device), torch.nan
+    )
+    assert isinstance(out, StringTensor)
+    out.data_offset[0][0] = ord("z")
+    assert out.tolist() == ["z", None, None]
+    assert text.tolist() == ["a", None, "c"]
+
+
+@withCUDA
+def test_text_fill_of_sliced_payload(device: torch.device) -> None:
+    text = StringTensor.from_list(["a", "bb", None, "dddd"], device=device)
+    out = text[1:3].masked_fill(
+        torch.tensor([True, False], device=device), torch.nan
+    )
+    assert out.tolist() == [None, None]
+    assert text.tolist() == ["a", "bb", None, "dddd"]
 
 
 @withCUDA
@@ -309,3 +349,28 @@ def test_compiled(device: torch.device, compilation: None) -> None:
         torch.testing.assert_close(
             actual.categorical.code, expected.categorical.code
         )
+
+
+@pytest.mark.parametrize(
+    ("dtype", "value"), [(torch.float32, 1e100), (torch.int8, 1000.0)]
+)
+def test_fill_conversion_overflow(dtype: torch.dtype, value: float) -> None:
+    table = TableTensor(numerical=torch.ones(2, 1, dtype=dtype))
+    fill = torch.tensor(value, dtype=torch.float64)
+    with pytest.raises(RuntimeError, match="overflow"):
+        table.masked_fill(torch.ones(2, 1, dtype=torch.bool), fill)
+
+
+@pytest.mark.parametrize("kind", ["table", "categorical", "columnar"])
+def test_invalid_empty_mask(kind: str) -> None:
+    tensor: Tensor
+    if kind == "table":
+        tensor = TableTensor(size=(2,))
+    elif kind == "categorical":
+        tensor = CategoricalTensor(
+            code=torch.empty(2, 0, dtype=torch.int64), categories=()
+        )
+    else:
+        tensor = ColumnarTensor(columns=[], size=(2,))
+    with pytest.raises(RuntimeError, match="boolean masks"):
+        tensor.masked_fill(torch.ones(2, 1), 0)
