@@ -12,17 +12,17 @@ import torch
 import torch.nn.functional as F
 from safetensors.torch import load_file
 from torch import Tensor
+from torch.nn import ReLU
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
-from sdm.models.chronos2.block import ResidualBlock
 from sdm.models.chronos2.ckpt import remap_ckpt
 from sdm.models.chronos2.icl import ICLBlock
 from sdm.models.chronos2.recipe import default_recipe
 from sdm.models.chronos2.util import rollout_quantiles
-from sdm.nn import RevIN
+from sdm.nn import ResidualMLP, RevIN
 
 QUANTILES = (0.01, *[i / 100 for i in range(5, 100, 5)], 0.99)
 
@@ -185,10 +185,11 @@ class _Chronos2(torch.nn.Module):
         self.context_length = context_length
         self.max_output_patches = max_output_patches
         self.norm = RevIN(eps=0)
-        self.patch_embedding = ResidualBlock(
+        self.patch_embedding = ResidualMLP(
             in_channels=3 * patch_size,
             hidden_channels=hidden_channels,
             out_channels=channels,
+            activation=ReLU(),
             **factory_kwargs,
         )
         self.reg_token = torch.nn.Parameter(
@@ -201,10 +202,11 @@ class _Chronos2(torch.nn.Module):
             hidden_channels=hidden_channels,
             **factory_kwargs,
         )
-        self.head = ResidualBlock(
+        self.head = ResidualMLP(
             in_channels=channels,
             hidden_channels=hidden_channels,
             out_channels=len(QUANTILES) * patch_size,
+            activation=ReLU(),
             **factory_kwargs,
         )
 
