@@ -35,6 +35,36 @@ def set_pinned_max_round_threshold(
     torch._C._accelerator_setAllocatorSettings(",".join(options))
 
 
+def set_pinned_register_threads(
+    num_threads: int,
+    force: bool = False,
+) -> None:
+    r"""Set the process-wide number of threads that pin new allocations.
+
+    Registering the pages of a pinned allocation from several threads pins
+    large allocations several times faster than a single thread.
+
+    Args:
+        num_threads: The number of threads, a power of two of at most
+            ``128``.
+        force: Whether to replace an existing setting.
+    """
+    if torch.__version__ < "2.14":
+        return
+    keys = ("pinned_use_cuda_host_register", "pinned_num_register_threads")
+    settings = torch._C._accelerator_getAllocatorSettings()
+    if not force and any(key in settings for key in keys):
+        return
+    options = [
+        option
+        for option in settings.split(",")
+        if option and option.split(":")[0].strip() not in keys
+    ]
+    options.append(f"{keys[0]}:True")
+    options.append(f"{keys[1]}:{num_threads}")
+    torch._C._accelerator_setAllocatorSettings(",".join(options))
+
+
 def chunk_memory_limit(device: torch.device) -> int:
     r"""Bytes one chunk of a chunked operation may occupy on a CUDA device.
 

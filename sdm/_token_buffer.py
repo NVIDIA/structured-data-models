@@ -9,7 +9,11 @@ from typing import Any, Literal, Self, cast
 import torch
 from torch import Tensor
 
-from sdm._memory import chunk_memory_limit, set_pinned_max_round_threshold
+from sdm._memory import (
+    chunk_memory_limit,
+    set_pinned_max_round_threshold,
+    set_pinned_register_threads,
+)
 from sdm.cache import Cache, KVCacheEntry
 
 # Lets one chunk load, another compute, and a third store concurrently.
@@ -70,6 +74,11 @@ class TokenBuffer:
             )
         self._pitch = R * D * dtype.itemsize
         set_pinned_max_round_threshold(mb=1)
+        num_threads = min(torch.get_num_threads(), 16)
+        # PyTorch requires the register thread count to be a power of two.
+        set_pinned_register_threads(
+            num_threads=1 << (num_threads.bit_length() - 1)
+        )
         self._host = torch.empty(
             self.size.numel(), dtype=dtype, pin_memory=True
         )
