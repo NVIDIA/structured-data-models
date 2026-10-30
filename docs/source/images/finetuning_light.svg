@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 262" width="760" height="262" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f2328"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4e7a00"/>
+    </marker>
+  </defs>
+
+  <!-- Training split -->
+  <text x="80" y="58" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">Training split</text>
+  <rect x="20" y="70" width="120" height="125" rx="4" fill="#f6f8fa" stroke="#1f2328" stroke-width="1.5"/>
+  <rect x="21" y="105" width="118" height="15" fill="#d1d9e0"/>
+  <rect x="21" y="150" width="118" height="15" fill="#d1d9e0"/>
+  <rect x="21" y="180" width="118" height="14" fill="#d1d9e0"/>
+  <rect x="21" y="90" width="118" height="15" fill="rgba(118,185,0,0.28)"/>
+  <rect x="21" y="165" width="118" height="15" fill="rgba(118,185,0,0.28)"/>
+  <line x1="20" y1="90" x2="140" y2="90" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="50" y1="70" x2="50" y2="195" stroke="#59636e" stroke-width="1"/>
+  <line x1="80" y1="70" x2="80" y2="195" stroke="#59636e" stroke-width="1"/>
+  <line x1="110" y1="70" x2="110" y2="195" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="35" y="84" text-anchor="middle" font-size="11" fill="#59636e">x₁</text>
+  <text x="65" y="84" text-anchor="middle" font-size="11" fill="#59636e">x₂</text>
+  <text x="95" y="84" text-anchor="middle" font-size="11" fill="#59636e">x₃</text>
+  <text x="125" y="84" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2328">y</text>
+
+  <!-- Sampling -->
+  <text x="172" y="137" text-anchor="middle" font-size="12" fill="#59636e">sample</text>
+  <path d="M142,118 C176,118 176,90 206,90" fill="none" stroke="#1f2328" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M142,150 C176,150 176,180 206,180" fill="none" stroke="#1f2328" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Context and query -->
+  <rect x="210" y="60" width="140" height="60" rx="6" fill="#d1d9e0" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="280" y="86" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">Context</text>
+  <text x="280" y="105" text-anchor="middle" font-size="12" fill="#1f2328">C rows with labels</text>
+  <rect x="210" y="150" width="140" height="60" rx="6" fill="rgba(118,185,0,0.28)" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="280" y="176" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">Query</text>
+  <text x="280" y="195" text-anchor="middle" font-size="12" fill="#1f2328">Q rows, labels hidden</text>
+
+  <!-- Model -->
+  <path d="M350,90 C372,90 372,120 392,120" fill="none" stroke="#1f2328" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M350,180 C372,180 372,150 392,150" fill="none" stroke="#1f2328" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="395" y="95" width="100" height="80" rx="6" fill="rgba(118,185,0,0.12)" stroke="#4e7a00" stroke-width="2"/>
+  <text x="445" y="131" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">TFM</text>
+  <text x="445" y="152" text-anchor="middle" font-size="11" fill="#59636e">all weights</text>
+  <text x="445" y="165" text-anchor="middle" font-size="11" fill="#59636e">trainable</text>
+
+  <!-- Loss -->
+  <path d="M495,135 L578,135" fill="none" stroke="#1f2328" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="537" y="127" text-anchor="middle" font-size="11" fill="#59636e">predictions</text>
+  <rect x="580" y="105" width="160" height="60" rx="6" fill="#f6f8fa" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="660" y="131" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">Loss</text>
+  <text x="660" y="150" text-anchor="middle" font-size="12" fill="#1f2328">on query rows only</text>
+
+  <!-- Query labels feed the loss -->
+  <path d="M280,210 L280,240 L660,240 L660,169" fill="none" stroke="#59636e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="470" y="233" text-anchor="middle" font-size="12" fill="#59636e">query labels</text>
+
+  <!-- Update -->
+  <path d="M660,103 C660,32 445,32 445,91" fill="none" stroke="#4e7a00" stroke-width="2" marker-end="url(#arrow-accent)"/>
+  <text x="552" y="34" text-anchor="middle" font-size="12" font-weight="600" fill="#4e7a00">backpropagate and update every weight</text>
+</svg>
