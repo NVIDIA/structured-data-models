@@ -40,6 +40,8 @@ class KumoForecast(ICLModel):
     Optional cross-channel mixing lets forecasts use dependencies between
     variates after temporal encoding. The forecasting head predicts the native
     up to 72-step horizon directly from a 512-step history.
+    Shorter histories are left-padded with missing values, which are excluded
+    from normalization statistics and replaced with zeros after normalization.
     Forecast horizons beyond 72 steps are extended autoregressively, up to
     512 steps.
 
@@ -181,12 +183,6 @@ class KumoForecast(ICLModel):
                 f"Expected 'alpha' between zero and one (got {alpha})"
             )
 
-        if y_context.size(-2) < self.model.context_size:
-            raise ValueError(
-                f"Expected at least {self.model.context_size} context rows "
-                f"(got {y_context.size(-2)})"
-            )
-
         horizon = x_query.size(-2)
         if not 1 <= horizon <= 512:
             raise ValueError(
@@ -218,6 +214,12 @@ class KumoForecast(ICLModel):
 
         # Forecast:
         last_x = x[..., -self.model.context_size :]
+        if last_x.size(-1) < context_size:
+            last_x = torch.nn.functional.pad(
+                last_x,
+                pad=(context_size - last_x.size(-1), 0),
+                value=float("nan"),
+            )
         encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
         out = self.model.decode(encoded, mean, scale)
 
