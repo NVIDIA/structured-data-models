@@ -17,6 +17,7 @@ from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
+_Level: TypeAlias = tuple[Tensor, Tensor, Tensor, Tensor]
 
 
 class ICLBlock(torch.nn.Module):
@@ -71,6 +72,17 @@ class ICLBlock(torch.nn.Module):
         num_classes: int | None = None,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
+        if (
+            cache is not None
+            and cache.is_replaying
+            and "icl_block.levels" in cache
+        ):
+            levels = cast("list[_Level]", cache["icl_block.levels"])
+            if levels[0][0].size(-1) != num_classes:
+                raise RuntimeError(
+                    "Cached hierarchy class count does not match"
+                )
+
         if num_classes is None or num_classes <= self.num_classes:
             return self._forward(
                 x=x,
@@ -83,6 +95,16 @@ class ICLBlock(torch.nn.Module):
             raise ValueError(
                 "Hierarchical classification requires 'num_classes' to be "
                 "at least two"
+            )
+
+        # Compilation needs fixed shapes; eager fit can keep compact caches.
+        # Either cache layout supports eager and compiled prediction.
+        if (
+            torch.compiler.is_compiling()
+            and (cache is None or cache.is_recording)
+        ) or (cache is not None and "icl_block.levels" in cache):
+            return self._forward_hierarchical_masked(
+                x=x, y=y, num_classes=num_classes, cache=cache
             )
 
         return self._forward_hierarchical(
@@ -99,6 +121,7 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None,
         cache_prefix: str,
+        attn_mask: Tensor | None = None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -120,6 +143,7 @@ class ICLBlock(torch.nn.Module):
                     if cache is not None and cache.is_replaying
                     else x[..., :R_train, :]
                 ),
+                attn_mask=attn_mask,
                 return_key_value=cache is not None and cache.is_recording,
                 # `x` is still the caller's tensor at i == 0; don't mutate.
                 out=None
@@ -136,6 +160,148 @@ class ICLBlock(torch.nn.Module):
             del result
 
         return self.head(self.norm(x))  # [..., R_test, out_channels]
+
+    def _forward_hierarchical_masked(
+        self,
+        x: Tensor,  # [..., R, D]
+        y: Tensor,  # [..., R_train]
+        *,
+        num_classes: int,
+        cache: Cache | None,
+    ) -> Tensor:  # [..., R_test, C]
+        y = y.long()
+        train_size = y.size(-1)
+        test_size = x.size(-2) - train_size
+        if 0 in x.size()[:-2]:
+            return (
+                x[..., train_size:, :]
+                .sum(dim=-1, keepdim=True)
+                .expand(*x.size()[:-2], test_size, num_classes)
+            )
+
+        if cache is not None and cache.is_replaying:
+            levels = cast("list[_Level]", cache["icl_block.levels"])
+            if levels[0][0].size()[:-2] != x.size()[:-2]:
+                raise RuntimeError(
+                    "Cached hierarchy batch shape does not match"
+                )
+        else:
+            levels = self._hierarchy(y=y, num_classes=num_classes)
+            if cache is not None and cache.is_recording:
+                cache["icl_block.levels"] = levels
+
+        # Start at the input precision so autocast cannot make the output
+        # dtype depend on which nodes are singletons.
+        log_probs = x.new_zeros((*x.size()[:-2], test_size, num_classes))
+        output_ids = torch.arange(self.num_classes, device=x.device)
+        # Add child probabilities before parent probabilities, preserving the
+        # recursive evaluation order in reduced precision.
+        for depth in range(len(levels) - 1, -1, -1):
+            classes, indices, sizes, mask = levels[depth]
+            num_nodes = classes.size(-2)
+            # Every level batches its nodes. Masking context rows keeps shapes
+            # independent of label values, including missing classes.
+            rows = (
+                x.unsqueeze(-3)
+                .expand(*x.size()[:-2], num_nodes, *x.size()[-2:])
+                .clone()
+            )
+            labels = indices.gather(
+                -1, y.unsqueeze(-2).expand(*y.size()[:-1], num_nodes, -1)
+            )
+            logits = self._forward(
+                x=rows,
+                y=labels,
+                cache=cache,
+                cache_prefix=f"icl_block.level{depth}",
+                attn_mask=mask.unsqueeze(-2),
+            )
+            logits = (
+                logits[..., : self.num_classes] / self.temperature
+            ).masked_fill(output_ids >= sizes[..., None, None], -torch.inf)
+            node_log_probs = logits.log_softmax(dim=-1)
+            class_log_probs = node_log_probs.gather(
+                -1,
+                indices.unsqueeze(-2).expand(
+                    *indices.size()[:-1], test_size, -1
+                ),
+            )
+            log_probs = log_probs + class_log_probs.masked_fill(
+                ~classes.unsqueeze(-2), 0
+            ).sum(dim=-3)
+
+        present = levels[0][0].squeeze(-2)
+        # The output Softmax divides by temperature.
+        return log_probs.masked_fill(~present.unsqueeze(-2), -torch.inf).mul(
+            self.temperature
+        )
+
+    def _hierarchy(
+        self,
+        y: Tensor,  # [..., R_train]
+        *,
+        num_classes: int,
+    ) -> list[_Level]:
+        counts = y.new_zeros((*y.size()[:-1], num_classes))
+        counts = counts.scatter_add(-1, y, torch.ones_like(y))
+        classes = counts.gt(0).unsqueeze(-2)  # [..., N, C]
+        levels = []
+        bounds = [min(num_classes, y.size(-1))]
+        while True:
+            sizes = classes.sum(dim=-1, keepdim=True)
+            ranks = (classes.cumsum(dim=-1) - 1).clamp(min=0)
+            groups = (
+                (sizes + self.num_classes - 1) // self.num_classes
+            ).clamp(min=1, max=self.num_classes)
+            quotient = sizes // groups
+            remainder = sizes % groups
+            boundary = (quotient + 1) * remainder
+            # Balanced, contiguous groups of *present* classes, with larger
+            # groups first, matching tensor_split in sorted class order.
+            indices = torch.where(
+                ranks < boundary,
+                ranks // (quotient + 1),
+                remainder + (ranks - boundary) // quotient.clamp(min=1),
+            )
+            internal = sizes > self.num_classes
+            indices = torch.where(internal, indices, ranks).masked_fill(
+                ~classes, 0
+            )
+            output_sizes = torch.where(internal, groups, sizes).squeeze(-1)
+            mask = classes.gather(
+                -1,
+                y.unsqueeze(-2).expand(*y.size()[:-1], classes.size(-2), -1),
+            )
+            # Empty nodes need a finite softmax before masking their outputs.
+            levels.append((classes, indices, output_sizes.clamp(min=1), mask))
+            # Upper bounds omit impossible descendants. For 101 classes at
+            # capacity 10, only the 11-class group splits again.
+            parents, children, next_bounds = [], [], []
+            for node, bound in enumerate(bounds):
+                if bound <= self.num_classes:
+                    continue
+                max_groups = min(
+                    (bound + self.num_classes - 1) // self.num_classes,
+                    self.num_classes,
+                )
+                for child in range(max_groups):
+                    parents.append(node)
+                    children.append(child)
+                    next_bounds.append(
+                        max(
+                            self.num_classes,
+                            (bound + self.num_classes - 1 - child)
+                            // self.num_classes,
+                        )
+                    )
+            if not parents:
+                return levels
+            parent_ids = torch.tensor(parents, device=y.device)
+            child_ids = torch.tensor(children, device=y.device)
+            classes = (classes & internal).index_select(-2, parent_ids) & (
+                indices.index_select(-2, parent_ids) == child_ids.unsqueeze(-1)
+            )
+            bounds = next_bounds
 
     def _forward_hierarchical(
         self,
