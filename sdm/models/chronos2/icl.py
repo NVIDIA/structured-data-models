@@ -26,6 +26,7 @@ class ICLBlock(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
         rope = RotaryEmbedding(
             channels=channels // num_heads,
             layout="split_half",
@@ -49,13 +50,9 @@ class ICLBlock(torch.nn.Module):
                 num_heads=num_heads,
                 mlp=Sequential(
                     RMSNorm(channels, eps=1e-6, **factory_kwargs),
-                    Linear(
-                        channels, hidden_channels, bias=False, **factory_kwargs
-                    ),
+                    Linear(channels, hidden_channels, False, **factory_kwargs),
                     ReLU(),
-                    Linear(
-                        hidden_channels, channels, bias=False, **factory_kwargs
-                    ),
+                    Linear(hidden_channels, channels, False, **factory_kwargs),
                 ),
                 **factory_kwargs,
             )
