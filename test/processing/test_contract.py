@@ -131,6 +131,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.RobustScale()),
     ProcessorCase(sp.MinMaxScale()),
     ProcessorCase(sp.FlipSign()),
+    ProcessorCase(sp.Asinh()),
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
     ProcessorCase(sp.RandomProjection(2)),

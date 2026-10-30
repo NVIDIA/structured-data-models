@@ -49,8 +49,10 @@ class Standardize(Processor, InvertibleMixin):
             mean: The mean to subtract.
             scale: The scale to divide by.
         """
-        self._set_buffer("mean", torch.as_tensor(mean))
-        self._set_buffer("scale", torch.as_tensor(scale))
+        mean = torch.atleast_1d(torch.as_tensor(mean))
+        scale = torch.atleast_1d(torch.as_tensor(scale))
+        self._set_buffer("mean", mean)
+        self._set_buffer("scale", scale)
         self.requires_fit = False
         return self
 
@@ -82,22 +84,16 @@ class Standardize(Processor, InvertibleMixin):
             self.scale.add_(self.eps)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.mean).div_(self.scale)
+        mean = self.mean.to(table.device)
+        scale = self.scale.to(table.device)
+        numerical = (table.numerical - mean).div_(scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        dtype = table.numerical.dtype
-        numerical = table.numerical
-        if self.scale.ndim and numerical.size(-1) != self.scale.size(-1):
-            numerical = numerical.unflatten(-1, (self.scale.size(-1), -1))
-            numerical = (
-                (numerical * self.scale.unsqueeze(-1))
-                .add_(self.mean.unsqueeze(-1))
-                .flatten(-2)
-            )
-        else:
-            numerical = (numerical * self.scale).add_(self.mean)
-        return table.replace_blocks(numerical=numerical.to(dtype=dtype))
+        numerical = table.numerical.unflatten(-1, (self.scale.size(-1), -1))
+        numerical = numerical * self.scale.to(table.device).unsqueeze(-1)
+        numerical.add_(self.mean.to(table.device).unsqueeze(-1))
+        return table.replace_blocks(numerical=numerical.flatten(-2))
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.eps == 0:

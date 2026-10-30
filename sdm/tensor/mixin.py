@@ -3,7 +3,7 @@
 
 import abc
 from collections.abc import Callable, Iterator
-from typing import Self
+from typing import Any, Self
 
 import torch
 from torch import Tensor
@@ -122,3 +122,11 @@ def _resolve_device(device: torch.device | str | None) -> torch.device | None:
     if device.type == "mps" and device.index is None:
         return torch.device("mps", 0)
     return device
+
+
+def _record_compiled_stream(tensor: Any, stream_index: int) -> None:
+    """Keep each stored tensor's memory alive while the stream uses it."""
+    tensor_names, _ = tensor.__tensor_flatten__()
+    for tensor_name in tensor_names:
+        stored_tensor = getattr(tensor, tensor_name)
+        torch.ops.streams.record_stream.default(stored_tensor, stream_index)
