@@ -6,10 +6,7 @@ from sdm.processing import InvertibleMixin, Processor
 
 
 class Asinh(Processor, InvertibleMixin):
-    """Apply the inverse hyperbolic sine to numerical values.
-
-    Inverse transformation applies the hyperbolic sine.
-    """
+    r"""Apply the inverse hyperbolic sine to numerical values."""
 
     handles_stypes = (Stype.numerical,)
     requires_fit = False
