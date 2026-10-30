@@ -245,6 +245,9 @@ class RowEmbedding(torch.nn.Module):
                                 batch_size_limit="auto",
                                 out=x,
                             )
+                    # Normalize in column-major storage order, since
+                    # strided inputs make RMSNorm copy.
+                    x = x.transpose(-2, -3)
                     x.copy_(row_norm(x))
 
                 buffer.rows(update, store=not last)

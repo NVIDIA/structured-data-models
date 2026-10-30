@@ -17,10 +17,13 @@ _NUM_SLOTS = 3
 
 
 class TokenBuffer:
-    r"""A ``[..., R, T, D]`` buffer of ``T`` tokens per row for row embeddings.
+    r"""A buffer of ``T`` tokens per row for row embeddings.
 
     Row embeddings update the buffer in passes: :meth:`rows` updates rows
     independently and :meth:`columns` updates token columns independently.
+
+    The buffer is stored column-major as ``[..., T, R, D]``. Column passes
+    see slices of it, and row passes see ``[..., R, T, D]`` views.
 
     Without offloading, the buffer is a device tensor and each pass computes
     on the whole buffer at once. With ``offload="cpu"``, the buffer lives in
@@ -50,27 +53,29 @@ class TokenBuffer:
         self.dtype = dtype
         self.device = device
         self.offload = offload
+        *B, R, T, D = self.size
 
         if offload is None:
-            self.tensor = torch.empty(self.size, dtype=dtype, device=device)
+            self.tensor = torch.empty(
+                (*B, T, R, D), dtype=dtype, device=device
+            )
             return
 
-        if math.prod(self.size[:-3]) != 1:
+        if math.prod(B) != 1:
             raise ValueError(
                 "'offload' requires 'estimator_batch_size=1' and no more "
                 "target classes than the model predicts natively (got "
                 f"buffer size {self.size})"
             )
-        R, T, D = self.size[-3:]
-        self._pitch = T * D * dtype.itemsize
+        self._pitch = R * D * dtype.itemsize
         set_pinned_max_round_threshold(mb=1)
         self._host = torch.empty(
             self.size.numel(), dtype=dtype, pin_memory=True
         )
         slot_bytes = max(
             chunk_memory_limit(device) // 2,
+            T * D * dtype.itemsize,
             self._pitch,
-            R * D * dtype.itemsize,
         )
         self._slots = [
             torch.empty(slot_bytes, dtype=torch.uint8, device=device)
@@ -82,9 +87,10 @@ class TokenBuffer:
 
     @classmethod
     def from_tensor(cls, tensor: Tensor) -> Self:
-        r"""Wraps a device tensor as a buffer without offloading."""
+        r"""Wraps a column-major ``[..., T, R, D]`` device tensor."""
         buffer = cls.__new__(cls)
-        buffer.size = tensor.size()
+        *B, T, R, D = tensor.size()
+        buffer.size = torch.Size((*B, R, T, D))
         buffer.dtype = tensor.dtype
         buffer.device = tensor.device
         buffer.offload = None
@@ -115,7 +121,7 @@ class TokenBuffer:
         write into.
         """
         if self.offload is None:
-            return self.tensor[..., :num_tokens, :]
+            return self.tensor[..., :num_tokens, :, :].transpose(-2, -3)
         return torch.empty(
             (*self.size[:-2], num_tokens, self.size[-1]),
             dtype=self.dtype,
@@ -139,27 +145,28 @@ class TokenBuffer:
             store: Whether the updated rows are needed afterwards.
         """
         if self.offload is None:
-            compute(self.tensor, slice(0, self.size[-3]))
+            compute(self.tensor.transpose(-2, -3), slice(0, self.size[-3]))
             return
 
         *B, R, T, D = self.size
-        step = max(1, len(self._slots[0]) // self._pitch)
+        token_bytes = D * self.dtype.itemsize
+        step = max(1, len(self._slots[0]) // (T * token_bytes))
         chunks = [
             slice(start, min(start + step, R)) for start in range(0, R, step)
         ]
         self._stream(
             chunks=[
                 (
-                    chunk.start * self._pitch,
-                    self._pitch,
-                    chunk.stop - chunk.start,
+                    chunk.start * token_bytes,
+                    (chunk.stop - chunk.start) * token_bytes,
+                    T,
                 )
                 for chunk in chunks
             ],
             compute=lambda slot, k: compute(
-                slot.view(self.dtype).view(
-                    *B, chunks[k].stop - chunks[k].start, T, D
-                ),
+                slot.view(self.dtype)
+                .view(*B, T, chunks[k].stop - chunks[k].start, D)
+                .transpose(-2, -3),
                 chunks[k],
             ),
             load=load,
@@ -179,12 +186,11 @@ class TokenBuffer:
             tokens: The token columns to update.
         """
         if self.offload is None:
-            compute(self.tensor[..., tokens, :].transpose(-2, -3))
+            compute(self.tensor[..., tokens, :, :])
             return
 
         *B, R, _, D = self.size
-        token_bytes = D * self.dtype.itemsize
-        step = max(1, len(self._slots[0]) // (R * token_bytes))
+        step = max(1, len(self._slots[0]) // self._pitch)
         chunks = [
             slice(start, min(start + step, tokens.stop))
             for start in range(tokens.start, tokens.stop, step)
@@ -192,16 +198,16 @@ class TokenBuffer:
         self._stream(
             chunks=[
                 (
-                    chunk.start * token_bytes,
-                    (chunk.stop - chunk.start) * token_bytes,
-                    R,
+                    chunk.start * self._pitch,
+                    self._pitch,
+                    chunk.stop - chunk.start,
                 )
                 for chunk in chunks
             ],
             compute=lambda slot, k: compute(
-                slot.view(self.dtype)
-                .view(*B, R, chunks[k].stop - chunks[k].start, D)
-                .transpose(-2, -3)
+                slot.view(self.dtype).view(
+                    *B, chunks[k].stop - chunks[k].start, R, D
+                )
             ),
         )
 

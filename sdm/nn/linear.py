@@ -31,6 +31,13 @@ class Linear(torch.nn.Linear):
             out.copy_(torch.matmul(input, weight))
         elif input.dim() == 2:
             torch.matmul(input, weight, out=out)
+        elif any(
+            out.stride(i) != out.size(i + 1) * out.stride(i + 1)
+            for i in range(out.dim() - 3)
+        ):
+            for input_i, out_i in zip(input, out):
+                self.forward(input_i, out=out_i)
+            return out
         else:
             batch_size = math.prod(input.shape[:-2])
             input = input.view(batch_size, input.size(-2), input.size(-1))
