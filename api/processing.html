@@ -131,6 +131,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.RobustScale.html">RobustScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.MinMaxScale.html">MinMaxScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html">FlipSign</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Asinh.html">Asinh</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html">PCA</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html">RandomProjection</a></li>
@@ -358,22 +359,25 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlipSign</span></code></a></p></td>
 <td><p>Randomly negate numerical columns.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Asinh.html#sdm.processing.numerical.Asinh" title="sdm.processing.numerical.Asinh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Asinh</span></code></a></p></td>
+<td><p>Apply the inverse hyperbolic sine to numerical values.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.DropConstantColumns.html#sdm.processing.numerical.DropConstantColumns" title="sdm.processing.numerical.DropConstantColumns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DropConstantColumns</span></code></a></p></td>
 <td><p>Remove non-informative numerical columns learned during fit.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.PCA.html#sdm.processing.numerical.PCA" title="sdm.processing.numerical.PCA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCA</span></code></a></p></td>
 <td><p>Project numerical columns onto their principal components.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.RandomProjection.html#sdm.processing.numerical.RandomProjection" title="sdm.processing.numerical.RandomProjection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProjection</span></code></a></p></td>
 <td><p>Randomly project numerical columns.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Detrend.html#sdm.processing.numerical.Detrend" title="sdm.processing.numerical.Detrend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Detrend</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Detrend.html#sdm.processing.numerical.Detrend" title="sdm.processing.numerical.Detrend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Detrend</span></code></a></p></td>
 <td><p>Remove a per-column linear trend over step coordinates.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Interpolate.html#sdm.processing.numerical.Interpolate" title="sdm.processing.numerical.Interpolate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Interpolate</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Interpolate.html#sdm.processing.numerical.Interpolate" title="sdm.processing.numerical.Interpolate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Interpolate</span></code></a></p></td>
 <td><p>Interpolate missing feature values along the row dimension.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.WarpTails.html#sdm.processing.numerical.WarpTails" title="sdm.processing.numerical.WarpTails"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WarpTails</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.WarpTails.html#sdm.processing.numerical.WarpTails" title="sdm.processing.numerical.WarpTails"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WarpTails</span></code></a></p></td>
 <td><p>Warp numerical columns to more skew or heavier tails.</p></td>
 </tr>
 </tbody>
@@ -475,7 +479,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=085e9d50"></script>
+      <script src="../_static/documentation_options.js?v=c694914d"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
