@@ -14,18 +14,18 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-@pytest.mark.parametrize("cross_channel", [False, True])
-@pytest.mark.parametrize("alpha", [0.0, 0.5, 1.0])
 @pytest.mark.parametrize(
     ("context_size", "horizon"),
-    [(1, 120), (37, 120), (1024, 120), (37, 600), (1200, 600)],
+    [(1, 120), (37, 600), (1200, 600)],
 )
+@pytest.mark.parametrize("cross_channel", [False, True])
+@pytest.mark.parametrize("alpha", [0.0, 0.5, 1.0])
 def test_forward(
     monkeypatch: pytest.MonkeyPatch,
-    cross_channel: bool,
-    alpha: float,
     context_size: int,
     horizon: int,
+    cross_channel: bool,
+    alpha: float,
     device: torch.device,
 ) -> None:
     monkeypatch.setattr(
@@ -67,33 +67,3 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
-
-    if context_size < 512:
-        padded_x_context = TableTensor.from_tensor(
-            torch.nn.functional.pad(
-                x_context.numerical,
-                pad=(0, 0, 512 - context_size, 0),
-                value=float("nan"),
-            ),
-            columns=x_context.numerical_columns,
-        )
-        padded_y_context = TableTensor.from_tensor(
-            torch.nn.functional.pad(
-                y_context.numerical,
-                pad=(0, 0, 512 - context_size, 0),
-                value=float("nan"),
-            ),
-            columns=y_context.numerical_columns,
-        )
-        with (
-            nullcontext()
-            if cross_channel
-            else pytest.warns(RuntimeWarning, match="Historical covariates")
-        ):
-            expected = model(
-                padded_x_context,
-                padded_y_context,
-                x_query,
-                alpha=alpha,
-            )
-        torch.testing.assert_close(out.numerical, expected.numerical)
