@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, ClassVar, cast
 
 import torch
@@ -22,7 +23,8 @@ from sdm.models.chronos2.ckpt import remap_ckpt
 from sdm.models.chronos2.icl import ICLBlock
 from sdm.models.chronos2.recipe import default_recipe
 from sdm.models.chronos2.util import rollout_quantiles
-from sdm.nn import ResidualMLP, RevIN
+from sdm.nn import ResidualMLP
+from sdm.tensor.table import TableSchema
 
 QUANTILES = (0.01, *[i / 100 for i in range(5, 100, 5)], 0.99)
 
@@ -114,54 +116,63 @@ class Chronos2(ICLModel):
 
     def _forward(
         self,
-        x_context: TableTensor | None,
-        y_context: TableTensor | None,
-        x_query: TableTensor | None,
-        x_context_only: TableTensor | None,
+        x_context: TableTensor | None,  # [..., R_context, D]
+        y_context: TableTensor | None,  # [..., R_context, Y]
+        x_query: TableTensor | None,  # [..., R_query, D]
+        x_context_only: TableTensor | None,  # [..., R_context, D_only]
         related_context_tables: RelatedTables[TableTensor] | None,
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         **kwargs: Any,
-    ) -> TableTensor:
+    ) -> TableTensor:  # [..., R_query, Y * 21]
 
-        if cache is not None and not cache.is_recording:
-            x_context = cast(TableTensor, cache["x_context"])
-            y_context = cast(TableTensor, cache["y_context"])
-            x_context_only = cast(TableTensor | None, cache["x_context_only"])
-        assert x_context is not None
-        assert y_context is not None
+        if cache is None or cache.is_recording:
+            assert x_context is not None
+            x_context: Tensor = x_context.numerical
+            assert y_context is not None
+            y = y_context.numerical
+            if x_context_only is not None:
+                x_context_only: Tensor = x_context_only.numerical
+            else:
+                x_context_only: Tensor = y.new_empty((*y.size()[:-1], 0))
+            y_schema = y_context.schema
+        else:
+            x_context: Tensor = cast(Tensor, cache["x_context"])
+            y = cast(Tensor, cache["y"])
+            x_context_only: Tensor = cast(Tensor, cache["x_context_only"])
+            y_schema = cast(TableSchema, cache["y_schema"])
+
         if cache is not None and cache.is_recording:
             cache["x_context"] = x_context
-            cache["y_context"] = y_context
             cache["x_context_only"] = x_context_only
-        y = y_context.numerical
-        columns = [
-            f"{name}__q{round(q * 100)}"
-            for name in y_context.columns[Stype.numerical]
-            for q in QUANTILES
-        ]
+            cache["y"] = y
+            cache["y_schema"] = y_schema
+
         if x_query is None or x_query.size(-2) == 0:
-            out = y.new_empty((*y.size()[:-2], 0, len(columns)))
+            out = y.new_empty((*y.size()[:-2], 0, y.size(-1) * len(QUANTILES)))
         else:
-            past = (
-                y.new_empty((*y.size()[:-1], 0))
-                if x_context_only is None
-                else x_context_only.numerical
+            context = torch.cat([y, x_context_only, x_context], dim=-1)
+            context = context.transpose(-2, -1)
+            query = context.new_full(
+                (*context.shape[:-1], x_query.size(-2)), torch.nan
             )
-            context = torch.cat([y, past, x_context.numerical], dim=-1)
-            context = context.transpose(-2, -1).float()
-            horizon = x_query.size(-2)
-            future = context.new_full(
-                (*context.shape[:-1], horizon), torch.nan
+            query[..., y.size(-1) + x_context_only.size(-1) :, :] = (
+                x_query.numerical.transpose(-2, -1)
             )
-            known = x_query.numerical
-            future[..., y.size(-1) + past.size(-1) :, :] = known.transpose(
-                -2, -1
-            )
-            out = self.model(context, future, horizon)
+            out = self.model(context, query)
             out = out[..., : y.size(-1), :, :].movedim(-1, -3).flatten(-2)
-        return TableTensor.from_tensor(out, columns=columns)
+
+        return TableTensor(
+            columns={
+                Stype.numerical: [
+                    f"{name}__q{round(q * 100)}"
+                    for name in y_schema.columns[Stype.numerical]
+                    for q in QUANTILES
+                ],
+            },
+            numerical=out,
+        )
 
 
 class _Chronos2(torch.nn.Module):
@@ -179,10 +190,11 @@ class _Chronos2(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
         self.patch_size = patch_size
         self.context_length = context_length
         self.max_output_patches = max_output_patches
-        self.norm = RevIN(eps=0)
+
         self.patch_embedding = ResidualMLP(
             in_channels=3 * patch_size,
             hidden_channels=hidden_channels,
@@ -210,120 +222,121 @@ class _Chronos2(torch.nn.Module):
 
     def forward(
         self,
-        context: Tensor,  # [..., C, T]
-        future: Tensor,  # [..., C, H], NaNs mark unknown future values.
-        prediction_length: int,
-    ) -> Tensor:  # [..., C, Q, H]
-        outputs = []
-        remaining = prediction_length
-        patches = min(
-            (remaining + self.patch_size - 1) // self.patch_size,
+        context: Tensor,  # [..., C, R_context]
+        query: Tensor,  # [..., C, R_query]
+    ) -> Tensor:  # [..., C, Q, R_query]
+
+        prediction_size = remaining = query.size(-1)
+        num_output_patches = min(
+            math.ceil(remaining / self.patch_size),
             self.max_output_patches,
         )
-        prediction = self._predict(context, future, patches)
-        outputs.append(prediction)
-        remaining -= prediction.size(-1)
+        out = self._predict(context, query, num_output_patches)
+        remaining -= out.size(-1)
+        outs = [out]
+
         if remaining > 0:
-            paths = 9
-            # Rollout feedback and refitted statistics use the linear scale.
-            prediction = prediction.sinh()
-            context, future = context.sinh(), future.sinh()
+            # Revert to original space:
+            context, query, out = context.sinh(), query.sinh(), out.sinh()
+            num_paths = 9
             context = context.unsqueeze(-3).expand(
-                *context.shape[:-2], paths, *context.shape[-2:]
+                *context.size()[:-2], num_paths, *context.size()[-2:]
             )
-            future = future.unsqueeze(-3).expand(
-                *future.shape[:-2], paths, *future.shape[-2:]
+            query = query.unsqueeze(-3).expand(
+                *query.size()[:-2], num_paths, *query.size()[-2:]
             )
+
         while remaining > 0:
             # Default rollout levels 0.1, ..., 0.9 are every second knot.
-            feedback = prediction[..., 2:19:2, :].transpose(-3, -2)
-            context = torch.cat([context, feedback], dim=-1)
+            out = out[..., 2:19:2, :].transpose(-3, -2)
+            known = query[..., : out.size(-1)]
+            out = out.where(known.isnan(), known)
+            context = torch.cat([context, out], dim=-1)
             context = context[..., -self.context_length :]
-            known = future[..., : prediction.size(-1)]
-            context[..., -known.size(-1) :] = torch.where(
-                known.isnan(), context[..., -known.size(-1) :], known
-            )
-            future = future[..., prediction.size(-1) :]
-            patches = min(
-                (remaining + self.patch_size - 1) // self.patch_size,
+            query = query[..., out.size(-1) :]
+
+            num_output_patches = min(
+                math.ceil(remaining / self.patch_size),
                 self.max_output_patches,
             )
-            # Refit only after extending the recipe-normalized context.
-            x = context
-            mean = x.nanmean(-1, keepdim=True).nan_to_num(nan=0.0)
-            scale = (x - mean).square().nanmean(-1, keepdim=True).sqrt()
-            scale = scale.nan_to_num(nan=1.0)
+            mean = context.nanmean(dim=-1, keepdim=True).nan_to_num(0.0)
+            scale = (context - mean).square().nanmean(dim=-1, keepdim=True)
+            scale = scale.sqrt().nan_to_num(1.0)
             scale = scale.where(scale != 0, 1e-5)
-            samples = self._predict(
-                self.norm(x, mean, scale).asinh(),
-                self.norm(future, mean, scale).asinh(),
-                patches,
+            out = self._predict(
+                (context - mean).div_(scale).asinh_(),
+                (query - mean).div_(scale).asinh_(),
+                num_output_patches,
             )
-            samples = self.norm.inverse(
-                samples.sinh(), mean.unsqueeze(-1), scale.unsqueeze(-1)
-            )
-            samples = samples.transpose(-4, -3).flatten(-3, -2)
-            prediction = rollout_quantiles(samples, QUANTILES)
-            outputs.append(prediction.asinh())
-            remaining -= prediction.size(-1)
-        return torch.cat(outputs, dim=-1)[..., :prediction_length]
+            out.sinh_().mul_(scale.unsqueeze(-1)).add_(mean.unsqueeze(-1))
+            out = out.transpose(-4, -3).flatten(-3, -2)
+            out = rollout_quantiles(out, QUANTILES)
+            outs.append(out.asinh())
+            remaining -= out.size(-1)
+
+        return torch.cat(outs, dim=-1)[..., :prediction_size]
 
     def _predict(
         self,
-        context: Tensor,
-        future: Tensor,
+        context: Tensor,  # [..., C, R_context]
+        query: Tensor,  # [..., C, R_query]
         num_output_patches: int,
-    ) -> Tensor:
-        context = context[..., -self.context_length :].float()
-        x = context
-        observed = ~context.isnan()
+    ) -> Tensor:  # [..., C, Q, num_output_patches * patch_size]
+
+        context = context[..., -self.context_length :]
+        context_mask = ~context.isnan()
+        context = context.masked_fill(~context_mask, 0)
         padding = -context.size(-1) % self.patch_size
-        x = F.pad(x, (padding, 0)).unflatten(-1, (-1, self.patch_size))
-        observed = F.pad(observed, (padding, 0))
-        observed = observed.unflatten(-1, (-1, self.patch_size))
-        x = x.masked_fill(~observed, 0)
-        length = num_output_patches * self.patch_size
-        future = future[..., :length].float()
-        future = F.pad(future, (0, length - future.size(-1)), value=torch.nan)
-        future_mask = ~future.isnan()
-        future = future.masked_fill(~future_mask, 0)
-        future = future.unflatten(-1, (num_output_patches, self.patch_size))
-        future_mask = future_mask.unflatten(
+        context = F.pad(context, (padding, 0))
+        context = context.unflatten(-1, (-1, self.patch_size))
+        context_mask = F.pad(context_mask, (padding, 0))
+        context_mask = context_mask.unflatten(-1, (-1, self.patch_size))
+        context_size = context.size(-2) * self.patch_size
+
+        query_size = num_output_patches * self.patch_size
+        query = query[..., :query_size]
+        query = F.pad(query, (0, query_size - query.size(-1)), value=torch.nan)
+        query_mask = ~query.isnan()
+        query = query.masked_fill(~query_mask, 0)
+        query = query.unflatten(-1, (num_output_patches, self.patch_size))
+        query_mask = query_mask.unflatten(
             -1, (num_output_patches, self.patch_size)
         )
-        context_length = x.size(-2) * self.patch_size
-        time = (
-            torch.arange(
-                -context_length, length, device=x.device, dtype=torch.float32
-            )
-            / 8192
+
+        time = torch.arange(
+            -context_size,
+            query_size,
+            device=context.device,
+            dtype=context.dtype,
         )
-        time = time.unflatten(-1, (-1, self.patch_size))
-        values = torch.cat([x, future], dim=-2).to(self.reg_token.dtype)
-        mask = torch.cat([observed, future_mask], dim=-2)
-        time = time.to(values.dtype).expand_as(values)
-        x = self.patch_embedding(
-            torch.cat([time, values, mask.to(values.dtype)], dim=-1)
-        )
-        first = observed.size(-2)
-        x = torch.cat(
+        time = (time / 8192).view(-1, self.patch_size)
+
+        x = torch.cat([context, query], dim=-2)
+        mask = torch.cat([context_mask, query_mask], dim=-2)
+        time = time.expand_as(x)
+
+        x = torch.cat([time, x, mask.to(x.dtype)], dim=-1)
+        x = self.patch_embedding(x)
+
+        x = torch.cat(  # Inject [REG] token:
             [
-                x[..., :first, :],
-                self.reg_token.expand(*x.shape[:-2], 1, -1),
-                x[..., first:, :],
+                x[..., : context.size(-2), :],
+                self.reg_token.expand(*x.size()[:-2], 1, -1),
+                x[..., context.size(-2) :, :],
             ],
             dim=-2,
         )
-        patch_mask = torch.cat(
-            [
-                ~observed.any(-1),
-                observed.new_zeros((*x.shape[:-2], 1 + num_output_patches)),
-            ],
-            dim=-1,
-        )
+
+        patch_mask = ~context_mask.any(dim=-1)
         if not patch_mask.any():  # Pay for device sync here:
             patch_mask = None
-        x = self.icl_block(x, patch_mask=patch_mask)
+        else:
+            query_patch_mask = patch_mask.new_zeros(
+                *x.size()[:-2], 1 + num_output_patches
+            )
+            patch_mask = torch.cat([patch_mask, query_patch_mask], dim=-1)
+
+        x = self.icl_block(x, patch_mask)
         out = self.head(x[..., -num_output_patches:, :])
         out = out.unflatten(-1, (len(QUANTILES), self.patch_size))
         return out.transpose(-3, -2).flatten(-2).float()

@@ -201,7 +201,7 @@ class TimesFM3(ICLModel):
                         y_schema.columns[Stype.numerical],
                         range(10, 100, 10),
                     )
-                ]
+                ],
             },
             numerical=out,
         )
