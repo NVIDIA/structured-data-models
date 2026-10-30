@@ -365,22 +365,34 @@ class AlignCategories(EnsembleProcessor):
             return codes.new_full((input_categories.numel(),), -1)
 
         comparable_categories = input_categories
-        sorted_categories = fitted_categories
         if (
             comparable_categories.dtype == torch.bool
             or comparable_categories.dtype in _UNSIGNED_DTYPES
         ):
             comparable_categories = comparable_categories.to(torch.int64)
-            sorted_categories = sorted_categories.to(torch.int64)
+            fitted_categories = fitted_categories.to(torch.int64)
 
-        sorted_categories, perm = sorted_categories.sort()
+        sorted_categories, perm = fitted_categories.sort()
+        input_nan = None
+        if sorted_categories.is_floating_point():
+            # Keep NaNs in fitted_categories; replace them only in search keys.
+            sorted_categories.nan_to_num_(
+                nan=torch.inf, posinf=torch.inf, neginf=-torch.inf
+            )
+            input_nan = comparable_categories.isnan()
         position = torch.searchsorted(
             sorted_categories,
             comparable_categories,
         )
         position = position.clamp(max=sorted_categories.numel() - 1)
-        match = sorted_categories[position] == comparable_categories
-        return torch.where(match, perm[position].to(codes.dtype), -1)
+        if input_nan is not None:
+            position.masked_fill_(input_nan, sorted_categories.numel() - 1)
+        indices = perm[position]
+        candidate = fitted_categories[indices]
+        match = candidate == comparable_categories
+        if input_nan is not None:
+            match |= candidate.isnan() & input_nan
+        return torch.where(match, indices.to(codes.dtype), -1)
 
     def _align_to_categories(
         self,

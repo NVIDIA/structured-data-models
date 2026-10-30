@@ -63,7 +63,17 @@ def _check_categories(
         if actual is expected:
             continue
         expected = expected.to(device=actual.device)
-        if not actual.equal(expected):
+        equal = actual.equal(expected)
+        if (
+            not equal
+            and actual.shape == expected.shape
+            and actual.is_floating_point()
+            and expected.is_floating_point()
+        ):
+            equal = (
+                (actual == expected) | (actual.isnan() & expected.isnan())
+            ).all()
+        if not equal:
             raise ValueError(
                 "Expected the category vocabulary for categorical column "
                 f"{columns[index]!r} to match the fitted values and order. "
