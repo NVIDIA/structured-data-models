@@ -1,15 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 import pytest
 import torch
+from torch._dynamo.testing import CompileCounterWithBackend
 
 from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 from sdm.processing import AlignCategories
-from sdm.testing import withCUDA
+from sdm.processing.categorical._string_lookup import _native_string_lookups
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def _table(
@@ -256,6 +258,41 @@ def test_align_categories_orders_values(
 
 
 @withCUDA
+@pytest.mark.parametrize("repeat", [1, 6000])
+def test_align_categories_sorts_and_matches_string_columns(
+    device: torch.device,
+    repeat: int,
+) -> None:
+    # 6000 repeats make eager code gather the codes in chunks.
+    long, other = "x" * 40, "x" * 39 + "y"
+    context = _table(
+        [[0, 1, 0], [1, 0, -1], [2, 0, 1]],
+        categories=(("zebra", "ant", "éclair"), ("b", "a"), (other, long)),
+        device=device,
+    )
+    query = _table(
+        [[0, 1, 2], [2, 0, -1], [1, 2, 0]] * repeat,
+        categories=(
+            ("ant", "new", "zebra"),
+            ("a", "b", "c"),
+            (other, "q", long),
+        ),
+        device=device,
+    )
+
+    processor = AlignCategories(sort_by="value").fit(context)
+    output = processor.transform(query)
+
+    assert [c.tolist() for c in output.categorical.categories] == [
+        ["ant", "zebra", "éclair"],
+        ["a", "b"],
+        [long, other],
+    ]
+    expected = [[0, 1, 0], [1, 0, -1], [-1, -1, 1]] * repeat
+    assert output.categorical.code.tolist() == expected
+
+
+@withCUDA
 def test_align_categories_numeric_values(device: torch.device) -> None:
     context = TableTensor(
         categorical=CategoricalTensor(
@@ -428,20 +465,36 @@ def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     assert output.categorical.code.squeeze(-1).tolist() == [-1, -1, -1]
 
 
-def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
-    context = TableTensor.from_pandas(
-        pd.DataFrame({"kind": [None, None]}),
-        stypes={"kind": "categorical"},
+@withCUDA
+def test_align_categories_mixed_and_all_missing_pandas_columns(
+    device: torch.device,
+) -> None:
+    def table(**columns: list[object]) -> TableTensor:
+        return TableTensor.from_pandas(
+            pd.DataFrame(columns),
+            stypes=dict.fromkeys(columns, "categorical"),
+            device=device,
+        )
+
+    context = table(
+        kind=[None, None],
+        color=["red", "blue"],
+        name=["x", "y"],
+        size=[10, 20],
     )
-    query = TableTensor.from_pandas(
-        pd.DataFrame({"kind": ["red", None]}),
-        stypes={"kind": "categorical"},
+    query = table(
+        kind=["red", None], color=[None, None], name=["y", "z"], size=[20, 30]
     )
 
     output = AlignCategories(sort_by="value").fit(context).transform(query)
 
-    assert output.categorical.categories[0].numel() == 0
-    assert output.categorical.code.squeeze(-1).tolist() == [-1, -1]
+    assert [c.tolist() for c in output.categorical.categories] == [
+        [],
+        ["blue", "red"],
+        ["x", "y"],
+        [10, 20],
+    ]
+    assert output.categorical.code.tolist() == [[-1, -1, 1, 1], [-1] * 4]
 
 
 def test_align_categories_rejects_changed_category_value_type() -> None:
@@ -461,14 +514,16 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 def test_align_categories_ensemble_matches_member_fits(
     device: torch.device,
 ) -> None:
+    prefix = "a" * 85
+    categories = ((prefix + "red", prefix + "blue", prefix + "green"),)
     first_context = _table(
         [[0], [1]],
-        categories=(("red", "blue", "green"),),
+        categories=categories,
         device=device,
     )
     second_context = _table(
         [[1], [2]],
-        categories=(("red", "blue", "green"),),
+        categories=categories,
         device=device,
     )
     member_table_ids = (1, 0, 1, 0, 0, 1, 1, 0)
@@ -478,7 +533,7 @@ def test_align_categories_ensemble_matches_member_fits(
     )
     query = _table(
         [[0], [1], [2]],
-        categories=(("red", "blue", "green"),),
+        categories=categories,
         device=device,
     )
     query_ensemble = EnsembleTable.from_tables(
@@ -506,37 +561,122 @@ def test_align_categories_ensemble_matches_member_fits(
         assert fitted_query_output[member_id].equal(expected_query)
 
 
-def test_string_category_lookups_compile(compilation: None) -> None:
-    fitted = (
-        StringTensor.from_list(["a", "b"]),
-        StringTensor.from_list(["a", "x"]),
-    )
-    codes = torch.empty((), dtype=torch.int32)
+@withCUDA
+@pytest.mark.parametrize("width", [64, 1023])
+def test_align_categories_compares_long_labels(
+    width: int, device: torch.device
+) -> None:
+    # Keys hold only the ends of long labels; bytes in between decide.
+    def long(middle: str) -> str:
+        return "a" * width + middle + "b" * width
 
-    def lookups(categories: StringTensor) -> tuple[torch.Tensor, ...]:
-        return AlignCategories._string_category_lookups(
-            input_categories=(categories, categories),
-            fitted_categories=fitted,
-            codes=codes,
+    fitted = [
+        *(f"label-{index}" for index in range(300)),
+        long("x"),
+        long("y"),
+        "a",
+        "a\0",
+        "",
+    ]
+    query = [long("y"), long("z"), long("x"), "a\0\0", "a\0", "", "a"]
+    context = _table(
+        [[index] for index in range(len(fitted))],
+        categories=(tuple(fitted),),
+        device=device,
+    )
+    output = (
+        AlignCategories()
+        .fit(context)
+        .transform(
+            _table(
+                [[index] for index in range(-1, len(query))],
+                categories=(tuple(query),),
+                device=device,
+            )
         )
+    )
+    indices = {value: index for index, value in enumerate(fitted)}
+    assert output.categorical.code.squeeze(-1).tolist() == [
+        -1,
+        *(indices.get(value, -1) for value in query),
+    ]
 
-    compiled = torch.compile(lookups, backend="inductor", fullgraph=True)
-    first, second = compiled(StringTensor.from_list(["b", "z", "a"]))
-    torch.testing.assert_close(
-        actual=first,
-        expected=torch.tensor([1, -1, 0], dtype=codes.dtype),
+
+@withCUDA
+def test_native_string_lookups_duplicates_and_views(
+    device: torch.device,
+) -> None:
+    # These distinct strings have the same hash; bytes decide equality.
+    first, second = "aaaaaaaadddddddd", "ddddddddcccccccc"
+    values = StringTensor.from_list(
+        [first, second, first, second, "", "unknown"], device=device
+    )
+    # The last duplicate fitted label wins, also in a broadcast view.
+    actual = _native_string_lookups(
+        left=cast(
+            tuple[StringTensor, ...],
+            (values[::2], values[1::2], values[:1].expand(3)),
+        ),
+        right=cast(
+            tuple[StringTensor, ...],
+            (values[:4], values[:3], values[:1].expand(2)),
+        ),
+        dtype=torch.int32,
     )
     torch.testing.assert_close(
-        actual=second,
-        expected=torch.tensor([-1, -1, 0], dtype=codes.dtype),
+        actual=actual,
+        expected=(
+            torch.tensor([2, 2, -1], dtype=torch.int32, device=device),
+            torch.tensor([1, 1, -1], dtype=torch.int32, device=device),
+            torch.tensor([1, 1, 1], dtype=torch.int32, device=device),
+        ),
     )
 
-    first, second = compiled(StringTensor.from_list(["x", "z", "q"]))
-    torch.testing.assert_close(
-        actual=first,
-        expected=torch.tensor([-1, -1, -1], dtype=codes.dtype),
+
+@onlyCUDA
+@pytest.mark.parametrize("backend", ["aot_eager", "inductor"])
+def test_string_category_lookups_compile_once(
+    compilation: None, backend: str
+) -> None:
+    device = torch.device("cuda")
+    long = "a" * 1024 + "{}" + "b" * 1024
+    fitted = (
+        StringTensor.from_list(
+            ["a", "bb", long.format("x"), long.format("y")], device=device
+        ),
+        StringTensor.from_list(["bb", "a\0", ""], device=device),
     )
-    torch.testing.assert_close(
-        actual=second,
-        expected=torch.tensor([1, -1, -1], dtype=codes.dtype),
+    codes = torch.empty((), dtype=torch.int32, device=device)
+    counter = CompileCounterWithBackend(backend)
+    compiled = torch.compile(
+        AlignCategories._string_category_lookups,
+        backend=counter,
+        fullgraph=True,
     )
+    # Query sizes and lengths change; the graph does not.
+    queries = (
+        (["bb"], ["a\0"]),
+        ([], ["", "x" * 300]),
+        ([long.format("y"), "a", long.format("z")], []),
+        (["x" * 300, long.format("x"), "", "bb"], ["bb", "a"]),
+    )
+    with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+        for values in queries:
+            query = tuple(
+                StringTensor.from_list(value, device=device)
+                for value in values
+            )
+            for value in query:
+                for tensor in (
+                    value,
+                    value._layout,
+                    value._offset,
+                    value._data,
+                ):
+                    torch._dynamo.maybe_mark_dynamic(tensor, 0)
+            actual = compiled(query, fitted, codes)
+            expected = AlignCategories._string_category_lookups(
+                query, fitted, codes
+            )
+            torch.testing.assert_close(actual=actual, expected=expected)
+    assert counter.frame_count == 1

@@ -17,6 +17,7 @@ from sdm import (
 )
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
+from sdm.processing.categorical._string_lookup import _native_string_lookups
 from sdm.relational.join import join_index
 from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.var_len import _cat, _contiguous
@@ -340,15 +341,17 @@ class AlignCategories(EnsembleProcessor):
     ) -> tuple[Tensor, ...]:
         if not input_categories:
             return ()
-        # StringTensor does not handle this custom op. Pass its underlying
-        # tensors and layout without copying the string data.
-        inputs, input_layout = _flatten_strings(input_categories)
-        fitted, fitted_layout = _flatten_strings(fitted_categories)
+        if codes.is_cuda:
+            return _native_string_lookups(
+                left=input_categories,
+                right=cast(tuple[StringTensor, ...], fitted_categories),
+                dtype=codes.dtype,
+            )
         lookup = _string_category_lookup(
-            inputs=inputs,
-            input_layout=input_layout,
-            fitted=fitted,
-            fitted_layout=fitted_layout,
+            input_categories=input_categories,
+            fitted_categories=cast(
+                tuple[StringTensor, ...], fitted_categories
+            ),
             codes=codes,
         )
         return lookup.split(
@@ -391,7 +394,6 @@ class AlignCategories(EnsembleProcessor):
         single_table = codes.dim() == 2
         if single_table:
             codes = codes.unsqueeze(0)
-        aligned_codes = torch.full_like(codes, -1)
         lookups_by_column: list[dict[int, Tensor]] = [
             {} for _ in range(codes.size(-1))
         ]
@@ -399,9 +401,6 @@ class AlignCategories(EnsembleProcessor):
         for column_index, input_categories in enumerate(
             _iter_categories(table.categorical)
         ):
-            if input_categories.numel() == 0:
-                continue
-
             lookup_by_categories = lookups_by_column[column_index]
             pending_categories: set[int] = set()
             for batch_categories in fitted_categories:
@@ -419,10 +418,22 @@ class AlignCategories(EnsembleProcessor):
                 if isinstance(input_categories, StringTensor) != isinstance(
                     column_categories, StringTensor
                 ):
-                    raise NotImplementedError(
-                        "Cannot align string categories with non-string "
-                        "categories"
+                    # Only an all-missing query column, whose categories
+                    # are empty and untyped, may differ in type. Compiled
+                    # code skips the check: size-oblivious tracing cannot
+                    # tell an empty dimension from a nonempty one.
+                    if (
+                        not torch.compiler.is_compiling()
+                        and input_categories.numel() != 0
+                    ):
+                        raise NotImplementedError(
+                            "Cannot align string categories with non-string "
+                            "categories"
+                        )
+                    lookup_by_categories[identity] = codes.new_full(
+                        (input_categories.numel(),), -1
                     )
+                    continue
                 if isinstance(input_categories, StringTensor):
                     pending_categories.add(identity)
                     string_requests.append(
@@ -440,6 +451,34 @@ class AlignCategories(EnsembleProcessor):
                     codes,
                 )
 
+        if codes.size(-1) == 0:
+            aligned_codes = torch.full_like(codes, -1)
+        else:
+            aligned_codes = self._align_columns(
+                codes, fitted_categories, lookups_by_column, string_requests
+            )
+
+        return tuple(
+            (table if single_table else table[batch_index]).replace_blocks(
+                categorical=CategoricalTensor(
+                    aligned_codes[batch_index],
+                    categories=tuple(batch_categories),
+                ),
+            )
+            for batch_index, batch_categories in enumerate(fitted_categories)
+        )
+
+    def _align_columns(
+        self,
+        codes: Tensor,
+        fitted_categories: Sequence[Sequence[Tensor]],
+        lookups_by_column: list[dict[int, Tensor]],
+        string_requests: list[tuple[int, int, StringTensor, Tensor]],
+    ) -> Tensor:
+        """Remap ``[B, N, C]`` codes of columns whose lookups are pending.
+
+        Lookups are released once they are joined into one table.
+        """
         string_lookups = self._string_category_lookups(
             input_categories=tuple(
                 input_categories
@@ -457,36 +496,70 @@ class AlignCategories(EnsembleProcessor):
             strict=True,
         ):
             lookups_by_column[column_index][identity] = lookup
+        del string_lookups
 
-        for column_index, input_categories in enumerate(
-            _iter_categories(table.categorical)
-        ):
-            if input_categories.numel() == 0:
-                continue
-            lookup_by_categories = lookups_by_column[column_index]
-            lookups = [
-                lookup_by_categories[id(batch_categories[column_index])]
-                for batch_categories in fitted_categories
-            ]
-            column_codes = codes[..., column_index]
-            mask = column_codes >= 0
-            lookup = torch.stack(lookups)
-            indices = column_codes.clamp_min(0).long()
-            aligned_codes[..., column_index] = torch.where(
-                mask,
-                lookup.gather(1, indices),
-                -1,
+        # One gather over all columns of a [B, T] lookup. Each column's
+        # block ends with -1 for missing codes, so empty vocabularies need no
+        # size-dependent branch, and no strided column views are traced.
+        lookups = [
+            torch.stack(
+                [
+                    lookups_by_column[column_index][
+                        id(categories[column_index])
+                    ]
+                    for categories in fitted_categories
+                ]
             )
-
-        return tuple(
-            (table if single_table else table[batch_index]).replace_blocks(
-                categorical=CategoricalTensor(
-                    aligned_codes[batch_index],
-                    categories=tuple(batch_categories),
-                ),
-            )
-            for batch_index, batch_categories in enumerate(fitted_categories)
+            for column_index in range(codes.size(-1))
+        ]
+        for lookup_by_categories in lookups_by_column:
+            lookup_by_categories.clear()
+        missing = codes.new_full((len(fitted_categories), 1), -1)
+        lookup_table = torch.cat(
+            [x for lookup in lookups for x in (lookup, missing)], 1
         )
+        # Column c owns lookup positions [start_c, end_c]; end_c is -1.
+        # Compiled code keeps a wide index to avoid a guard on table size.
+        index_dtype = torch.int64
+        if (
+            not torch.compiler.is_compiling()
+            and lookup_table.numel() < torch.iinfo(torch.int32).max
+        ):
+            index_dtype = torch.int32
+        widths = torch.tensor(
+            [lookup.size(1) + 1 for lookup in lookups],
+            dtype=index_dtype,
+            device=codes.device,
+        )
+        del lookups, missing
+        # First position of each column's block in the flat table.
+        starts = widths.cumsum(0, dtype=index_dtype) - widths
+        if codes.size(0) > 1:
+            batches = torch.arange(
+                codes.size(0), dtype=index_dtype, device=codes.device
+            )
+            starts = starts + (batches * lookup_table.size(1))[:, None, None]
+        table = lookup_table.flatten()
+
+        def gather(chunk: Tensor) -> Tensor:
+            # The narrow index is updated in place to keep temporaries small.
+            index = torch.where(chunk >= 0, chunk, widths - 1).to(index_dtype)
+            index += starts
+            return table.index_select(0, index.flatten()).view(chunk.shape)
+
+        # Eager code gathers chunks of rows, so the index stays small next to
+        # the output; compiled code fuses the index into a single gather.
+        if torch.compiler.is_compiling():
+            return gather(codes)
+        rows = max(1, _GATHER_CODES // (codes.size(0) * codes.size(-1)))
+        if codes.size(1) <= rows:
+            return gather(codes)
+        output = torch.empty_like(codes)
+        for start in range(0, codes.size(1), rows):
+            output[:, start : start + rows] = gather(
+                codes[:, start : start + rows]
+            )
+        return output
 
     def __repr__(self, *, indent: int = 0) -> str:
         arguments = []
@@ -501,45 +574,11 @@ class AlignCategories(EnsembleProcessor):
         )
 
 
-def _flatten_strings(
-    categories: tuple[Tensor, ...],
-) -> tuple[list[Tensor | None], list[int]]:
-    """Pack vocabulary tensors and their (length, stride, offset) metadata."""
-    tensors: list[Tensor | None] = []
-    layout: list[int] = []
-    for category in categories:
-        category = cast(StringTensor, category)
-        tensors.extend((category._data, category._offset, category._valid))
-        layout.extend(
-            (
-                category.numel(),
-                category.stride(0),
-                category._logical_storage_offset,
-            )
-        )
-    return tensors, layout
-
-
-def _unflatten_strings(
-    tensors: list[Tensor | None], layout: list[int]
-) -> tuple[StringTensor, ...]:
-    """Rebuild string views over the same tensors for the join."""
-    return tuple(
-        StringTensor(
-            data=cast(Tensor, tensors[3 * i]),
-            offset=cast(Tensor, tensors[3 * i + 1]),
-            valid=tensors[3 * i + 2],
-            size=(layout[3 * i],),
-            stride=(layout[3 * i + 1],),
-            storage_offset=layout[3 * i + 2],
-        )
-        for i in range(len(layout) // 3)
-    )
+# Eager code gathers aligned codes in chunks of about this many codes.
+_GATHER_CODES = 1 << 14
 
 
 def _concatenate_strings(categories: tuple[StringTensor, ...]) -> StringTensor:
-    # Calling torch.cat here fails on StringTensor during compiled execution.
-    # Call SDM's concatenation implementation directly.
     contiguous = tuple(
         category if category.is_contiguous() else _contiguous(category)
         for category in categories
@@ -547,17 +586,11 @@ def _concatenate_strings(categories: tuple[StringTensor, ...]) -> StringTensor:
     return cast(StringTensor, _cat(contiguous))
 
 
-@torch.library.custom_op("sdm::string_category_lookup", mutates_args=())
 def _string_category_lookup(
-    inputs: list[Tensor | None],
-    input_layout: list[int],
-    fitted: list[Tensor | None],
-    fitted_layout: list[int],
+    input_categories: tuple[StringTensor, ...],
+    fitted_categories: tuple[StringTensor, ...],
     codes: Tensor,
 ) -> Tensor:
-    """Keep the backend join's dynamic row pairs inside a fixed-size lookup."""
-    input_categories = _unflatten_strings(inputs, input_layout)
-    fitted_categories = _unflatten_strings(fitted, fitted_layout)
     # Pair IDs for each input category: (total_input_categories,).
     left_pair = torch.cat(
         [
@@ -606,16 +639,3 @@ def _string_category_lookup(
     )
     lookup[left_index] = fitted_codes[right_index]
     return lookup
-
-
-@_string_category_lookup.register_fake
-def _string_category_lookup_fake(
-    inputs: list[Tensor | None],
-    input_layout: list[int],
-    fitted: list[Tensor | None],
-    fitted_layout: list[int],
-    codes: Tensor,
-) -> Tensor:
-    # E.g. inputs ["red", "blue", "unknown"], fitted ["blue", "red"]:
-    # real lookup [1, 0, -1]; the fake result only describes its shape (3,).
-    return codes.new_empty((sum(input_layout[::3]),))
