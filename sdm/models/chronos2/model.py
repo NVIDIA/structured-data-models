@@ -108,7 +108,7 @@ class Chronos2(ICLModel):
             revision="29ec3766d36d6f73f0696f85560a422f50e8498c",
         )
         state = remap_ckpt(load_file(path, device=str(device)))
-        self.model.load_state_dict(state, strict=True, assign=True)
+        self.model.load_state_dict(state, assign=True)
 
         return self
 
@@ -150,18 +150,16 @@ class Chronos2(ICLModel):
                 else x_context_only.numerical
             )
             context = torch.cat([y, past, x_context.numerical], dim=-1)
-            *batch, length, variates = context.shape
-            context = context.transpose(-2, -1).reshape(-1, length).float()
+            context = context.transpose(-2, -1).float()
             horizon = x_query.size(-2)
-            future = context.new_full((*batch, horizon, variates), torch.nan)
+            future = context.new_full(
+                (*context.shape[:-1], horizon), torch.nan
+            )
             known = x_query.numerical
-            future[..., y.size(-1) + past.size(-1) :] = known
-            future = future.transpose(-2, -1).reshape(-1, horizon)
-            groups = torch.arange(
-                context.size(0) // variates, device=context.device
-            ).repeat_interleave(variates)
-            out = self.model(context, future, groups, horizon)
-            out = out.reshape(*batch, variates, len(QUANTILES), horizon)
+            future[..., y.size(-1) + past.size(-1) :, :] = known.transpose(
+                -2, -1
+            )
+            out = self.model(context, future, horizon)
             out = out[..., : y.size(-1), :, :].movedim(-1, -3).flatten(-2)
         return TableTensor.from_tensor(out, columns=columns)
 
@@ -212,18 +210,17 @@ class _Chronos2(torch.nn.Module):
 
     def forward(
         self,
-        context: Tensor,  # [S, T]
-        future: Tensor,  # [S, H], NaNs mark unknown future values.
-        group_ids: Tensor,  # [S]
+        context: Tensor,  # [..., C, T]
+        future: Tensor,  # [..., C, H], NaNs mark unknown future values.
         prediction_length: int,
-    ) -> Tensor:  # [S, Q, H]
+    ) -> Tensor:  # [..., C, Q, H]
         outputs = []
         remaining = prediction_length
         patches = min(
             (remaining + self.patch_size - 1) // self.patch_size,
             self.max_output_patches,
         )
-        prediction = self._predict(context, future, group_ids, patches)
+        prediction = self._predict(context, future, patches)
         outputs.append(prediction)
         remaining -= prediction.size(-1)
         if remaining > 0:
@@ -231,14 +228,15 @@ class _Chronos2(torch.nn.Module):
             # Rollout feedback and refitted statistics use the linear scale.
             prediction = prediction.sinh()
             context, future = context.sinh(), future.sinh()
-            context = context[:, None, :].expand(-1, paths, -1)
-            future = future[:, None, :].expand(-1, paths, -1)
-            group_ids = group_ids[:, None] * paths + torch.arange(
-                paths, device=group_ids.device
+            context = context.unsqueeze(-3).expand(
+                *context.shape[:-2], paths, *context.shape[-2:]
+            )
+            future = future.unsqueeze(-3).expand(
+                *future.shape[:-2], paths, *future.shape[-2:]
             )
         while remaining > 0:
             # Default rollout levels 0.1, ..., 0.9 are every second knot.
-            feedback = prediction[:, 2:19:2]
+            feedback = prediction[..., 2:19:2, :].transpose(-3, -2)
             context = torch.cat([context, feedback], dim=-1)
             context = context[..., -self.context_length :]
             known = future[..., : prediction.size(-1)]
@@ -251,21 +249,20 @@ class _Chronos2(torch.nn.Module):
                 self.max_output_patches,
             )
             # Refit only after extending the recipe-normalized context.
-            x = context.flatten(0, 1)
+            x = context
             mean = x.nanmean(-1, keepdim=True).nan_to_num(nan=0.0)
             scale = (x - mean).square().nanmean(-1, keepdim=True).sqrt()
             scale = scale.nan_to_num(nan=1.0)
             scale = scale.where(scale != 0, 1e-5)
             samples = self._predict(
                 self.norm(x, mean, scale).asinh(),
-                self.norm(future.flatten(0, 1), mean, scale).asinh(),
-                group_ids.flatten(),
+                self.norm(future, mean, scale).asinh(),
                 patches,
             )
             samples = self.norm.inverse(
                 samples.sinh(), mean.unsqueeze(-1), scale.unsqueeze(-1)
             )
-            samples = samples.unflatten(0, (-1, 9)).flatten(1, 2)
+            samples = samples.transpose(-4, -3).flatten(-3, -2)
             prediction = rollout_quantiles(samples, QUANTILES)
             outputs.append(prediction.asinh())
             remaining -= prediction.size(-1)
@@ -275,7 +272,6 @@ class _Chronos2(torch.nn.Module):
         self,
         context: Tensor,
         future: Tensor,
-        group_ids: Tensor,
         num_output_patches: int,
     ) -> Tensor:
         context = context[..., -self.context_length :].float()
@@ -312,20 +308,22 @@ class _Chronos2(torch.nn.Module):
         first = observed.size(-2)
         x = torch.cat(
             [
-                x[:, :first],
-                self.reg_token.expand(x.size(0), 1, -1),
-                x[:, first:],
+                x[..., :first, :],
+                self.reg_token.expand(*x.shape[:-2], 1, -1),
+                x[..., first:, :],
             ],
             dim=-2,
         )
-        attention_mask = torch.cat(
+        patch_mask = torch.cat(
             [
-                observed.any(-1),
-                observed.new_ones((x.size(0), 1 + num_output_patches)),
+                ~observed.any(-1),
+                observed.new_zeros((*x.shape[:-2], 1 + num_output_patches)),
             ],
             dim=-1,
         )
-        x = self.icl_block(x, attention_mask, group_ids)
-        out = self.head(x[:, -num_output_patches:])
+        if not patch_mask.any():  # Pay for device sync here:
+            patch_mask = None
+        x = self.icl_block(x, patch_mask=patch_mask)
+        out = self.head(x[..., -num_output_patches:, :])
         out = out.unflatten(-1, (len(QUANTILES), self.patch_size))
         return out.transpose(-3, -2).flatten(-2).float()

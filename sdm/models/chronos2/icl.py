@@ -62,23 +62,30 @@ class ICLBlock(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [S, N, C]
-        observed: Tensor,  # [S, N]
-        group_ids: Tensor,  # [S]
-    ) -> Tensor:
-        # Finite additive masks preserve upstream's fully masked-row behavior.
-        minimum = torch.finfo(x.dtype).min
-        time_mask = (~observed).to(x.dtype)[:, None, None, :] * minimum
-        group_mask = group_ids[:, None] == group_ids[None, :]
-        group_mask = group_mask[..., None] & observed[None, :, :]
-        group_mask = (~group_mask).permute(2, 0, 1).unsqueeze(1)
-        group_mask = group_mask.to(x.dtype) * minimum
+        x: Tensor,  # [..., C, N, D]
+        patch_mask: Tensor | None = None,  # [..., C, N]
+    ) -> Tensor:  # [..., C, N, D]
+
+        time_attn_mask = var_attn_mask = None
+        if patch_mask is not None:
+            time_attn_mask = ~patch_mask.unsqueeze(-2).unsqueeze(-2)
+            var_attn_mask = time_attn_mask.transpose(-4, -1)
+
         for time_block, group_block in zip(
             self.time_blocks, self.group_blocks
         ):
-            x = time_block(query=x, attn_mask=time_mask)
+            x = time_block(
+                query=x,
+                attn_mask=time_attn_mask,
+                batch_size_limit="auto",
+                out=None if torch.is_grad_enabled() else x,
+            )
+            x = x.transpose(-3, -2)
             x = group_block(
-                query=x.transpose(0, 1),
-                attn_mask=group_mask,
-            ).transpose(0, 1)
+                query=x,
+                attn_mask=var_attn_mask,
+                batch_size_limit="auto",
+                out=None if torch.is_grad_enabled() else x,
+            ).transpose(-3, -2)
+
         return self.norm(x)
