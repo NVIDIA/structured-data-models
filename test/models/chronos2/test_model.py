@@ -4,7 +4,7 @@
 import torch
 
 from sdm import TableTensor
-from sdm.models.chronos2 import Chronos2
+from sdm.models import Chronos2
 
 
 def test_forward() -> None:

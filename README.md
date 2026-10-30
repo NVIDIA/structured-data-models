@@ -17,7 +17,7 @@
 
 **A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3), [`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly), *etc*), built on a unified interface with room for future model families.
+- **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2), [`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3), [`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly), *etc*), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -53,6 +53,7 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 **Times Series Forecasting Foundation Models:**
 
+- **[`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2)** from Ansari *et al.*: [Chronos-2: From Univariate to Universal Forecasting](https://arxiv.org/abs/2510.15821) (CoRR '25)
 - **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Gautam *et al.*: [Memory-Augmented Forecasting: Scalability and Generalization Across Temporal Domains](https://ieeexplore.ieee.org/abstract/document/11402442) (IEEE BigData '25)
 - **[`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3)** from Jain *et al.*: [TimesFM-3: A Zero-Shot Foundation Model for Multivariate Forecasting](https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting) ('26)
 
@@ -116,6 +117,7 @@ Third-party software and separately distributed model assets are documented in [
 
 - [**`sdm/models/tabiclv2/`**](sdm/models/tabiclv2/) contains code derived from [`TabICLv2`](https://github.com/soda-inria/tabicl) under the BSD 3-Clause License; its terms are distributed in [`sdm/models/tabiclv2/LICENSE`](sdm/models/tabiclv2/LICENSE).
 - [**`sdm/models/tabfm/`**](sdm/models/tabfm/) contains code derived from [`TabFM`](https://github.com/google-research/tabfm) under the Apache License 2.0; its terms are distributed in [`sdm/models/tabfm/LICENSE`](sdm/models/tabfm/LICENSE).
+- [**`sdm/models/chronos2/`**](sdm/models/chronos2/) contains code derived from [`Chronos2`](https://github.com/amazon-science/chronos-forecasting) under the Apache License 2.0; its terms are distributed in [`sdm/models/chronos2/LICENSE`](sdm/models/chronos2/LICENSE).
 - [**`sdm/models/timesfm3/`**](sdm/models/timesfm3/) contains code derived from [`TimesFM`](https://github.com/google-research/timesfm) under the Apache License 2.0; its terms are distributed in [`sdm/models/timesfm3/LICENSE`](sdm/models/timesfm3/LICENSE).
 - [**`sdm/models/timestral/`**](sdm/models/timestral/) contains code derived from [`Timestral`](https://github.com/mistralai/timestral) under the Apache License 2.0; its terms are distributed in [`sdm/models/timestral/LICENSE`](sdm/models/timestral/LICENSE).
 - [**`sdm/models/kumo/relational/NOTICE`**](sdm/models/kumo/relational/NOTICE) documents [`KumoRelational`](sdm/models/kumo/relational/)'s reuse of [`TabICLv2`](sdm/models/tabiclv2/)-derived components.
