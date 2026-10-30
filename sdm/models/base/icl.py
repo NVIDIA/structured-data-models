@@ -3,7 +3,7 @@
 
 import abc
 import copy
-from collections.abc import Hashable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -17,6 +17,7 @@ from sdm import (
     TableTensor,
     Task,
     TaskLike,
+    VarLenTensor,
 )
 from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
@@ -70,6 +71,8 @@ class ICLModel(Model):
         task: TaskLike | Iterable[TaskLike] | None = None,
     ) -> None:
         super().__init__()
+
+        self._compiled_predict: Callable[..., TableTensor] | None = None
 
         if task is None:
             self.tasks = self.supported_tasks
@@ -357,6 +360,7 @@ class ICLModel(Model):
         related_tables: RelatedTables | None = None,
         *,
         callbacks: Sequence[Callback] | None = None,
+        compile: bool = False,  # noqa: A002
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
@@ -369,11 +373,52 @@ class ICLModel(Model):
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             related_tables: Related context for query examples.
             callbacks: Callbacks applied in sequence to this model call.
+            compile: Whether to run prediction through :func:`torch.compile`.
+                The first call compiles a graph that later calls reuse across
+                numbers of rows and category vocabulary sizes until the model
+                is fitted again. Queries without rows run eagerly.
 
         Returns:
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        R = x.size(-2)
+        if not compile or R == 0:  # Dynamo cannot trace empty queries.
+            return self._predict(x, related_tables, callbacks)
+
+        if related_tables is not None or callbacks:
+            raise ValueError(
+                "Compiled prediction does not support related tables or "
+                "callbacks"
+            )
+
+        if self._compiled_predict is None:
+            self._compiled_predict = torch.compile(
+                self._predict, fullgraph=True
+            )
+        # Add the transfer stream outside of the graph, which guards on it:
+        if x.is_cuda and x.device not in self._transfer_streams:
+            self._transfer_streams[x.device] = torch.cuda.Stream(x.device)
+
+        # Pad a single row: PyTorch operators specialize on one-row inputs.
+        # Keep the input's inference state, which torch.compile guards on:
+        if R == 1:
+            with torch.inference_mode(x.is_inference()):
+                x = torch.cat([x, x], dim=-2)
+        _mark_dynamic_sizes(x)
+
+        # Keep sizes of zero or one symbolic, like those of vocabularies:
+        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+            out = self._compiled_predict(x, None, None)
+
+        return out[..., :1, :] if R == 1 else out
+
+    def _predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None,
+        callbacks: Sequence[Callback] | None,
+    ) -> TableTensor:
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -469,6 +514,13 @@ class ICLModel(Model):
             inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
+
+    # Python Builtins #########################################################
+
+    def __getstate__(self) -> dict[str, object]:
+        state = super().__getstate__()
+        state["_compiled_predict"] = None  # Bound to this instance.
+        return state
 
     # Abstract Methods ########################################################
 
@@ -763,6 +815,23 @@ class ICLModel(Model):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+
+def _mark_dynamic_sizes(x: Tensor) -> None:
+    r"""Mark the number of rows and category vocabulary sizes as dynamic.
+
+    :func:`torch._dynamo.maybe_mark_dynamic` reaches nested tensors of equal
+    rank only, so blocks, the layouts of variable-length tensors and
+    one-dimensional vocabularies are marked explicitly.
+    """
+    sizes = [(x, x.dim() - 2)]
+    if isinstance(x, TableTensor):
+        sizes += [(block, x.dim() - 2) for _, block in x.items()]
+        sizes += [(category, 0) for category in x.categorical.categories]
+    for tensor, dim in sizes:
+        torch._dynamo.maybe_mark_dynamic(tensor, dim)
+        if isinstance(tensor, VarLenTensor):
+            torch._dynamo.maybe_mark_dynamic(tensor._layout, dim)
 
 
 def _stack(tables: Sequence[TableTensor]) -> TableTensor:

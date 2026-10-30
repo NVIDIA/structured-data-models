@@ -1,15 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import functools
 from typing import Literal
 
+import pandas as pd
 import pytest
 import torch
+from torch._dynamo.testing import CompileCounterWithBackend
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
-from sdm.testing import onlyMPS
+from sdm.testing import onlyCUDA, onlyMPS
 
 
 def _build(
@@ -276,6 +279,36 @@ def test_fit_predict(
         atol=1e-4,
         rtol=1e-4,
     )
+
+
+@onlyCUDA
+def test_compiled_predict_matches_eager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counter = CompileCounterWithBackend("aot_eager")
+    compile_fn = functools.partial(torch.compile, backend=counter)
+    monkeypatch.setattr(torch, "compile", compile_fn)
+    frame = pd.DataFrame(
+        {"n": range(8), "c": list("abcdabxy"), "y": list("uvuvuvuv")}
+    )
+    stypes = {"n": "numerical", "c": "categorical"}
+    model = _build("classification", "small").cuda()
+    model.fit(
+        TableTensor.from_pandas(frame[["n", "c"]], stypes, device="cuda"),
+        TableTensor.from_pandas(
+            frame[["y"]], {"y": "categorical"}, device="cuda"
+        ),
+    )
+
+    # Row counts and vocabulary sizes vary; one row is padded, none is eager:
+    for rows in (1, 5, 0, 8):
+        x = frame.iloc[:rows][["n", "c"]]
+        x = TableTensor.from_pandas(x, stypes, device="cuda")
+        expected = model.predict(x)
+        actual = model.predict(x, compile=True)
+        assert actual.size() == expected.size()
+        torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert counter.frame_count == 1
 
 
 def test_missing_values_pass_through_fit_predict(
