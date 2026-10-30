@@ -4,6 +4,16 @@
 import os
 
 import torch
+from torch.fx.experimental.symbolic_shapes import statically_known_true
+
+
+def _split_tensor(
+    tensor: torch.Tensor, size: int, dim: int
+) -> tuple[torch.Tensor, ...]:
+    """Return one chunk when the dimension provably fits the split size."""
+    if statically_known_true(tensor.size(dim) <= size):
+        return (tensor,)
+    return tensor.split(size, dim=dim)
 
 
 def set_pinned_max_round_threshold(

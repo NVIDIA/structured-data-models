@@ -25,22 +25,20 @@ from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ReLU
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
-from sdm.models.timesfm3.block import ResidualBlock
 from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
 from sdm.models.timesfm3.util import (
     crossfade_patches,
     gather_future_patches,
-    get_running_stats,
-    update_running_stats,
 )
-from sdm.nn import RevIN
+from sdm.nn import ResidualMLP, RevIN
 from sdm.tensor.table import TableSchema
 
 
@@ -203,7 +201,7 @@ class TimesFM3(ICLModel):
                         y_schema.columns[Stype.numerical],
                         range(10, 100, 10),
                     )
-                ]
+                ],
             },
             numerical=out,
         )
@@ -231,9 +229,12 @@ class _TimesFM3(torch.nn.Module):
         self.refinement = refinement
 
         self.revin = RevIN(eps=0, **factory_kwargs)
-        self.patch_embedding = ResidualBlock(
+        self.patch_embedding = ResidualMLP(
             in_channels=2 * (input_patch_size + output_patch_size),
+            hidden_channels=channels,
             out_channels=channels,
+            activation=ReLU(),
+            bias=False,
             **factory_kwargs,
         )
         self.icl_block = ICLBlock(
@@ -280,7 +281,7 @@ class _TimesFM3(torch.nn.Module):
         # Gather future patches and normalize:
         mask = x.isnan()
         x[mask] = 0.0
-        count, mean, std = get_running_stats(x, mask)
+        mean, std, count = self.revin.running_stats(x, mask, correction=0)
 
         future_x, past_end = gather_future_patches(x, num_patches=O // P)
         future_mask, _ = gather_future_patches(mask, num_patches=O // P)
@@ -288,9 +289,9 @@ class _TimesFM3(torch.nn.Module):
         # Exclude future information for context only features and targets:
         future_mask[..., C:, :, :] = True
 
-        scale = std.where(std >= 1e-6, 1.0).unsqueeze(-1)
-        x = self.revin(x, mean.unsqueeze(-1), scale)
-        future_x = self.revin(future_x, mean.unsqueeze(-1), scale)
+        scale = std.where(std >= 1e-6, 1.0)
+        x = self.revin(x, mean, scale)
+        future_x = self.revin(future_x, mean, scale)
         x[mask] = 0.0
         future_x[future_mask] = 0.0
 
@@ -307,48 +308,43 @@ class _TimesFM3(torch.nn.Module):
 
         x = self.patch_embedding(x)  # [..., C, N, D]
         out = self.icl_block(x, patch_mask=patch_mask)  # [..., C, N, O * Q]
-        out = out.unflatten(-1, (self.output_patch_size, -1))
+        out = out.unflatten(-1, (self.output_patch_size, -1)).float()
         first = mid // P - 1
 
         # Refine forecast normalization statistics using predicted medians:
         if self.refinement and horizon > 0:
             median = out[..., out.size(-1) // 2].unflatten(-1, (O // P, P))
-            mask = torch.zeros_like(median[..., 0, 0, :], dtype=torch.bool)
-
-            # Get most recent context statistics:
-            carry_count = count[..., first]
-            carry_mean = mean[..., first]
-            carry_std = std[..., first]
+            state = (  # Get most recent context statistics:
+                mean[..., first : first + 1, :],
+                std[..., first : first + 1, :],
+                count[..., first : first + 1, :],
+            )
 
             means, stds = [], []
             for i in range(first, out.size(-3) - 1, O // P):
                 anchor = self.revin.inverse(  # Denormalize output patch:
                     median[..., i, :, :],
-                    carry_mean[..., None, None],
-                    carry_std[..., None, None],
+                    mean=state[0],
+                    scale=state[1],
                 ).clamp(-1e20, 1e20)  # [..., C, O / P, P]
 
                 for j in range(min(O // P, out.size(-3) - i - 1)):
                     # Update running statistics:
-                    carry_count, carry_mean, carry_std = update_running_stats(
-                        count=carry_count,
-                        mean=carry_mean,
-                        std=carry_std,
-                        x=anchor[..., j, :],
-                        mask=mask,
+                    state = self.revin.running_stats(
+                        x=anchor[..., j : j + 1, :],
+                        state=state,
+                        correction=0,
                     )
-                    means.append(carry_mean)
-                    stds.append(carry_std)
+                    means.append(state[0])
+                    stds.append(state[1])
 
-            means = [mean[..., : first + 1], torch.stack(means, dim=-1)]
-            mean = torch.cat(means, dim=-1)
-            stds = [std[..., : first + 1], torch.stack(stds, dim=-1)]
-            std = torch.cat(stds, dim=-1)
+            mean = torch.cat([mean[..., : first + 1, :], *means], dim=-2)
+            std = torch.cat([std[..., : first + 1, :], *stds], dim=-2)
 
         out = self.revin.inverse(
             out,
-            mean[..., None, None],
-            scale=std[..., None, None],
+            mean=mean.unsqueeze(-1),
+            scale=std.unsqueeze(-1),
         ).clamp(-1e20, 1e20)
 
         # Narrow target output patches:

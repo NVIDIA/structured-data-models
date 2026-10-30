@@ -49,6 +49,12 @@ Overview
      - 2.44M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
+   * - | :class:`~sdm.models.Chronos2`
+       | (`Paper <https://arxiv.org/abs/2510.15821>`__)
+     - 2025-10-17
+     - 119.48M
+     - `Apache-2.0 <https://github.com/amazon-science/chronos-forecasting/blob/main/LICENSE>`__
+     - `Apache-2.0 <https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/apache-2.0.md>`__
    * - | :class:`~sdm.models.TimesFM3`
        | (`Blog <https://arxiv.org/abs/2609.37959>`__)
      - 2026-08-31

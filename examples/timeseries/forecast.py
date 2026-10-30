@@ -8,7 +8,7 @@ import sdm
 
 url = "https://autogluon.s3.amazonaws.com/datasets/timeseries"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = sdm.models.TimesFM3(device=device)
+model = sdm.models.Chronos2(device=device)
 
 print("# Univariate Forecasting")  ############################################
 # 414 items ("item_id"), each with up to 960 observations:

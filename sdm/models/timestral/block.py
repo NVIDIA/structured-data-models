@@ -4,14 +4,56 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: D101
+# ruff: noqa: D101, D102
 
+from collections.abc import Sequence
 from typing import Any
 
 import torch
+import torch.nn.functional as F
+from torch import Tensor
 from torch.nn import Linear, Sequential, Sigmoid
 
 from sdm.nn import RMSNorm, RotaryEmbedding, SwiGLU, TransformerBlock
+
+
+class MonotoneQuantiles(torch.nn.Module):
+    width: Tensor
+
+    def __init__(
+        self,
+        levels: Sequence[float],
+        width_factor: float = 3.0,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.width_factor = width_factor
+        self.median_index = list(levels).index(0.5)
+
+        widths = [
+            levels[i + 1] - levels[i]
+            if i < self.median_index
+            else levels[i] - levels[i - 1]
+            if i > self.median_index
+            else 0.0
+            for i in range(len(levels))
+        ]
+        self.register_buffer(
+            "width",
+            torch.tensor(widths, device=device, dtype=dtype),
+            persistent=False,
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        m = self.median_index
+        median = x[..., m : m + 1]
+
+        inc = self.width_factor * self.width.to(x) * F.softplus(x)
+        up = inc[..., m + 1 :].cumsum(-1)
+        down = inc[..., :m].flip(-1).cumsum(-1).flip(-1)
+
+        return torch.cat([median - down, median, median + up], dim=-1)
 
 
 class TimestralTransformerBlock(TransformerBlock):

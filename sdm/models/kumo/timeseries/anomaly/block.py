@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn import Conv1d, LayerNorm, Linear, TransformerEncoderLayer
 
 
-class ResidualBlock(torch.nn.Module):
+class DiffusionBlock(torch.nn.Module):
     """Kumo-Anomaly temporal/feature attention with gated residual outputs.
 
     Time and feature axes of length one bypass their attention and subsequent

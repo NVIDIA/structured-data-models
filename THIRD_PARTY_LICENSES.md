@@ -32,6 +32,15 @@ The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) and [`sdm/models/kumo/relatio
 The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from [`TabFM`](https://github.com/google-research/tabfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
 
+## Chronos-2
+
+- Source: https://github.com/amazon-science/chronos-forecasting
+- License: Apache License 2.0
+- License terms: [`sdm/models/chronos2/LICENSE`](sdm/models/chronos2/LICENSE)
+- Optional pretrained weights: https://huggingface.co/amazon/chronos-2
+
+The [`sdm/models/chronos2/`](sdm/models/chronos2/) implementation contains code derived from [`Chronos2`](https://github.com/amazon-science/chronos-forecasting).
+
 ## TimesFM 3.0
 
 - Source: https://github.com/google-research/timesfm

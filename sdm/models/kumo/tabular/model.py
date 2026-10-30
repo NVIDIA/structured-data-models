@@ -316,12 +316,14 @@ class _KumoTabular(torch.nn.Module):
         categorical_mask: Tensor,  # [..., C]
         *,
         num_columns: Tensor | None = None,  # [...]
-    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        train_size: Tensor | None = None,  # [...], int32 lengths in padded y
+    ) -> Tensor:  # [..., R or R_test, num_classes or num_quantiles]
         x = self.row_embedding(
             x=x,
             y=y,
             categorical_mask=categorical_mask,
             num_columns=num_columns,
+            train_size=train_size,
         )
         x = self.row_project(x)
-        return self.icl_block(x=x, y=y)
+        return self.icl_block(x=x, y=y, train_size=train_size)

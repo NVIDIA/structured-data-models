@@ -7,6 +7,7 @@ import argparse
 import os
 import warnings
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -29,7 +30,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
     "--model",
     choices=tuple(MODEL_CONFIGS),
-    default="timesfm3",
+    default="chronos2",
     help="SDM model to benchmark.",
 )
 parser.add_argument(
@@ -41,7 +42,7 @@ args = parser.parse_args()
 
 warnings.filterwarnings("ignore", message=r"'.*' is deprecated.*")
 
-config = MODEL_CONFIGS[args.model]
+config = replace(MODEL_CONFIGS[args.model], cross_learning=False)
 dataset_config = load_dataset_config()
 path = Path(__file__).parent.parent / "time_bench_out" / config.name
 
@@ -79,7 +80,9 @@ for name in names:
             )
         )
 
-        quantiles = np.stack([out.forecast_array for out in outs])
+        levels = [i / 10 for i in range(1, 10)]
+        indices = [outs[0].forecast_keys.index(str(q)) for q in levels]
+        quantiles = np.stack([out.forecast_array for out in outs])[:, indices]
         if quantiles.ndim == 4:
             quantiles = quantiles.swapaxes(-1, -2)  # [B, Q, C, R]
 
@@ -90,7 +93,7 @@ for name in names:
                 ds_config=f"{name}/{term}",
                 output_base_dir=str(path),
                 seasonality=get_seasonality(dataset.freq),
-                quantile_levels=[float(q) for q in outs[0].forecast_keys],
+                quantile_levels=levels,
             )
         with np.load(path / name / term / "metrics.npz") as metrics:
             mase = np.nanmean(metrics["MASE"])

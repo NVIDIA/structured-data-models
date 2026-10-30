@@ -10,7 +10,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList
 
-from sdm.models.kumo.timeseries.anomaly.block import ResidualBlock
+from sdm.models.kumo.timeseries.anomaly.block import DiffusionBlock
 from sdm.models.kumo.timeseries.anomaly.embedding import DiffusionEmbedding
 
 
@@ -48,7 +48,7 @@ class DiffusionDenoiser(torch.nn.Module):
         )
         self.residual_layers = ModuleList(
             [
-                ResidualBlock(
+                DiffusionBlock(
                     channels=channels,
                     side_channels=side_channels,
                     embedding_channels=embedding_channels,

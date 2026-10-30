@@ -81,9 +81,8 @@ class ICLBlock(torch.nn.Module):
         patch_mask: Tensor | None = None,  # [..., C, N]
     ) -> Tensor:  # [..., C, N, out_channels]
 
-        if patch_mask is None:
-            time_attn_mask = var_attn_mask = None
-        else:
+        time_attn_mask = var_attn_mask = None
+        if patch_mask is not None:
             time_attn_mask = torch.ones(
                 (x.size(-2), x.size(-2)),
                 device=x.device,

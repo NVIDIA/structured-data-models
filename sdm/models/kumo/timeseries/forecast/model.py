@@ -40,8 +40,7 @@ class KumoForecast(ICLModel):
     Optional cross-channel mixing lets forecasts use dependencies between
     variates after temporal encoding. The forecasting head predicts the native
     up to 72-step horizon directly from a 512-step history.
-    Forecast horizons beyond 72 steps are extended autoregressively, up to
-    512 steps.
+    Forecast horizons beyond 72 steps are extended autoregressively.
 
     For longer observation histories, Domain-Aware Representation and
     Retrieval (DARR) can augment the direct forecast with patterns retrieved
@@ -181,19 +180,7 @@ class KumoForecast(ICLModel):
                 f"Expected 'alpha' between zero and one (got {alpha})"
             )
 
-        if y_context.size(-2) < self.model.context_size:
-            raise ValueError(
-                f"Expected at least {self.model.context_size} context rows "
-                f"(got {y_context.size(-2)})"
-            )
-
         horizon = x_query.size(-2)
-        if not 1 <= horizon <= 512:
-            raise ValueError(
-                "Number of query rows must be between 1 and 512 steps "
-                f"(got {horizon})"
-            )
-
         context_size = self.model.context_size
         prediction_size = self.model.prediction_size
         memory_horizon = max(prediction_size, horizon)
@@ -218,6 +205,12 @@ class KumoForecast(ICLModel):
 
         # Forecast:
         last_x = x[..., -self.model.context_size :]
+        if last_x.size(-1) < context_size:
+            last_x = torch.nn.functional.pad(
+                last_x,
+                pad=(context_size - last_x.size(-1), 0),
+                value=float("nan"),
+            )
         encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
         out = self.model.decode(encoded, mean, scale)
 
@@ -328,7 +321,8 @@ class _KumoForecast(torch.nn.Module):
         return self.decode(encoded, mean, scale)
 
     def decode(self, encoded: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
-        return self.revin.inverse(self.head(encoded.flatten(-2)), mean, scale)
+        out = self.head(encoded.flatten(-2)).float()
+        return self.revin.inverse(out, mean, scale)
 
     def encode_memory(
         self,
@@ -362,7 +356,7 @@ class _KumoForecast(torch.nn.Module):
         self,
         x: Tensor,  # [..., C, R]
     ) -> tuple[Tensor, Tensor, Tensor]:
-        mean, scale = self.revin.compute_stats(x)
+        mean, scale = self.revin.stats(x, correction=0)
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]

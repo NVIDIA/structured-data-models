@@ -52,10 +52,10 @@ history = sdm.TableTensor.from_columns(
 ```
 
 We can forecast with any time series forecasting model in [`sdm.models`](api/models).
-Here, we use {py:class}`~sdm.models.TimesFM3`:
+Here, we use {py:class}`~sdm.models.Chronos2`:
 
 ```python
-model = sdm.models.TimesFM3(device="cuda")
+model = sdm.models.Chronos2(device="cuda")
 out = model(
     x_context=sdm.TableTensor(size=(5, ), device="cuda"),
     y_context=history,
@@ -68,7 +68,7 @@ Since we have none yet, both tables hold zero columns.
 However, we still need to pass them to {py:meth}`~sdm.models.ICLModel.forward`, in particular because the number of rows in `x_query` defines the **forecast horizon**: here, we request predictions for the next three time steps.
 
 The forecast is returned as a {py:class}`~sdm.tensor.TableTensor` with one row per future step.
-Its output is model-specific, *e.g.*, {py:class}`~sdm.models.TimesFM3` outputs one column per target and quantile, from the 10th to the 90th percentile, named `"<target>__q<level>"`:
+Its output is model-specific, *e.g.*, {py:class}`~sdm.models.Chronos2` outputs one column per target and quantile, named `"<target>__q<level>"`:
 
 ```python
 out["ice_cream__q50"].numerical  # median forecast, [3, 1]

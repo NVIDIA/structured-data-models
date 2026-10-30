@@ -114,6 +114,7 @@ class RowEmbedding(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_columns: Tensor | None = None,
+        train_size: Tensor | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
         *B, R, C = x.size()
@@ -127,11 +128,11 @@ class RowEmbedding(torch.nn.Module):
         )
 
         buffer: Tensor | None = None
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or train_size is not None:
             x = self.cell_embedding(
                 x=x,
                 categorical_mask=categorical_mask,
-                train_size=R_train,
+                train_size=R_train if train_size is None else train_size,
                 num_columns=num_columns,
                 cache=cache,
             )  # [..., R, C, D]
@@ -147,7 +148,7 @@ class RowEmbedding(torch.nn.Module):
             x = self.cell_embedding(
                 x=x,
                 categorical_mask=categorical_mask,
-                train_size=R_train,
+                train_size=R_train if train_size is None else train_size,
                 num_columns=num_columns,
                 cache=cache,
                 batch_size_limit="auto",
@@ -160,6 +161,10 @@ class RowEmbedding(torch.nn.Module):
             else:
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
+            if train_size is not None:
+                context = torch.arange(R_train, device=y.device)
+                context = context < train_size[..., None]
+                y_emb = y_emb.masked_fill(~context[..., None, None], 0)
             x[..., :R_train, :, :] += y_emb.to(x.dtype)
 
         if buffer is not None:
@@ -184,6 +189,9 @@ class RowEmbedding(torch.nn.Module):
                 key_value=cast(KVCacheEntry, cache[key])
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :],
+                seqused_key_value=None
+                if train_size is None
+                else train_size.unsqueeze(-1),
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
                 out=None if buffer is None else x,

@@ -17,9 +17,19 @@ class ModelConfig:
     num_estimators: int = 1
     max_context_size: int | None = None
     max_variates: int | None = None
+    cross_learning: bool = False
 
 
 MODEL_CONFIGS = {
+    "chronos2": ModelConfig(
+        name="Chronos2",
+        factory=lambda device: sdm.models.Chronos2(device=device),
+        autocast_dtype=torch.float16,
+        num_estimators=1,
+        max_context_size=8_192,
+        max_variates=None,
+        cross_learning=True,
+    ),
     "timesfm3": ModelConfig(
         name="TimesFM3",
         factory=lambda device: sdm.models.TimesFM3(

@@ -15,6 +15,7 @@ from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.robust_scale import RobustScale
 from sdm.processing.numerical.min_max_scale import MinMaxScale
 from sdm.processing.numerical.flip_sign import FlipSign
+from sdm.processing.numerical.asinh import Asinh
 from sdm.processing.numerical.constant import DropConstantColumns
 from sdm.processing.numerical.pca import PCA
 from sdm.processing.numerical.random_projection import RandomProjection
@@ -35,6 +36,7 @@ __all__ = [
     "RobustScale",
     "MinMaxScale",
     "FlipSign",
+    "Asinh",
     "DropConstantColumns",
     "PCA",
     "RandomProjection",
