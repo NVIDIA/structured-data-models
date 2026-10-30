@@ -21,6 +21,7 @@ from sdm.tensor.io import (
     combine_arrow_chunks,
     to_arrow,
 )
+from sdm.tensor.mixin import _record_compiled_stream
 
 aten = torch.ops.aten
 
@@ -631,6 +632,9 @@ class VarLenTensor(Tensor):
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             with enable_reentrant_dispatch():  # Record autograd in `_data`.
                 return handler(*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_compiled_stream(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
