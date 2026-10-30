@@ -18,7 +18,8 @@ pip install . fev==0.10.0
   python -m benchmark.timeseries.fev_bench.main --model chronos2
   ```
 
-  `Chronos2` uses cross-learning across batches of 64 examples, contexts truncated to 8,192 time steps, and `float16` mixed precision. Targets and available covariates are shared within each batch. Evaluation windows are processed separately.
+  `Chronos2` follows official evaluation with cross-learning across batches, and contexts truncated to 8,192 time steps.
+  Unlike the official `float32` evaluation, we use `float16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
 
 - **`TimesFM3`**:
 

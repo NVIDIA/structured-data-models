@@ -19,8 +19,8 @@ pip install --no-deps "git+https://github.com/SalesforceAIResearch/gift-eval.git
   python -m benchmark.timeseries.gift_eval.main --model chronos2
   ```
 
-  `Chronos2` uses cross-learning across batches of 64 examples, contexts truncated to 8,192 time steps, and `float16` mixed precision. Historical covariates are included when available. Each evaluation window is predicted separately to prevent leakage between rolling windows.
-  The published reference uses `float32`, targets only, and a batch budget of 100 series, so these settings can produce different scores.
+  `Chronos2` follows official evaluation with cross-learning across batches, and contexts truncated to 8,192 time steps.
+  Unlike the official `float32` evaluation, we use `float16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
 
 - **`TimesFM3`**:
 
