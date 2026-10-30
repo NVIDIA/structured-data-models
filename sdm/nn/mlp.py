@@ -1,5 +1,3 @@
-# Copyright 2026 Google LLC
-# Copyright (c) 2026 Mistral AI
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -14,11 +12,11 @@ class ResidualMLP(torch.nn.Module):
     """A two-layer MLP with a learned linear residual projection.
 
     Args:
-        in_channels: Number of input channels.
-        hidden_channels: Number of hidden channels.
-        out_channels: Number of output channels.
-        activation: Activation between the two MLP projections.
-        bias: Whether all three projections learn additive biases.
+        in_channels: The number of input channels.
+        hidden_channels: The number of hidden channels.
+        out_channels: The number of output channels.
+        activation: The activation within the MLP.
+        bias: Whether to learn additive biases.
         device: The device.
         dtype: The dtype.
     """
@@ -47,12 +45,9 @@ class ResidualMLP(torch.nn.Module):
         self.res = Linear(in_channels, out_channels, **factory_kwargs)
 
     def forward(self, x: Tensor) -> Tensor:
-        """Transform the final dimension of ``x``.
+        r"""The forward pass.
 
         Args:
-            x: Input with shape ``[..., C]``, where ``C`` is input channels.
-
-        Returns:
-            Tensor with shape ``[..., O]``, where ``O`` is output channels.
+            x: The tensor.
         """
         return self.mlp(x) + self.res(x)
