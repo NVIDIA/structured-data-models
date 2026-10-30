@@ -19,6 +19,7 @@ reviews:
   in_progress_fortune: false
   suggested_labels: false
   suggested_reviewers: false
+  related_prs: false
 
   path_filters:
     - '!uv.lock'
