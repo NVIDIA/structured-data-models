@@ -989,6 +989,53 @@ def _pin_memory_composite(
     return _pin_memory(inp)
 
 
+@VarLenTensor.implements(aten.masked_fill.Scalar)
+@VarLenTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: VarLenTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> VarLenTensor:
+    if mask.dtype != torch.bool:
+        raise RuntimeError("Expected 'mask' to have dtype 'torch.bool'")
+    if isinstance(value, Tensor) and value.dim() != 0:
+        raise RuntimeError("Expected 'value' to be zero-dimensional")
+    if isinstance(value, Tensor):
+        torch._assert_async(
+            value.isnan() | ~mask.any(),
+            "Can't fill variable-length cells with a non-missing scalar",
+        )
+    elif value == value:
+        torch._assert_async(
+            ~mask.any(),
+            "Can't fill variable-length cells with a non-missing scalar",
+        )
+    size = torch.broadcast_shapes(inp.shape, mask.shape)
+    if (
+        size == inp.shape
+        and inp.is_contiguous()
+        and int(inp.storage_offset()) == 0
+        and inp._offset.numel() == inp.numel() + 1
+    ):
+        data, offset = inp._data.clone(), inp._offset.clone()
+        valid = _valid(inp)
+    else:
+        out = cast(
+            VarLenTensor,
+            inp.expand(size).clone(memory_format=torch.contiguous_format),
+        )
+        data, offset, valid = out._data, out._offset, out.valid
+    present = ~mask.expand(size)
+    if valid is not None:
+        present.logical_and_(valid)
+    return inp.__class__(
+        data=data,
+        offset=offset,
+        valid=present.reshape(-1),
+        size=size,
+    )
+
+
 @VarLenTensor.implements(aten.isnan.default)
 def _isnan(inp: VarLenTensor) -> Tensor:
     valid = inp.valid

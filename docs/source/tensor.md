@@ -163,6 +163,28 @@ print(table.to("cuda").device)
 # cuda:0
 ```
 
+### Masking Cells
+
+Use {py:meth}`~torch.Tensor.masked_fill` or {py:func}`torch.masked_fill` to replace selected cells without modifying the input table:
+
+```python
+rows = torch.tensor([[True], [False], [False]], device=table.device)
+masked = table.masked_fill(rows, torch.nan)
+filled = table[["age", "income"]].masked_fill(rows, 0)
+```
+
+The boolean mask broadcasts over rows and batch dimensions.
+A mask with shape `[rows, 1]` selects entire rows, `[1, columns]` selects entire columns, and `[rows, columns]` selects individual cells.
+Mask columns follow the fixed numerical, categorical, datetime, text, then identifier block order, with each block's own column order.
+This order is independent of `.columns` dictionary insertion order and the original dataframe column order.
+Broadcasting cannot add columns because that would require a new schema.
+
+Numerical fills follow PyTorch's dtype conversion rules.
+Numeric categorical fills must match existing category values, not internal codes; unknown values are rejected for columns containing selected cells.
+NaN fills mark cells as missing using each block's representation: NaN for floating-point values, negative category codes, `sdm.NaT` for timestamps, and validity masks for text and nullable identifiers.
+Non-missing numeric fills cannot replace text or variable-length cells, but leave unselected cells of those types unchanged.
+Scalar tensors are also accepted as fill values; tensor values must be zero-dimensional.
+
 ### Round-Tripping
 
 A {py:class}`~sdm.tensor.TableTensor` is intended to sit between dataframe interfaces and model code.

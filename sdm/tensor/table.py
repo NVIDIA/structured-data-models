@@ -1505,6 +1505,63 @@ def _contiguous(
     )
 
 
+@TableTensor.implements(aten.masked_fill.Scalar)
+@TableTensor.implements(aten.masked_fill.Tensor)
+@preserve_autograd_state
+def _masked_fill(
+    inp: TableTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> TableTensor:
+    broadcast_columns = mask.dim() == 0 or mask.size(-1) == 1
+    if not broadcast_columns and mask.size(-1) != inp.size(-1):
+        raise RuntimeError(
+            f"Can't expand the column dimension of '{inp.__class__.__name__}'"
+        )
+    size = inp.shape
+    if mask.dim() > 0 and mask.shape[:-1] != size[:-1]:
+        size = torch.broadcast_shapes(size, mask.shape)
+
+    blocks: dict[Stype, Tensor] = {}
+    offset = 0
+    for stype, block in inp.items():
+        width = block.size(-1)
+        if width == 0:
+            blocks[stype] = (
+                block if size == inp.shape else block.expand(*size[:-1], 0)
+            )
+            continue
+        block_mask = (
+            mask if broadcast_columns else mask[..., offset : offset + width]
+        )
+        offset += width
+
+        fill = value
+        if stype == Stype.datetime:
+            if isinstance(value, Tensor) and value.is_floating_point():
+                fill = torch.where(value.isnan(), NaT, value)
+            elif not isinstance(value, Tensor) and value != value:
+                fill = NaT
+        if (
+            type(block) is Tensor
+            and isinstance(fill, Tensor)
+            and fill.dtype == block.dtype
+        ):
+            if fill.dim() != 0:
+                raise RuntimeError("Expected 'value' to be zero-dimensional")
+            blocks[stype] = torch.where(block_mask, fill, block)
+        else:
+            blocks[stype] = block.masked_fill(block_mask, fill)
+
+    if inp.size(-1) == 0:
+        blocks[Stype.numerical] = inp.numerical.masked_fill(mask, value)
+
+    return inp.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **blocks,
+    )
+
+
 @TableTensor.implements(aten.is_pinned.default)
 def _is_pinned(inp: TableTensor) -> bool:
     return all(

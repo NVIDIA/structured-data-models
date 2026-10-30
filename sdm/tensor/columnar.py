@@ -623,6 +623,52 @@ def _contiguous(
     )
 
 
+@ColumnarTensor.implements(aten.masked_fill.Scalar)
+@ColumnarTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: ColumnarTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> ColumnarTensor:
+    broadcast_columns = mask.dim() == 0 or mask.size(-1) == 1
+    if not broadcast_columns and mask.size(-1) != inp.size(-1):
+        raise RuntimeError(
+            f"Can't expand the column dimension of '{inp.__class__.__name__}'"
+        )
+    size = inp.shape
+    if mask.dim() > 0 and mask.shape[:-1] != size[:-1]:
+        size = torch.broadcast_shapes(size, mask.shape)
+    shared_mask = (
+        mask.squeeze(-1) if broadcast_columns and mask.dim() > 0 else mask
+    )
+    columns = []
+    for i, column in enumerate(inp._columns):
+        if (
+            (isinstance(value, Tensor) or value != value)
+            and not isinstance(column, NullableTensor | VarLenTensor)
+            and not column.is_floating_point()
+        ):
+            column = NullableTensor.from_tensor(column)
+        column_mask = shared_mask if broadcast_columns else mask[..., i]
+        if (
+            type(column) is Tensor
+            and isinstance(value, Tensor)
+            and value.dtype == column.dtype
+        ):
+            if value.dim() != 0:
+                raise RuntimeError("Expected 'value' to be zero-dimensional")
+            columns.append(torch.where(column_mask, value, column))
+        else:
+            columns.append(column.masked_fill(column_mask, value))
+    if not columns:
+        return inp._from_empty(inp._empty.masked_fill(mask, value))
+    return inp.__class__(
+        columns=columns,
+        size=size[:-1],
+        device=inp.device,
+    )
+
+
 @ColumnarTensor.implements(aten.is_pinned.default)
 def _is_pinned(inp: ColumnarTensor) -> bool:
     if not inp._columns:
