@@ -25,12 +25,12 @@ from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
+from torch.nn import ReLU
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task
 from sdm.cache import Cache
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.base import ICLModel
-from sdm.models.timesfm3.block import ResidualBlock
 from sdm.models.timesfm3.ckpt import remap_ckpt
 from sdm.models.timesfm3.icl import ICLBlock
 from sdm.models.timesfm3.recipe import default_recipe
@@ -38,7 +38,7 @@ from sdm.models.timesfm3.util import (
     crossfade_patches,
     gather_future_patches,
 )
-from sdm.nn import RevIN
+from sdm.nn import ResidualMLP, RevIN
 from sdm.tensor.table import TableSchema
 
 
@@ -229,9 +229,12 @@ class _TimesFM3(torch.nn.Module):
         self.refinement = refinement
 
         self.revin = RevIN(eps=0, **factory_kwargs)
-        self.patch_embedding = ResidualBlock(
+        self.patch_embedding = ResidualMLP(
             in_channels=2 * (input_patch_size + output_patch_size),
+            hidden_channels=channels,
             out_channels=channels,
+            activation=ReLU(),
+            bias=False,
             **factory_kwargs,
         )
         self.icl_block = ICLBlock(

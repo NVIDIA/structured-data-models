@@ -3,16 +3,20 @@
 
 
 import torch
+from torch.nn import ReLU
 
-from sdm.models.timesfm3.block import ResidualBlock
+from sdm.nn import ResidualMLP
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_residual_block(device: torch.device) -> None:
-    block = ResidualBlock(
+def test_residual_mlp(device: torch.device) -> None:
+    block = ResidualMLP(
         in_channels=3,
+        hidden_channels=2,
         out_channels=2,
+        activation=ReLU(),
+        bias=False,
         device=device,
     )
 
