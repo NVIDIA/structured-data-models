@@ -52,11 +52,8 @@ class Chronos2(ICLModel):
         device: The device.
 
     Additional Forward Parameters:
-        cross_learning (bool): Whether examples in the batch share information
-            through variate attention. Defaults to ``False``. Predictions
-            depend on batch composition when enabled. Use ``num_estimators=1``
-            for inputs shaped ``[B, R, D]`` to treat ``B`` as examples.
-            For fitted predictions, pass this option to :meth:`fit`.
+        cross_learning (bool): Whether examples in a batch will share
+            information through variate attention. (default: ``False``)
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -92,8 +89,7 @@ class Chronos2(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
-        if cross_learning:
-            # Keep estimator groups separate when merging batch dimensions.
+        if cross_learning:  # Keep estimator groups separate:
             kwargs["estimator_batch_size"] = 1
         return super().forward(
             x_context[..., -self.model.context_length :, :],
@@ -112,7 +108,7 @@ class Chronos2(ICLModel):
         **kwargs: Any,
     ) -> None:
         r""":meta private:"""  # noqa: D415
-        if cross_learning:
+        if cross_learning:  # Keep estimator groups separate:
             kwargs["estimator_batch_size"] = 1
         super().fit(
             x[..., -self.model.context_length :, :],
@@ -190,8 +186,8 @@ class Chronos2(ICLModel):
             query[..., y.size(-1) + x_context_only.size(-1) :, :] = (
                 x_query.numerical.transpose(-2, -1)
             )
+            shape = context.size()[:-1]
             if cross_learning:
-                shape = context.size()[:-1]
                 context = context.flatten(0, -2)
                 query = query.flatten(0, -2)
             out = self.model(context, query)
