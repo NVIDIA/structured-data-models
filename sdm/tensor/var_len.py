@@ -1595,3 +1595,191 @@ def _materialize(
         storage_offset=0,
         max_length=inp._max_length,
     )
+
+
+def _permute_entries(inp: VarLenTensor, perm: Tensor) -> VarLenTensor:
+    """Reorder one-dimensional entries by a permutation.
+
+    A permutation of a view with nonzero stride selects at most the bytes of
+    its backing storage, so the output keeps that static capacity regardless
+    of individual entry lengths. Bytes after the final offset are zero.
+
+    Eager CUDA copies in tiles, which needs one host read of entry counts;
+    compiled code searches each element's entry, which Inductor fuses into
+    one kernel. A single tiled path for both was 2.7x slower eager on 1M
+    URLs and used up to 2.9x the memory, so the two paths stay separate.
+    """
+    if inp.stride(0) == 0:
+        return cast(VarLenTensor, inp[perm])
+
+    rows = perm * inp.stride(0) + inp._logical_storage_offset
+    valid = inp._valid[rows] if inp._valid is not None else None
+    capacity = inp._data.numel()
+    dtype = torch.int32
+    if capacity + 2 * _TILE + _SCRATCH > torch.iinfo(torch.int32).max:
+        dtype = torch.int64
+    shift = inp._offset[rows].to(dtype)
+    offset = inp._offset[1:][rows].to(dtype) - shift
+    del rows
+    offset = torch.cat((offset.new_zeros(1), offset.cumsum(0, dtype=dtype)))
+    shift -= offset[:-1]  # Source minus output position of each entry.
+
+    if inp.is_cuda and not torch.compiler.is_compiling():
+        data = _gather_tiles(inp._data, shift, offset)
+    else:
+        data = _gather_elements(inp._data, shift, offset)
+    del shift
+
+    return inp.__class__(
+        data=data,
+        offset=offset.to(inp._offset.dtype),
+        valid=valid,
+        size=perm.shape,
+        max_length=inp._max_length,
+    )
+
+
+_TILE = 32
+_SCRATCH = 1024
+
+
+def _gather_elements(data: Tensor, shift: Tensor, offset: Tensor) -> Tensor:
+    """Copy entries element by element with static shapes.
+
+    Ends of non-empty entries strictly increase, so at most ``2 * _TILE`` of
+    them fall in any ``2 * _TILE``-element window. A binary search of
+    ``(2 * _TILE).bit_length()`` steps within the window's range finds the
+    entry of each output element; compiled, this is a single fused kernel.
+    """
+    capacity, n, width = data.numel(), shift.numel(), 2 * _TILE
+    end = offset[1:]
+    nonempty = end > offset[:-1]
+    # Non-empty entries in output order; others land in the spare slot ``n``.
+    rank = (nonempty.cumsum(0, dtype=end.dtype) - 1).where(nonempty, n)
+    last = end.new_empty(n + 1).scatter_(0, rank, end)
+    shift = shift.new_empty(n + 1).scatter_(0, rank, shift)
+    # Slots after the last non-empty entry pad up to the capacity.
+    unused = torch.arange(n + 1, device=end.device) >= nonempty.sum()
+    last.masked_fill_(unused, capacity + width)
+    shift.masked_fill_(unused, -capacity)
+
+    pos = torch.arange(capacity, dtype=end.dtype, device=end.device)
+    window = torch.arange(
+        0,
+        capacity + width,
+        width,
+        dtype=end.dtype,
+        device=end.device,
+    )
+    bound = torch.searchsorted(
+        last,
+        window,
+        right=True,
+        out_int32=end.dtype == torch.int32,
+    )
+    low, high = bound[pos // width], bound[pos // width + 1]
+    for _ in range(width.bit_length()):
+        mid = (low + high) >> 1
+        right = last[mid] <= pos
+        low, high = (mid + 1).where(right, low), high.where(right, mid)
+    source = pos + shift[low]
+    return data[source.clamp_min(0)].masked_fill(source < 0, 0)
+
+
+def _gather_tiles(data: Tensor, shift: Tensor, offset: Tensor) -> Tensor:
+    """Copy entries in ``_TILE``-element windows; synchronizes once.
+
+    Each output tile is copied from the entry owning its first element, which
+    is exact up to the first entry boundary inside the tile. Entries of at
+    least ``_TILE`` elements then rewrite their first ``_TILE`` elements, and
+    shorter entries are copied element by element.
+    """
+    capacity, n = data.numel(), shift.numel()
+    if capacity == 0 or n == 0:
+        return data.new_zeros(capacity)
+    head, end = offset[:-1], offset[1:]
+    i32 = offset.dtype == torch.int32
+
+    # Per-entry bookkeeping before the payload is allocated.
+    length = end - head
+    short = (length > 0) & (length < _TILE)
+    total, n_short, short_size = torch.stack(
+        (end[-1:].sum(), short.sum(), (length * short).sum())
+    ).tolist()
+    width = _TILE if total >= _TILE * n and capacity >= _TILE else 1
+    if width > 1:
+        short = torch.nonzero_static(short, size=n_short).squeeze(1)
+        short = short.to(offset.dtype)
+        # Tiles are clamped into the payload only for the long entry whose
+        # source ends within the last ``width`` elements.
+        tail = (length >= width) & (head + shift + length > capacity - width)
+        tail = torch.nonzero_static(tail, size=1, fill_value=n)
+    del length
+
+    out = data.new_empty(-(-capacity // width) * width + width + _SCRATCH)
+    src = data.unfold(0, width, 1)  # [capacity - width + 1, width]
+    scratch = out.numel() - width - _SCRATCH
+
+    # [tiles, width] tiles from the owner of their first element.
+    tiles, block = -(-total // width), 1 << (20 if width == 1 else 18)
+    for lo in range(0, tiles, block):
+        hi = min(lo + block, tiles)
+        row = torch.arange(
+            lo * width,
+            hi * width,
+            width,
+            dtype=offset.dtype,
+            device=data.device,
+        )
+        owner = torch.searchsorted(end, row, right=True, out_int32=i32)
+        row += shift.index_select(0, owner)
+        del owner
+        torch.index_select(
+            src,
+            0,
+            row.clamp_max_(capacity - width),
+            out=out[lo * width : hi * width].view(-1, width),
+        )
+    if width == 1:
+        out[total:capacity].zero_()
+        return out[:capacity]
+
+    # [n, width] first elements of long entries; others write scratch rows.
+    dst = out.unfold(0, width, 1)
+    step = (3 << 20) // width
+    for lo in range(0, n, step):
+        hi = min(lo + step, n)
+        ok = end[lo:hi] - head[lo:hi] >= width
+        pad = torch.arange(lo, hi, dtype=offset.dtype, device=data.device)
+        pad = pad.remainder_(_SCRATCH).add_(scratch)
+        dst.index_copy_(
+            0,
+            head[lo:hi].where(ok, pad).long(),
+            src.index_select(0, (head[lo:hi] + shift[lo:hi]).where(ok, 0)),
+        )
+
+    # Rewrite the last elements of the entry whose tiles were clamped.
+    ok = tail < n
+    tail = tail.clamp_max(n - 1)
+    dst.index_copy_(
+        0,
+        (end[tail] - width).where(ok, scratch).long().view(-1),
+        src.index_select(
+            0, (end[tail] + shift[tail] - width).where(ok, 0).view(-1)
+        ),
+    )
+
+    # [short_size] elements of short entries, packed back to back.
+    first = (end - head)[short].cumsum(0, dtype=offset.dtype)
+    move = head[short]
+    move[1:] -= first[:-1]  # Packed to output position.
+    shift = shift[short]
+    for lo in range(0, short_size, 1 << 17):
+        hi = min(lo + (1 << 17), short_size)
+        pos = torch.arange(lo, hi, dtype=offset.dtype, device=data.device)
+        k = torch.searchsorted(first, pos, right=True, out_int32=i32)
+        pos += move.index_select(0, k)
+        out[pos] = data[pos + shift.index_select(0, k)]
+
+    out[total:capacity].zero_()
+    return out[:capacity]
