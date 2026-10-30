@@ -9,10 +9,10 @@ Thus, an application can call the model without loading its weights or managing 
 NIMs for structured data models follow SDM's unified prediction interface.
 We have published the following NIMs:
 
-| Model ID          | Model                                | NVIDIA Build                                                        | NGC Catalog                                                                                   |
-| ----------------- | ------------------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `kumo-tabular`     | {py:class}`~sdm.models.KumoTabular`    | [Deploy](https://build.nvidia.com/nvidia/kumo-tabular)                 | [Container](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/kumo-tabular/-)              |
-| `kumo-relational`  | {py:class}`~sdm.models.KumoRelational` | [Deploy](https://build.nvidia.com/nvidia/kumo-relational)              | [Container](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/kumo-relational/-)           |
+| Model ID          | Model                                  | NVIDIA Build                                              | NGC Catalog                                                                              |
+| ----------------- | -------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `kumo-tabular`    | {py:class}`~sdm.models.KumoTabular`    | [Deploy](https://build.nvidia.com/nvidia/kumo-tabular)    | [Container](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/kumo-tabular/-)    |
+| `kumo-relational` | {py:class}`~sdm.models.KumoRelational` | [Deploy](https://build.nvidia.com/nvidia/kumo-relational) | [Container](https://catalog.ngc.nvidia.com/orgs/nim/nvidia/containers/kumo-relational/-) |
 
 ## The NIM API
 
