@@ -15,9 +15,9 @@ class ModelConfig:
     factory: Callable[[torch.device], sdm.models.ICLModel]
     autocast_dtype: torch.dtype
     num_estimators: int = 1
-    cross_learning: bool = False
     max_context_size: int | None = None
     max_variates: int | None = None
+    cross_learning: bool = False
 
 
 MODEL_CONFIGS = {
@@ -28,6 +28,7 @@ MODEL_CONFIGS = {
         num_estimators=1,
         max_context_size=8_192,
         max_variates=None,
+        cross_learning=True,
     ),
     "timesfm3": ModelConfig(
         name="TimesFM3",
