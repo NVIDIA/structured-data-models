@@ -37,7 +37,7 @@ class StringTensor(VarLenTensor):
         max_length: Upper bound on the byte length of every stored string,
             or :obj:`None` if unknown. Lets eager operations size buffers
             without reading lengths from the device. Must not underestimate.
-            Compiled tensor operations see :obj:`None` and never recompile.
+            Tensors rebuilt inside compiled code have :obj:`None`.
     """
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
@@ -566,13 +566,13 @@ def _sort(
 def _length_bound(offset: Tensor) -> int:
     """Return an upper bound on the byte length of every stored string.
 
-    ``torch.compile`` treats the bound as a constant and compiles a separate
-    graph for each distinct value. Rounding the longest length up to the
-    next ``2**k - 1`` bytes (1, 3, 7, ..., 127, 255, ...) lets inputs with
-    similar lengths share one graph, at the cost of a bound up to about
-    twice the longest length. Pass only the offsets of the tensor's own
-    strings: views and copies of the tensor cannot reach other strings in
-    a shared buffer, so the bound stays valid for them.
+    When compiled code reads the bound of an input, ``torch.compile`` treats
+    it as a constant and compiles a separate graph for each value. Rounding
+    the longest length up to the next ``2**k - 1`` bytes (1, 3, 7, ..., 127,
+    255, ...) lets inputs with similar lengths share one graph, at the cost
+    of a bound up to about twice the longest length. Pass only the offsets
+    of the tensor's own strings: views and copies of the tensor cannot reach
+    other strings in a shared buffer, so the bound stays valid for them.
     """
     lengths = offset[1:] - offset[:-1]
     longest = int(lengths.max()) if lengths.numel() > 0 else 0

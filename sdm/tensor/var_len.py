@@ -65,7 +65,7 @@ class VarLenTensor(Tensor):
         max_length: Upper bound on the length of every stored entry, or
             :obj:`None` if unknown. Lets eager operations size buffers
             without reading lengths from the device. Must not underestimate.
-            Compiled tensor operations see :obj:`None` and never recompile.
+            Tensors rebuilt inside compiled code have :obj:`None`.
     """
 
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
@@ -577,8 +577,9 @@ class VarLenTensor(Tensor):
         attrs = ["_offset", "_data", "_layout"]
         if self._valid is not None:
             attrs.append("_valid")
-        # The length bound stays eager: compiled operations see ``None``.
-        # As context, each new query bound would compile another graph.
+        # Leave out the length bound: torch.compile compiles a new graph when
+        # a value returned here changes, and the bound changes from one query
+        # batch to the next. Tensors rebuilt inside compiled code get `None`.
         return attrs, (self.__class__, self.storage_offset())
 
     @staticmethod

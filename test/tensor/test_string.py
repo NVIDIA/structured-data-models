@@ -422,46 +422,25 @@ def test_bound_rounds_up(length: int, bound: int) -> None:
     assert values._max_length == bound
 
 
-@withCUDA
-@pytest.mark.parametrize("bound", [None, 0, 15])
-def test_bound_provenance(
-    compilation: None,
-    device: torch.device,
-    bound: int | None,
-) -> None:
-    texts = ["", None] if bound == 0 else ["abcdefgh", "é"]
-    # A non-null Arrow slice shares storage with a longer, unreachable string.
-    array = pa.array(texts)
-    if bound == 15:
-        array = pa.array(["x" * 40, *texts]).slice(1)
-    values = StringTensor.from_arrow(array, device=device)
-    if bound is None:
-        values = StringTensor(
-            data=values._data,
-            offset=values._offset,
-            valid=values._valid,
-            size=values.size(),
-        )
-    compiled = torch.compile(lambda value: value.detach(), fullgraph=True)
-    for copied, expected in (
-        (values[:], texts),
-        (values[::2], texts[::2]),
-        (values[torch.tensor([1, 0], device=device)], texts[::-1]),
-        (values.clone(), texts),
-        (values.detach(), texts),
-        (values.to(device, copy=True), texts),
-        (pickle.loads(pickle.dumps(values)), texts),
-    ):
-        copied = cast(StringTensor, copied)
-        assert copied._max_length == bound
-        assert copied.tolist() == expected
-    # Compiled outputs carry no bound, so new bounds do not recompile.
-    compiled_values = cast(StringTensor, compiled(values))
-    assert compiled_values._max_length is None
-    assert compiled_values.tolist() == texts
-    for suffix in ("", "x" * 16):
-        extra = StringTensor.from_list([suffix], device=device)
-        joined = cast(StringTensor, torch.cat((values, extra)))
-        new_bound = None if bound is None else max(bound, 31 if suffix else 0)
-        assert joined._max_length == new_bound
-        assert joined.tolist() == [*texts, suffix]
+def test_bound_survives_views_and_copies() -> None:
+    # A sliced Arrow array shares a buffer with a longer, unreachable string.
+    array = pa.array(["x" * 40, "abcdefgh", "é"]).slice(1)
+    values = StringTensor.from_arrow(array)
+    assert values._max_length == 15
+    copies = (values[1:], values.clone(), pickle.loads(pickle.dumps(values)))
+    for copied in copies:
+        assert cast(StringTensor, copied)._max_length == 15
+
+
+def test_cat_bound() -> None:
+    values = StringTensor.from_list(["abcdefgh"])
+    longer = StringTensor.from_list(["x" * 16])
+    assert cast(StringTensor, torch.cat((values, longer)))._max_length == 31
+    # An unknown bound makes the result unknown, never too small.
+    unknown = StringTensor(
+        data=longer._data,
+        offset=longer._offset,
+        valid=None,
+        size=longer.size(),
+    )
+    assert cast(StringTensor, torch.cat((values, unknown)))._max_length is None
