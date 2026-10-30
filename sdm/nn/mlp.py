@@ -9,13 +9,17 @@ from torch.nn import Linear, Sequential
 
 
 class ResidualMLP(torch.nn.Module):
-    """A two-layer MLP with a learned linear residual projection.
+    r"""Two-layer MLP with a learned linear residual projection.
+
+    .. math::
+
+        \operatorname{MLP}_2(x) + \operatorname{Linear}(x)
 
     Args:
         in_channels: The number of input channels.
-        hidden_channels: The number of hidden channels.
+        hidden_channels: The number of hidden channels in the MLP.
         out_channels: The number of output channels.
-        activation: The activation within the MLP.
+        activation: The activation in the MLP.
         bias: Whether to learn additive biases.
         device: The device.
         dtype: The dtype.
