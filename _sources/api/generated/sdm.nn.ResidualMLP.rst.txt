@@ -1,0 +1,8 @@
+﻿ResidualMLP
+===========
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: ResidualMLP
+   :members:
+   :show-inheritance:
