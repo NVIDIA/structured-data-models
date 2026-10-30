@@ -564,17 +564,21 @@ def _sort(
 
 
 def _length_bound(offset: Tensor) -> int:
-    """Return an upper bound on the byte length of the strings in ``offset``.
+    """Return an upper bound on the byte length of a tensor's strings.
 
-    ``offset`` holds the ``n + 1`` positions of ``n`` strings in a byte
-    buffer: string ``i`` spans ``offset[i]`` to ``offset[i + 1]``. Pass only
-    the tensor's own strings; other strings in a shared buffer would only
-    loosen the bound.
+    Rounds the longest length up to the next ``2**k - 1`` (0, 1, 3, 7, 15,
+    ...). When compiled code reads the bound of an input, ``torch.compile``
+    compiles a separate graph for each value, so rounding lets similar
+    lengths share one graph.
 
-    The longest length is rounded up to the next ``2**k - 1`` (0, 1, 3, 7,
-    15, ...), at most about twice the longest length. When compiled code
-    reads the bound of an input, ``torch.compile`` compiles a separate graph
-    for each value, so rounding lets similar lengths share one graph.
+    Args:
+        offset: Byte positions of ``n`` strings, with shape ``(n + 1,)``.
+            String ``i`` spans bytes ``offset[i]`` to ``offset[i + 1]``.
+            Pass only the tensor's own strings; other strings in a shared
+            buffer would only loosen the bound.
+
+    Returns:
+        The bound, at most about twice the longest length.
     """
     lengths = offset[1:] - offset[:-1]
     longest = int(lengths.max()) if lengths.numel() > 0 else 0
