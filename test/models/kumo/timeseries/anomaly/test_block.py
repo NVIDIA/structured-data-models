@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.models.kumo.timeseries.anomaly.block import ResidualBlock
+from sdm.models.kumo.timeseries.anomaly.block import DiffusionBlock
 from sdm.testing import withCUDA
 
 
@@ -34,7 +34,7 @@ def reference_attention(
 
 
 def reference_block(
-    block: ResidualBlock,
+    block: DiffusionBlock,
     x: Tensor,
     side_info: Tensor,
     diffusion_embedding: Tensor,
@@ -79,7 +79,7 @@ def reference_block(
         (3, 5, 1, 2, True),
     ],
 )
-def test_residual_block(
+def test_diffusion_block(
     device: torch.device,
     features: int,
     length: int,
@@ -87,7 +87,7 @@ def test_residual_block(
     strategy_batch: int,
     training: bool,
 ) -> None:
-    block = ResidualBlock(
+    block = DiffusionBlock(
         channels=8,
         side_channels=6,
         embedding_channels=12,
@@ -110,8 +110,8 @@ def test_residual_block(
 
 
 @withCUDA
-def test_residual_block_grad_and_state_dict(device: torch.device) -> None:
-    block = ResidualBlock(
+def test_diffusion_block_grad_and_state_dict(device: torch.device) -> None:
+    block = DiffusionBlock(
         channels=8,
         side_channels=6,
         embedding_channels=12,
@@ -135,7 +135,7 @@ def test_residual_block_grad_and_state_dict(device: torch.device) -> None:
         assert value.grad is not None
         assert value.grad.abs().sum() > 0
 
-    restored = ResidualBlock(
+    restored = DiffusionBlock(
         channels=8,
         side_channels=6,
         embedding_channels=12,
