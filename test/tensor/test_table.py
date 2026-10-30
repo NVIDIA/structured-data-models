@@ -1533,6 +1533,7 @@ def test_from_pandas_nullable_and_categorical_dtypes(
     assert all(
         category.device == device for category in tensor.categorical.categories
     )
+    assert tensor.categorical.categories[1].storage_offset() == 0
     assert tensor.categorical.categories[0].tolist() == ["unused", "a", "b"]
     assert tensor.categorical.categories[1].tolist() == ["b", "a"]
     assert tensor.categorical.categories[2].tolist() == [True, False]
