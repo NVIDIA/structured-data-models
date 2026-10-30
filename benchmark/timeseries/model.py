@@ -15,6 +15,7 @@ class ModelConfig:
     factory: Callable[[torch.device], sdm.models.ICLModel]
     autocast_dtype: torch.dtype
     num_estimators: int = 1
+    cross_learning: bool = False
     max_context_size: int | None = None
     max_variates: int | None = None
 

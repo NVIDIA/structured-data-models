@@ -19,8 +19,8 @@ pip install --no-deps "git+https://github.com/SalesforceAIResearch/gift-eval.git
   python -m benchmark.timeseries.gift_eval.main --model chronos2
   ```
 
-  `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass.
-  Unlike the official `float32` evaluation, we use `bfloat16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
+  `Chronos2` uses cross-learning across batches of 64 examples, contexts truncated to 8,192 time steps, and `float16` mixed precision. Historical covariates are included when available. Each evaluation window is predicted separately to prevent leakage between rolling windows.
+  The published reference uses `float32`, targets only, and a batch budget of 100 series, so these settings can produce different scores.
 
 - **`TimesFM3`**:
 
@@ -36,6 +36,7 @@ pip install --no-deps "git+https://github.com/SalesforceAIResearch/gift-eval.git
 > Review the license before running the `TimesFM3` benchmark, which will download its weights noninteractively.
 
 Results will be written to `benchmark/timeseries/gift_eval_out/<model>/`, and already completed configurations are skipped.
+Chronos-2 cross-learning results use the `Chronos2CrossLearning` directory to keep them separate from previous independent forecasts.
 
 Pass `--dataset` to run only selected GIFT-Eval datasets, *e.g.*, `--dataset hospital --dataset ett1/H`.
 

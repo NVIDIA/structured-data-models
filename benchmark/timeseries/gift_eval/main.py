@@ -7,7 +7,9 @@ import argparse
 import logging
 import os
 import warnings
+from dataclasses import replace
 from functools import partial
+from itertools import islice
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,7 +17,7 @@ import pandas as pd
 import torch
 from gift_eval.data import Dataset
 from gluonts.ev import metrics
-from gluonts.model import evaluate_model
+from gluonts.model import evaluate_forecasts
 from gluonts.time_feature import get_seasonality
 from huggingface_hub import snapshot_download
 from tqdm.auto import tqdm
@@ -65,6 +67,12 @@ METRICS = [
 ]
 
 config = MODEL_CONFIGS[args.model]
+if args.model == "chronos2":
+    config = replace(
+        config,
+        name=f"{config.name}CrossLearning",
+        cross_learning=True,
+    )
 path = Path(__file__).parent.parent
 path = path / "gift_eval_out" / config.name / "all_results.csv"
 path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,12 +103,31 @@ for name in names:
 
         dataset = Dataset(name=name, term=term, to_univariate=False)
         predictor = SDMPredictor(model, config, dataset.prediction_length)
+        num_windows = dataset.test_data.windows
+        forecasts = []
+        with tqdm(total=len(dataset.test_data), desc=dataset_id) as progress:
+            for window in range(num_windows):
+                # Share information only within the same evaluation window.
+                inputs = islice(
+                    dataset.test_data.input, window, None, num_windows
+                )
+                window_forecasts = []
+                for forecast in predictor.predict(inputs):
+                    window_forecasts.append(forecast)
+                    progress.update()
+                forecasts.append(window_forecasts)
+        # Restore the series-major order expected by the evaluator.
+        forecasts = [
+            forecast
+            for window_forecasts in zip(*forecasts, strict=True)
+            for forecast in window_forecasts
+        ]
         with patch(
             "gluonts.model.evaluation.tqdm",
             partial(tqdm, total=len(dataset.test_data), desc=dataset_id),
         ):
-            result = evaluate_model(
-                predictor,
+            result = evaluate_forecasts(
+                forecasts,
                 test_data=dataset.test_data,
                 metrics=METRICS,
                 seasonality=get_seasonality(dataset.freq),

@@ -107,6 +107,7 @@ class SDMPredictor(Predictor):
                             device=self.device,
                         ),
                         num_estimators=self.config.num_estimators,
+                        cross_learning=self.config.cross_learning,
                     )
                 pred = out.numerical
                 pred = pred.view(y.size(0), self.prediction_length, size, -1)
