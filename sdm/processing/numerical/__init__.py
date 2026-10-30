@@ -12,7 +12,6 @@ from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.rank_gaussian import RankGaussian
 from sdm.processing.numerical.standardize import Standardize
-from sdm.processing.numerical.asinh import Asinh
 from sdm.processing.numerical.robust_scale import RobustScale
 from sdm.processing.numerical.min_max_scale import MinMaxScale
 from sdm.processing.numerical.flip_sign import FlipSign
@@ -34,7 +33,6 @@ __all__ = [
     "QuantileTransform",
     "RankGaussian",
     "Standardize",
-    "Asinh",
     "RobustScale",
     "MinMaxScale",
     "FlipSign",

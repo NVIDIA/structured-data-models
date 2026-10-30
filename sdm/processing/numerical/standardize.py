@@ -21,9 +21,6 @@ class Standardize(Processor, InvertibleMixin):
     invertible. NaN and infinite values are ignored when fitting statistics
     and preserved during the transform.
 
-    Inverse transformation supports multiple consecutive outputs per fitted
-    column, such as quantile predictions.
-
     Args:
         eps: Value added to each fitted standard deviation.
     """
