@@ -43,6 +43,9 @@ class VarLenTensor(Tensor):
     Values are stored in a flat contiguous ``data`` tensor and indexed by an
     ``offset`` tensor.
 
+    :meth:`~torch.Tensor.masked_fill` accepts NaN to mark entire cells as
+    missing. Non-missing scalar fills cannot replace variable-length values.
+
     .. testcode::
 
         import torch
@@ -987,6 +990,38 @@ def _pin_memory_composite(
     if _is_pinned(inp):
         return inp
     return _pin_memory(inp)
+
+
+@VarLenTensor.implements(aten.masked_fill.Scalar)
+@VarLenTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: VarLenTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> VarLenTensor:
+    if mask.dtype != torch.bool:
+        raise RuntimeError("masked_fill expects a boolean mask")
+    if isinstance(value, Tensor) and value.dim() != 0:
+        raise RuntimeError("masked_fill expects a scalar fill value")
+    torch._assert_async(
+        torch.as_tensor(value, device=inp.device).isnan(),
+        "Numeric masked_fill values cannot fill variable-length cells; "
+        "use NaN for missing values",
+    )
+    size = torch.broadcast_shapes(inp.shape, mask.shape)
+    out = cast(
+        VarLenTensor,
+        inp.expand(size).clone(memory_format=torch.contiguous_format),
+    )
+    valid = ~mask.expand(size)
+    if out._valid is not None:
+        valid = valid & out._valid.view(size)
+    return inp.__class__(
+        data=out._data,
+        offset=out._offset,
+        valid=valid.reshape(-1),
+        size=size,
+    )
 
 
 @VarLenTensor.implements(aten.isnan.default)

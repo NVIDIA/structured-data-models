@@ -42,6 +42,9 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
 class NullableTensor(Tensor):
     r"""A :class:`torch.Tensor` for nullable values.
 
+    :meth:`~torch.Tensor.masked_fill` replaces selected values and marks them
+    valid, or marks them missing when filled with NaN.
+
     Args:
         data: Tensor containing the values.
         valid: Boolean mask indicating valid, non-null values.
@@ -655,6 +658,28 @@ def _pin_memory_composite(
     if _is_pinned(inp):
         return inp
     return _pin_memory(inp)
+
+
+@NullableTensor.implements(aten.masked_fill.Scalar)
+@NullableTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: NullableTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> NullableTensor:
+    if mask.dtype != torch.bool:
+        raise RuntimeError("masked_fill expects a boolean mask")
+    if isinstance(value, Tensor):
+        data = inp._data.masked_fill(mask, value.nan_to_num(nan=0))
+        valid = torch.where(mask, ~value.isnan(), inp._valid)
+    elif value != value:
+        data, mask = torch.broadcast_tensors(inp._data, mask)
+        data = data.clone()
+        valid = inp._valid & ~mask
+    else:
+        data = inp._data.masked_fill(mask, value)
+        valid = torch.where(mask, True, inp._valid)
+    return inp.__class__(data, valid)
 
 
 @NullableTensor.implements(aten.isnan.default)

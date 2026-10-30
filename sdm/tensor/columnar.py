@@ -43,6 +43,9 @@ class ColumnarTensor(Tensor):
     Each of the ``C`` columns is stored independently and may use a different
     tensor subclass or dtype.
 
+    :meth:`~torch.Tensor.masked_fill` broadcasts the mask and fills each column
+    using its own value semantics.
+
     Args:
         columns: Per-column values.
         size: The shape of the tensor ``[...]``.
@@ -619,6 +622,37 @@ def _contiguous(
             for column in inp._columns
         ],
         size=inp.size()[:-1],
+        device=inp.device,
+    )
+
+
+@ColumnarTensor.implements(aten.masked_fill.Scalar)
+@ColumnarTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: ColumnarTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> ColumnarTensor:
+    if mask.dtype != torch.bool:
+        raise RuntimeError("masked_fill expects a boolean mask")
+    if isinstance(value, Tensor) and value.dim() != 0:
+        raise RuntimeError("masked_fill expects a scalar fill value")
+    size = torch.broadcast_shapes(inp.shape, mask.shape)
+    if size[-1] != inp.size(-1):
+        raise RuntimeError("masked_fill cannot expand the column dimension")
+    mask = mask.expand(size)
+    columns = []
+    for i, column in enumerate(inp._columns):
+        if (
+            (isinstance(value, Tensor) or value != value)
+            and not column.is_floating_point()
+            and not isinstance(column, NullableTensor | VarLenTensor)
+        ):
+            column = NullableTensor.from_tensor(column)
+        columns.append(column.masked_fill(mask[..., i], value))
+    return inp.__class__(
+        columns=columns,
+        size=size[:-1],
         device=inp.device,
     )
 

@@ -138,6 +138,14 @@ class TableTensor(Tensor):
     while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
+    :meth:`~torch.Tensor.masked_fill` accepts a boolean tensor whose last
+    dimension follows numerical, categorical, datetime, text, then identifier
+    columns, in each block's column order. Masks broadcast over rows and batch
+    dimensions. Filling with NaN marks cells as missing; other scalar values
+    follow the corresponding block's value semantics. Categorical fills refer
+    to existing category values, not codes. Numeric fills cannot replace text
+    or variable-length cells with non-missing values.
+
     .. testcode:: drop_stypes, select_columns, drop_columns
 
         import torch
@@ -1499,6 +1507,47 @@ def _contiguous(
         stype: tensor.contiguous(memory_format=memory_format)
         for stype, tensor in inp.items()
     }
+    return inp.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.masked_fill.Scalar)
+@TableTensor.implements(aten.masked_fill.Tensor)
+@preserve_autograd_state
+def _masked_fill(
+    inp: TableTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> TableTensor:
+    if mask.dtype != torch.bool:
+        raise RuntimeError("masked_fill expects a boolean mask")
+    if isinstance(value, Tensor) and value.dim() != 0:
+        raise RuntimeError("masked_fill expects a scalar fill value")
+    size = torch.broadcast_shapes(inp.shape, mask.shape)
+    if size[-1] != inp.size(-1):
+        raise RuntimeError("masked_fill cannot expand the column dimension")
+    mask = mask.expand(size)
+
+    blocks: dict[Stype, Tensor] = {}
+    offset = 0
+    for stype, block in inp.items():
+        width = block.size(-1)
+        block_mask = mask[..., offset : offset + width]
+        offset += width
+        if width == 0:
+            blocks[stype] = block.expand(*size[:-1], 0)
+            continue
+
+        fill = value
+        if stype == Stype.datetime:
+            if isinstance(value, Tensor):
+                fill = torch.where(value.isnan(), NaT, value)
+            elif value != value:
+                fill = NaT
+        blocks[stype] = block.masked_fill(block_mask, fill)
+
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
