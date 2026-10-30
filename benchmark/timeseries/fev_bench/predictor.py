@@ -155,7 +155,7 @@ class SDMPredictor(fev.ForecastingModel):
                     pred = torch.cat(preds, dim=-2)[..., : y.size(-1), :]
                     pred = pred.cpu().numpy()  # [B, R, C, Q]
                     levels = out.numerical_columns[: pred.shape[-1]]
-                    levels = [int(q.rsplit("q", 1)[-1]) / 100 for q in levels]
+                    levels = [int(q.split("q")[-1]) / 100 for q in levels]
                     wanted = [0.5, *task.quantile_levels]
                     index = [levels.index(q) for q in wanted]
                     values.append(pred[..., index])

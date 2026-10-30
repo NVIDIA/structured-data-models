@@ -68,11 +68,7 @@ METRICS = [
 
 config = MODEL_CONFIGS[args.model]
 if args.model == "chronos2":
-    config = replace(
-        config,
-        name=f"{config.name}CrossLearning",
-        cross_learning=True,
-    )
+    config = replace(config, cross_learning=True)
 path = Path(__file__).parent.parent
 path = path / "gift_eval_out" / config.name / "all_results.csv"
 path.parent.mkdir(parents=True, exist_ok=True)

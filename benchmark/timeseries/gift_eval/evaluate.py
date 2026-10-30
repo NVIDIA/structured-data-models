@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from benchmark.timeseries.gift_eval import GIFT_EVAL_URL
+from benchmark.timeseries.model import MODEL_CONFIGS
 
 BASELINE = "Seasonal_Naive"
 REFERENCES = ("TimesFM-3", "TimesFM-2.5", "Chronos-2", BASELINE)
@@ -20,8 +21,10 @@ METRICS = {
 root = Path(__file__).parent.parent / "gift_eval_out"
 
 dfs = []
-for path in sorted(root.glob("*/all_results.csv")):
-    dfs.append(pd.read_csv(path))
+for config in MODEL_CONFIGS.values():
+    path = root / config.name / "all_results.csv"
+    if path.exists():
+        dfs.append(pd.read_csv(path))
 datasets = set.intersection(*(set(df["dataset"]) for df in dfs))
 
 for name in REFERENCES:

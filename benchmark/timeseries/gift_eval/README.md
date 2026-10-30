@@ -36,7 +36,6 @@ pip install --no-deps "git+https://github.com/SalesforceAIResearch/gift-eval.git
 > Review the license before running the `TimesFM3` benchmark, which will download its weights noninteractively.
 
 Results will be written to `benchmark/timeseries/gift_eval_out/<model>/`, and already completed configurations are skipped.
-Chronos-2 cross-learning results use the `Chronos2CrossLearning` directory to keep them separate from previous independent forecasts.
 
 Pass `--dataset` to run only selected GIFT-Eval datasets, *e.g.*, `--dataset hospital --dataset ett1/H`.
 
