@@ -40,10 +40,7 @@ class KumoForecast(ICLModel):
     Optional cross-channel mixing lets forecasts use dependencies between
     variates after temporal encoding. The forecasting head predicts the native
     up to 72-step horizon directly from a 512-step history.
-    Shorter histories are left-padded with missing values, which are excluded
-    from normalization statistics and replaced with zeros after normalization.
-    Forecast horizons beyond 72 steps are extended autoregressively, up to
-    512 steps.
+    Forecast horizons beyond 72 steps are extended autoregressively.
 
     For longer observation histories, Domain-Aware Representation and
     Retrieval (DARR) can augment the direct forecast with patterns retrieved
@@ -184,12 +181,6 @@ class KumoForecast(ICLModel):
             )
 
         horizon = x_query.size(-2)
-        if not 1 <= horizon <= 512:
-            raise ValueError(
-                "Number of query rows must be between 1 and 512 steps "
-                f"(got {horizon})"
-            )
-
         context_size = self.model.context_size
         prediction_size = self.model.prediction_size
         memory_horizon = max(prediction_size, horizon)
