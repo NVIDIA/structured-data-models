@@ -58,7 +58,11 @@ class RelationalSampler:
         data: The collection of named tables and their relationships.
         time_columns: Mapping from table name to the datetime column used for
             temporal sampling. A row in a time-aware table can only be sampled
-            if its timestamp does not exceed the query timestamp.
+            if its timestamp does not exceed the query timestamp. Nanosecond
+            query anchors remain exact. Graphs with nanosecond event clocks
+            require all configured event clocks and queries to fit the int64
+            nanosecond timestamp range; all-microsecond graphs retain their
+            original supported range.
     """
 
     def __init__(
