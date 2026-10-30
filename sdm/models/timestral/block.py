@@ -12,33 +12,9 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Linear, Sequential, Sigmoid, SiLU
+from torch.nn import Linear, Sequential, Sigmoid
 
 from sdm.nn import RMSNorm, RotaryEmbedding, SwiGLU, TransformerBlock
-
-
-class ResidualBlock(torch.nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int,
-        out_channels: int,
-        bias: bool = True,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.mlp = Sequential(
-            Linear(in_channels, hidden_channels, bias, **factory_kwargs),
-            SiLU(),
-            Linear(hidden_channels, out_channels, bias, **factory_kwargs),
-        )
-        self.res = Linear(in_channels, out_channels, bias, **factory_kwargs)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.mlp(x) + self.res(x)
 
 
 class MonotoneQuantiles(torch.nn.Module):
