@@ -6,6 +6,7 @@
 from sdm.nn.rope import RotaryEmbedding
 from sdm.nn.sinusoidal import SinusoidalEmbedding
 from sdm.nn.glu import SwiGLU
+from sdm.nn.mlp import ResidualMLP
 from sdm.nn.softplus import SoftplusScale
 from sdm.nn.rms_norm import RMSNorm
 from sdm.nn.revin import RevIN
@@ -18,6 +19,7 @@ __all__ = [
     "RotaryEmbedding",
     "SinusoidalEmbedding",
     "SwiGLU",
+    "ResidualMLP",
     "SoftplusScale",
     "RMSNorm",
     "RevIN",
