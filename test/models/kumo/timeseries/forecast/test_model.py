@@ -14,10 +14,16 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    ("context_size", "horizon"),
+    [(1, 120), (37, 600), (1200, 600)],
+)
 @pytest.mark.parametrize("cross_channel", [False, True])
 @pytest.mark.parametrize("alpha", [0.0, 0.5, 1.0])
 def test_forward(
     monkeypatch: pytest.MonkeyPatch,
+    context_size: int,
+    horizon: int,
     cross_channel: bool,
     alpha: float,
     device: torch.device,
@@ -38,24 +44,24 @@ def test_forward(
 
     # Past and past-and-future covariates:
     x_context = TableTensor.from_tensor(
-        torch.randn(1024, 2, device=device),
+        torch.randn(context_size, 2, device=device),
         columns=["x1", "x2"],
     )
-    x_query = TableTensor.from_tensor(torch.randn(120, 0, device=device))
+    x_query = TableTensor.from_tensor(torch.randn(horizon, 0, device=device))
 
     # Target variates:
     y_context = TableTensor.from_tensor(
-        torch.randn(1024, 3, device=device),
+        torch.randn(context_size, 3, device=device),
         columns=["y1", "y2", "y3"],
     )
 
     with (
         nullcontext()
-        if cross_channel or alpha < 1
+        if cross_channel or (alpha < 1 and context_size >= 512 + horizon)
         else pytest.warns(RuntimeWarning, match="Historical covariates")
     ):
         out = model(x_context, y_context, x_query, alpha=alpha)
-    assert out.size() == (120, 3)
+    assert out.size() == (horizon, 3)
     assert out.device == device
     assert out.numerical.isfinite().all()
     assert "y1" in out.numerical_columns
