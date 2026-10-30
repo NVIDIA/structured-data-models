@@ -8,6 +8,7 @@ import logging
 import os
 import warnings
 from functools import partial
+from itertools import islice
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,7 +16,7 @@ import pandas as pd
 import torch
 from gift_eval.data import Dataset
 from gluonts.ev import metrics
-from gluonts.model import evaluate_model
+from gluonts.model import evaluate_forecasts
 from gluonts.time_feature import get_seasonality
 from huggingface_hub import snapshot_download
 from tqdm.auto import tqdm
@@ -33,7 +34,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
     "--model",
     choices=tuple(MODEL_CONFIGS),
-    default="timesfm3",
+    default="chronos2",
     help="SDM model to benchmark.",
 )
 parser.add_argument(
@@ -95,12 +96,38 @@ for name in names:
 
         dataset = Dataset(name=name, term=term, to_univariate=False)
         predictor = SDMPredictor(model, config, dataset.prediction_length)
+
+        if config.cross_learning:  # Share information only within same window:
+            outs = []
+            with tqdm(total=len(dataset.test_data), desc=dataset_id) as pbar:
+                for window in range(dataset.test_data.windows):
+                    inputs = islice(
+                        dataset.test_data.input,
+                        window,
+                        None,
+                        dataset.test_data.windows,
+                    )
+                    windows = []
+                    for out in predictor.predict(inputs):
+                        windows.append(out)
+                        pbar.update()
+                    outs.append(windows)
+            outs = [out for windows in zip(*outs) for out in windows]
+        else:
+            outs = list(
+                tqdm(
+                    predictor.predict(dataset.test_data.input),
+                    total=len(dataset.test_data),
+                    desc=dataset_id,
+                )
+            )
+
         with patch(
             "gluonts.model.evaluation.tqdm",
-            partial(tqdm, total=len(dataset.test_data), desc=dataset_id),
+            partial(tqdm, disable=True),
         ):
-            result = evaluate_model(
-                predictor,
+            result = evaluate_forecasts(
+                outs,
                 test_data=dataset.test_data,
                 metrics=METRICS,
                 seasonality=get_seasonality(dataset.freq),

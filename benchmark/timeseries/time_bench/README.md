@@ -13,6 +13,15 @@ pip install --no-deps "git+https://github.com/zqiao11/TIME.git@3ca5c41d71c76f3c7
 
 ## Run
 
+- **`Chronos2`**:
+
+  ```bash
+  python -m benchmark.timeseries.time_bench.main --model chronos2
+  ```
+
+  `Chronos2` follows official evaluation with contexts truncated to 8,192 time steps.
+  Unlike the official `float32` evaluation, we use `float16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
+
 - **`TimesFM3`**:
 
   ```bash
