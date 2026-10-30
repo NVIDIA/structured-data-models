@@ -81,13 +81,15 @@ class Standardize(Processor, InvertibleMixin):
             self.scale.add_(self.eps)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.mean).div_(self.scale)
+        mean = self.mean.to(table.device)
+        scale = self.scale.to(table.device)
+        numerical = (table.numerical - mean).div_(scale)
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical.unflatten(-1, (self.scale.size(-1), -1))
-        numerical = numerical * self.scale.unsqueeze(-1)
-        numerical.add_(self.mean.unsqueeze(-1))
+        numerical = numerical * self.scale.to(table.device).unsqueeze(-1)
+        numerical.add_(self.mean.to(table.device).unsqueeze(-1))
         return table.replace_blocks(numerical=numerical.flatten(-2))
 
     def __repr__(self, *, indent: int = 0) -> str:
