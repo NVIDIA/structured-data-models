@@ -145,7 +145,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
     def _pack_tables(
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
-        compatible_groups: dict[tuple[object, ...], list[int]] = {}
+        compatible_groups: list[tuple[tuple[object, ...], list[int]]] = []
         vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
             if torch.compiler.is_compiling():
@@ -184,11 +184,18 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
                 table.device,
                 vocabulary_key,
             )
-            compatible_groups.setdefault(compatibility_key, []).append(index)
+            # Compare keys instead of hashing them: hashing a symbolic size
+            # specializes it, so torch.compile would recompile per row count.
+            for key, indices in compatible_groups:
+                if key == compatibility_key:
+                    indices.append(index)
+                    break
+            else:
+                compatible_groups.append((compatibility_key, [index]))
 
         groups: list[TableTensor] = []
         locations = [(-1, -1)] * len(tables)
-        for indices in compatible_groups.values():
+        for _, indices in compatible_groups:
             group_index = len(groups)
             groups.append(
                 cast(TableTensor, tables[indices[0]].unsqueeze(0))

@@ -159,7 +159,14 @@ class CellEmbedding(torch.nn.Module):
                 batch_size_limit = memory_limit // max(bytes_per_example, 1)
                 batch_size_limit = max(batch_size_limit, 1)
 
-        if batch_size_limit is None:
+        rows_per_chunk = R
+        if batch_size_limit is not None:
+            rows_per_chunk = batch_size_limit // max(math.prod(B) * C, 1)
+            rows_per_chunk = max(rows_per_chunk, 1)
+
+        # Skip the loop for a single chunk, which would specialize the number
+        # of rows under torch.compile:
+        if rows_per_chunk >= R:
             return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         if out is None:
@@ -170,7 +177,6 @@ class CellEmbedding(torch.nn.Module):
                 else x.dtype,
             )
 
-        rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
         for start in range(0, R, rows_per_chunk):
             self._forward(
                 x=x[..., start : start + rows_per_chunk, :, :],
