@@ -18,8 +18,7 @@ pip install . fev==0.10.0
   python -m benchmark.timeseries.fev_bench.main --model chronos2
   ```
 
-  `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass.
-  Unlike the official `float32` evaluation, we use `bfloat16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
+  `Chronos2` uses cross-learning across batches of 64 examples, contexts truncated to 8,192 time steps, and `float16` mixed precision. Targets and available covariates are shared within each batch. Evaluation windows are processed separately.
 
 - **`TimesFM3`**:
 

@@ -147,6 +147,7 @@ class SDMPredictor(fev.ForecastingModel):
                                 y_context=TableTensor.from_tensor(y_i),
                                 x_query=TableTensor.from_tensor(x_query),
                                 num_estimators=self.config.num_estimators,
+                                cross_learning=self.config.cross_learning,
                             )
                         pred = out.numerical
                         pred = pred.view(y.size(0), task.horizon, size, -1)
