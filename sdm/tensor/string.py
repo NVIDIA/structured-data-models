@@ -15,8 +15,9 @@ from torch import Tensor
 from typing_extensions import override
 
 from sdm._warnings import warn_once
-from sdm.tensor import VarLenTensor
+from sdm.tensor import VarLenTensor, _string_sort
 from sdm.tensor.io import arrow_as_tensor, combine_arrow_chunks
+from sdm.tensor.var_len import _permute_entries
 
 if TYPE_CHECKING:
     import cudf
@@ -531,36 +532,27 @@ def _sort(
     if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
 
-    backend: Literal["arrow", "cudf"] = "arrow"
     if inp.is_cuda:
-        if importlib.util.find_spec("cudf") is not None:
-            backend = "cudf"
-        else:
-            warn_once(
-                key="missing-cudf-sort",
-                message=(
-                    "Falling back to a CPU-based string sort because cuDF is "
-                    "not installed. Install cuDF to enable faster CUDA-based "
-                    "string sorting without device synchronization."
-                ),
-            )
+        return _sort_native(inp, descending=descending)
 
-    if backend == "arrow":
-        out = pc.call_function(
-            "array_sort_indices",
-            [inp.to_arrow()],
-            options=pc.ArraySortOptions(
-                order="descending" if descending else "ascending",
-            ),
-        )
-        perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
-    else:
-        assert backend == "cudf"
-        with torch.cuda.device(inp.device):
-            perm_ser = inp.to_cudf().argsort(ascending=not descending)
-            perm = torch.from_dlpack(perm_ser.astype("int64").to_cupy())
-
+    out = pc.call_function(
+        "array_sort_indices",
+        [inp.to_arrow()],
+        options=pc.ArraySortOptions(
+            order="descending" if descending else "ascending",
+        ),
+    )
+    perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
     return cast(StringTensor, inp[perm]), perm
+
+
+def _sort_native(
+    inp: StringTensor,
+    *,
+    descending: bool,
+) -> tuple[StringTensor, Tensor]:
+    perm = _string_sort.argsort(inp, descending=descending)
+    return cast(StringTensor, _permute_entries(inp, perm)), perm
 
 
 def _length_bound(offset: Tensor) -> int:
