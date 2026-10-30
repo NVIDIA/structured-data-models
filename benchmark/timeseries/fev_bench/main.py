@@ -4,7 +4,6 @@
 r"""Run an SDM time series forecasting model on fev-bench."""
 
 import argparse
-from dataclasses import replace
 from pathlib import Path
 
 import fev
@@ -35,8 +34,6 @@ parser.add_argument(
 args = parser.parse_args()
 
 config = MODEL_CONFIGS[args.model]
-if args.model == "chronos2":
-    config = replace(config, cross_learning=True)
 path = Path(__file__).parent.parent
 path = path / "fev_bench_out" / config.name / "results.csv"
 path.parent.mkdir(parents=True, exist_ok=True)

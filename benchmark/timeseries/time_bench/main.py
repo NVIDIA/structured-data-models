@@ -7,6 +7,7 @@ import argparse
 import os
 import warnings
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +42,7 @@ args = parser.parse_args()
 
 warnings.filterwarnings("ignore", message=r"'.*' is deprecated.*")
 
-config = MODEL_CONFIGS[args.model]
+config = replace(MODEL_CONFIGS[args.model], cross_learning=False)
 dataset_config = load_dataset_config()
 path = Path(__file__).parent.parent / "time_bench_out" / config.name
 

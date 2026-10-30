@@ -7,7 +7,6 @@ import argparse
 import logging
 import os
 import warnings
-from dataclasses import replace
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -67,8 +66,6 @@ METRICS = [
 ]
 
 config = MODEL_CONFIGS[args.model]
-if args.model == "chronos2":
-    config = replace(config, cross_learning=True)
 path = Path(__file__).parent.parent
 path = path / "gift_eval_out" / config.name / "all_results.csv"
 path.parent.mkdir(parents=True, exist_ok=True)
