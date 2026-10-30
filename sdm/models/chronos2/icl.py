@@ -10,8 +10,8 @@ import torch
 from torch import Tensor
 from torch.nn import Linear, ModuleList, ReLU, Sequential
 
-from sdm.models.chronos2.block import Chronos2TransformerBlock, LayerNorm
-from sdm.nn import RotaryEmbedding
+from sdm.models.chronos2.block import Chronos2TransformerBlock
+from sdm.nn import RMSNorm, RotaryEmbedding
 
 
 class ICLBlock(torch.nn.Module):
@@ -37,6 +37,7 @@ class ICLBlock(torch.nn.Module):
             Chronos2TransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
+                mlp=None,
                 rope=rope,
                 **factory_kwargs,
             )
@@ -46,24 +47,21 @@ class ICLBlock(torch.nn.Module):
             Chronos2TransformerBlock(
                 channels=channels,
                 num_heads=num_heads,
+                mlp=Sequential(
+                    RMSNorm(channels, eps=1e-6, **factory_kwargs),
+                    Linear(
+                        channels, hidden_channels, bias=False, **factory_kwargs
+                    ),
+                    ReLU(),
+                    Linear(
+                        hidden_channels, channels, bias=False, **factory_kwargs
+                    ),
+                ),
                 **factory_kwargs,
             )
             for _ in range(num_layers)
         )
-        self.mlps = ModuleList(
-            Sequential(
-                LayerNorm(channels, eps=1e-6, **factory_kwargs),
-                Linear(
-                    channels, hidden_channels, bias=False, **factory_kwargs
-                ),
-                ReLU(),
-                Linear(
-                    hidden_channels, channels, bias=False, **factory_kwargs
-                ),
-            )
-            for _ in range(num_layers)
-        )
-        self.norm = LayerNorm(channels, eps=1e-6, **factory_kwargs)
+        self.norm = RMSNorm(channels, eps=1e-6, **factory_kwargs)
 
     def forward(
         self,
@@ -78,13 +76,12 @@ class ICLBlock(torch.nn.Module):
         group_mask = group_mask[..., None] & observed[None, :, :]
         group_mask = (~group_mask).permute(2, 0, 1).unsqueeze(1)
         group_mask = group_mask.to(x.dtype) * minimum
-        for time_block, group_block, mlp in zip(
-            self.time_blocks, self.group_blocks, self.mlps
+        for time_block, group_block in zip(
+            self.time_blocks, self.group_blocks
         ):
             x = time_block(query=x, attn_mask=time_mask)
             x = group_block(
                 query=x.transpose(0, 1),
                 attn_mask=group_mask,
             ).transpose(0, 1)
-            x = x + mlp(x)
         return self.norm(x)

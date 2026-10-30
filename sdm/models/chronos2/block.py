@@ -13,20 +13,6 @@ from torch.nn import Linear, ReLU, Sequential
 from sdm.nn import RMSNorm, RotaryEmbedding, TransformerBlock
 
 
-class LayerNorm(RMSNorm):
-    def forward(
-        self, x: Tensor, rope: RotaryEmbedding | None = None
-    ) -> Tensor:
-        # T5 accumulates in float32 and rounds before multiplying half weights.
-        if rope is not None:
-            x = rope(x)
-        variance = x.float().square().mean(-1, keepdim=True)
-        x = x * (variance + (1e-6 if self.eps is None else self.eps)).rsqrt()
-        if self.weight.dtype in {torch.float16, torch.bfloat16}:
-            x = x.to(self.weight.dtype)
-        return self.weight * x
-
-
 class ResidualBlock(torch.nn.Module):
     def __init__(
         self,
@@ -54,12 +40,13 @@ class Chronos2TransformerBlock(TransformerBlock):
         self,
         channels: int,
         num_heads: int,
+        mlp: torch.nn.Module | None,
         rope: RotaryEmbedding | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        norm = LayerNorm(channels, eps=1e-6, **factory_kwargs)
+        norm = RMSNorm(channels, eps=1e-6, **factory_kwargs)
         super().__init__(
             channels=channels,
             num_query_heads=num_heads,
@@ -67,7 +54,7 @@ class Chronos2TransformerBlock(TransformerBlock):
             key_value_norm=norm,
             query_transform=rope,
             key_transform=rope,
-            mlp=None,
+            mlp=mlp,
             scale=1.0,
             bias=False,
             **factory_kwargs,

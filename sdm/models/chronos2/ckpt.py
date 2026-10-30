@@ -38,7 +38,7 @@ def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
             out[f"{target}.attn.out_lin.weight"] = ckpt[
                 f"{source}.self_attention.o.weight"
             ]
-        target = f"icl_block.mlps.{layer}"
+        target = f"icl_block.group_blocks.{layer}.mlp"
         out[f"{target}.0.weight"] = ckpt[f"{prefix}.2.layer_norm.weight"]
         out[f"{target}.1.weight"] = ckpt[f"{prefix}.2.mlp.wi.weight"]
         out[f"{target}.3.weight"] = ckpt[f"{prefix}.2.mlp.wo.weight"]
