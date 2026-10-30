@@ -73,6 +73,28 @@ Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls wh
 
 Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
 
+## CUDA Graph Replay for Kumo Tabular
+
+For repeated GPU predictions, {py:class}`~sdm.models.KumoTabular` can replay the neural network with fewer CPU kernel launches:
+
+```python
+model = sdm.models.KumoTabular(task="classification", device="cuda")
+model.enable_cuda_graphs(max_graphs=4, max_memory_bytes=2 * 1024**3)
+model.fit(context_features, context_targets)
+first = model.predict(query_features)  # Captures on first use.
+next_prediction = model.predict(other_query_features)
+model.disable_cuda_graphs()  # Releases graphs; fitted context remains usable.
+```
+
+Replay is opt-in and affects cached prediction only. It preserves preprocessing, postprocessing, model arithmetic, and estimator cache offload. Each replay copies query and cache values into stable buffers; returned outputs remain independent of later calls. Small, repeated query batches are the intended use case. Large computations or estimator cache transfers can outweigh the dispatch savings.
+
+- `max_graphs` limits captured or rejected signatures per task network. Shape, tensor layout, precision, inference mode and CUDA stream changes may require another signature. Requests beyond the limit run normally; rejected signatures are retried after graphs are cleared.
+- `max_memory_bytes` limits retained graph pools and static buffers per task network, excluding existing model weights and fitted context. Capture can temporarily exceed this budget, and allocation or capture errors propagate. A successfully captured graph that exceeds the budget is discarded and that signature runs normally.
+- The first prediction for each captured signature includes warmup and capture. Exclude it when measuring warm latency, and synchronize the GPU before and after timing.
+- `fit()` and `clear()` discard graphs while preserving replay settings. Training mode, device/dtype changes, and loading model weights also discard graphs. Refit after changing weights or moving a fitted model. Serialized models do not include captured graphs.
+- CPU execution, gradient-enabled calls, compilation, an active outer CUDA capture and non-native CUDA allocators bypass this replay helper. Use PyTorch's native allocator for replay. Bypassing the helper does not make preprocessing or postprocessing capture-compatible.
+- Serialize calls to the model, including fit, prediction and configuration. During capture, avoid other threads submitting CUDA work. Concurrent serving and automatic latency-based selection are outside this API's scope.
+
 ## Model Concepts
 
 Structured data foundation models are not bound to a specific task type.
