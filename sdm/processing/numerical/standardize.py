@@ -46,8 +46,10 @@ class Standardize(Processor, InvertibleMixin):
             mean: The mean to subtract.
             scale: The scale to divide by.
         """
-        self._set_buffer("mean", torch.as_tensor(mean))
-        self._set_buffer("scale", torch.as_tensor(scale))
+        mean = torch.atleast_1d(torch.as_tensor(mean))
+        scale = torch.atleast_1d(torch.as_tensor(scale))
+        self._set_buffer("mean", mean)
+        self._set_buffer("scale", scale)
         self.requires_fit = False
         return self
 
