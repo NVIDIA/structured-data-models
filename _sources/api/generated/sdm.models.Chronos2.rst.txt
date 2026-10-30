@@ -1,0 +1,46 @@
+﻿Chronos2
+========
+
+.. currentmodule:: sdm.models
+
+.. autoclass:: Chronos2
+   :members:
+   :show-inheritance:
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables
+
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Semantic Types**
+     - ``numerical``
+   * - **Supported Target Semantic Types**
+     - ``numerical``
+   * - **Supported Prediction Tasks**
+     - ``regression``
+   * - **Multi-Target Support**
+     - ✅
+   * - **Context-only Column Support**
+     - ✅
+   * - **Related Table Support**
+     - ❌
+
+Default Recipe
+--------------
+
+.. code-block:: python
+
+   Recipe(
+     features=Sequential(
+       Standardize(),
+       Asinh(),
+     ),
+     target=Sequential(
+       Standardize(),
+       Asinh(),
+     ),
+     output=AverageEstimators(),
+   )

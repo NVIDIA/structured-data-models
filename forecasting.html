@@ -179,6 +179,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoRelational.html">KumoRelational</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoForecast.html">KumoForecast</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoAnomaly.html">KumoAnomaly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.Chronos2.html">Chronos2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TimesFM3.html">TimesFM3</a></li>
 </ul>
 </li>
@@ -285,8 +286,8 @@ In particular, <code class="docutils literal notranslate"><span class="pre">y_co
 </span></pre></div>
 </div>
 <p>We can forecast with any time series forecasting model in <a class="reference internal" href="api/models.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">sdm.models</span></code></span></a>.
-Here, we use <a class="reference internal" href="api/generated/sdm.models.TimesFM3.html#sdm.models.TimesFM3" title="sdm.models.TimesFM3"><code class="xref py py-class docutils literal notranslate"><span class="pre">TimesFM3</span></code></a>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TimesFM3</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+Here, we use <a class="reference internal" href="api/generated/sdm.models.Chronos2.html#sdm.models.Chronos2" title="sdm.models.Chronos2"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chronos2</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">Chronos2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
 </span><span data-line="2"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
 </span><span data-line="3">    <span class="n">x_context</span><span class="o">=</span><span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">),</span>
 </span><span data-line="4">    <span class="n">y_context</span><span class="o">=</span><span class="n">history</span><span class="p">,</span>
@@ -298,7 +299,7 @@ Here, we use <a class="reference internal" href="api/generated/sdm.models.TimesF
 Since we have none yet, both tables hold zero columns.
 However, we still need to pass them to <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a>, in particular because the number of rows in <code class="docutils literal notranslate"><span class="pre">x_query</span></code> defines the <strong>forecast horizon</strong>: here, we request predictions for the next three time steps.</p>
 <p>The forecast is returned as a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> with one row per future step.
-Its output is model-specific, <em>e.g.</em>, <a class="reference internal" href="api/generated/sdm.models.TimesFM3.html#sdm.models.TimesFM3" title="sdm.models.TimesFM3"><code class="xref py py-class docutils literal notranslate"><span class="pre">TimesFM3</span></code></a> outputs one column per target and quantile, from the 10th to the 90th percentile, named <code class="docutils literal notranslate"><span class="pre">&quot;&lt;target&gt;__q&lt;level&gt;&quot;</span></code>:</p>
+Its output is model-specific, <em>e.g.</em>, <a class="reference internal" href="api/generated/sdm.models.Chronos2.html#sdm.models.Chronos2" title="sdm.models.Chronos2"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chronos2</span></code></a> outputs one column per target and quantile, named <code class="docutils literal notranslate"><span class="pre">&quot;&lt;target&gt;__q&lt;level&gt;&quot;</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">out</span><span class="p">[</span><span class="s2">"ice_cream__q50"</span><span class="p">]</span><span class="o">.</span><span class="n">numerical</span>  <span class="c1"># median forecast, [3, 1]</span>
 </span><span data-line="2"><span class="n">out</span><span class="p">[</span><span class="s2">"ice_cream__q10"</span><span class="p">]</span><span class="o">.</span><span class="n">numerical</span>  <span class="c1"># lower end of an 80% prediction interval</span>
 </span><span data-line="3"><span class="n">out</span><span class="p">[</span><span class="s2">"ice_cream__q90"</span><span class="p">]</span><span class="o">.</span><span class="n">numerical</span>  <span class="c1"># upper end of an 80% prediction interval</span>
@@ -446,7 +447,7 @@ Set <code class="docutils literal notranslate"><span class="pre">num_estimators<
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=0f0bf015"></script>
+      <script src="_static/documentation_options.js?v=64fda612"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
