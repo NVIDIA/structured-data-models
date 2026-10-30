@@ -22,7 +22,7 @@ from torch import Tensor
 
 
 def rollout_quantiles(samples: Tensor, levels: Sequence[float]) -> Tensor:
-    """Combine the nine forecast paths using upstream's weighted empirical CDF.
+    """Combine the nine forecast paths using weighted empirical CDF.
 
     Args:
         samples: Predictions with shape ``[S, 9 * Q, H]``, where ``S`` is
@@ -41,7 +41,6 @@ def rollout_quantiles(samples: Tensor, levels: Sequence[float]) -> Tensor:
     weights = weights / weights.sum()
     values, index = samples.transpose(-1, -2).sort(-1)
     cdf = weights.expand_as(values).gather(-1, index).cumsum(-1).clamp(0, 1)
-    # Upstream sorts the CDF too; ties can change sample order in float32.
     cdf, index = cdf.sort(-1)
     values = values.gather(-1, index)
     # The first CDF entry is positive. All model levels are below the final
