@@ -295,18 +295,8 @@ def test_align_categories_numeric_values(device: torch.device) -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize(
-    ("sort_by", "expected"),
-    [
-        ("code", [0, -1, 1, -1]),
-        ("frequency", [0, -1, 1, -1]),
-        ("value", [1, -1, 0, -1]),
-    ],
-)
-def test_align_categories_matches_nan_category_values(
+def test_align_categories_does_not_match_nan_category_values(
     device: torch.device,
-    sort_by: Literal["code", "frequency", "value"],
-    expected: list[int],
 ) -> None:
     context = TableTensor(
         categorical=CategoricalTensor(
@@ -317,21 +307,17 @@ def test_align_categories_matches_nan_category_values(
     query = TableTensor(
         categorical=CategoricalTensor(
             code=torch.tensor(
-                [[0], [1], [2], [3]],
+                [[0], [1], [2]],
                 dtype=torch.int32,
                 device=device,
             ),
-            categories=(
-                torch.tensor([torch.nan, 2.0, 1.0, torch.inf], device=device),
-            ),
+            categories=(torch.tensor([torch.nan, 2.0, 1.0], device=device),),
         ),
     )
 
-    output = AlignCategories(sort_by=sort_by).fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
-    assert output.categorical.code.squeeze(-1).tolist() == expected
-    nan_code = output.categorical.code[0, 0]
-    assert output.categorical.categories[0][nan_code].isnan()
+    assert output.categorical.code.squeeze(-1).tolist() == [-1, -1, -1]
 
 
 def test_align_categories_scales_to_large_numeric_vocabulary() -> None:

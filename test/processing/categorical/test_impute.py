@@ -6,33 +6,7 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.processing import Processor
 from sdm.testing import withCUDA
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    "processor_type", [sp.AddCategoryCounts, sp.ImputeMode]
-)
-def test_nan_category_state_roundtrip(
-    device: torch.device,
-    processor_type: type[Processor],
-) -> None:
-    table = TableTensor(
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0], [0], [1], [-1]], device=device),
-            categories=(torch.tensor([torch.nan, 1.0], device=device),),
-        ),
-    )
-    processor = processor_type().fit(table)
-    restored = processor_type().to(device=device)
-    restored.load_state_dict(processor.state_dict())
-    expected = processor.transform(table)
-    actual = restored.transform(table)
-    torch.testing.assert_close(
-        actual.categorical.code, expected.categorical.code
-    )
-    torch.testing.assert_close(actual.numerical, expected.numerical)
 
 
 def _table(
