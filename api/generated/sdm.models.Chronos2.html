@@ -247,8 +247,37 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.models.Chronos2">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.models.</span></span><span class="sig-name descname"><span class="pre">Chronos2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pretrained</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.15)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.models.Chronos2" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.base.icl.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a></p>
-<p>The time series forecasting model from the
+<p>The time series forecasting foundation model from the
 <a class="reference external" href="https://arxiv.org/abs/2510.15821">“Chronos-2: From Univariate to Universal Forecasting”</a> paper.</p>
+<figure class="light-only align-default">
+<a class="reference internal image-reference" href="../../_images/chronos2_light.svg"><img alt="../../_images/chronos2_light.svg" src="../../_images/chronos2_light.svg" style="width: 100%;" />
+</a>
+</figure>
+<figure class="dark-only align-default">
+<a class="reference internal image-reference" href="../../_images/chronos2_dark.svg"><img alt="../../_images/chronos2_dark.svg" src="../../_images/chronos2_dark.svg" style="width: 100%;" />
+</a>
+</figure>
+<p><a class="reference internal" href="#sdm.models.Chronos2" title="sdm.models.Chronos2"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chronos2</span></code></a> is a time-series foundation model for multivariate
+forecasting. It extends <a class="reference external" href="https://arxiv.org/abs/2403.07815">Chronos</a> with
+native support for jointly forecasting multiple coevolving target series,
+incorporating historical covariates, and using dynamic covariates that are
+known across both the past and future forecast horizon.</p>
+<p>Architecturally, it combines patch-based time-series tokenization with
+alternating temporal attention and group attention, allowing forecasts to
+use both within-series history and information shared across targets and
+covariates. Each patch encodes scaled values, time indices, and observation
+masks. It returns 21 quantile forecasts: the 1st and 99th percentiles and
+every fifth percentile from the 5th to the 95th, for each target series
+and query time step. Forecasts of up to 1,024 time steps are decoded in
+a single forward pass; longer horizons use autoregressive rollout.</p>
+<p>Within the <a class="reference internal" href="sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> protocol, <a class="reference internal" href="#sdm.models.Chronos2" title="sdm.models.Chronos2"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chronos2</span></code></a>
+treats rows as ordered time steps and uses up to 8,192 time steps as
+context. In a default forward pass, <code class="docutils literal notranslate"><span class="pre">x_context</span></code> contains historical
+covariates, <code class="docutils literal notranslate"><span class="pre">y_context</span></code> contains one or more past target series, and
+<code class="docutils literal notranslate"><span class="pre">x_query</span></code> contains future-known covariates (which must also be present in
+<code class="docutils literal notranslate"><span class="pre">x_context</span></code>). By default, examples in a batch are forecasted
+independently; <code class="docutils literal notranslate"><span class="pre">cross_learning=True</span></code> allows group attention to share
+information across examples in the batch.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -332,7 +361,7 @@ information through variate attention. (default: <code class="docutils literal n
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=7a852378"></script>
+      <script src="../../_static/documentation_options.js?v=b9d0f8ba"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
