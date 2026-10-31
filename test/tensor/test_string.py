@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pickle
 from typing import cast
 
 import pyarrow as pa
@@ -159,6 +160,8 @@ def test_from_cudf_sliced_values() -> None:
     assert tensor._offset.equal(
         torch.tensor([0, 1, 3, 5, 5], device=tensor.device)
     )
+    # The bound covers the slice, rounded up to 2**k - 1 bytes.
+    assert tensor._max_length == 3
 
 
 @onlyCUDA
@@ -184,6 +187,7 @@ def test_from_cudf_all_empty_values() -> None:
     assert tensor.tolist() == ["", ""]
     assert tensor._data.numel() == 0
     assert tensor._offset.equal(torch.tensor([0, 0, 0], device=tensor.device))
+    assert tensor._max_length == 0
 
 
 @onlyCUDA
@@ -198,6 +202,7 @@ def test_from_cudf_empty_values() -> None:
     assert tensor.tolist() == []
     assert tensor._data.numel() == 0
     assert tensor._offset.equal(torch.tensor([0], device=tensor.device))
+    assert tensor._max_length == 0
 
 
 @pytest.mark.parametrize(
@@ -406,3 +411,36 @@ def test_registers_as_a_pytorch_buffer() -> None:
     module.register_buffer("value", tensor)
 
     assert tuple(module.buffers()) == (tensor,)
+
+
+@pytest.mark.parametrize(
+    ("length", "bound"),
+    [(0, 0), (1, 1), (3, 3), (4, 7), (127, 127), (128, 255)],
+)
+def test_bound_rounds_up(length: int, bound: int) -> None:
+    values = StringTensor.from_list(["a" * length, ""])
+    assert values._max_length == bound
+
+
+def test_bound_survives_views_and_copies() -> None:
+    # A sliced Arrow array shares a buffer with a longer, unreachable string.
+    array = pa.array(["x" * 40, "abcdefgh", "é"]).slice(1)
+    values = StringTensor.from_arrow(array)
+    assert values._max_length == 15
+    copies = (values[1:], values.clone(), pickle.loads(pickle.dumps(values)))
+    for copied in copies:
+        assert cast(StringTensor, copied)._max_length == 15
+
+
+def test_cat_bound() -> None:
+    values = StringTensor.from_list(["abcdefgh"])
+    longer = StringTensor.from_list(["x" * 16])
+    assert cast(StringTensor, torch.cat((values, longer)))._max_length == 31
+    # An unknown bound makes the result unknown, never too small.
+    unknown = StringTensor(
+        data=longer._data,
+        offset=longer._offset,
+        valid=None,
+        size=longer.size(),
+    )
+    assert cast(StringTensor, torch.cat((values, unknown)))._max_length is None
