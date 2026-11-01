@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en" data-accent-color="green" data-content_root="./">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Fine-Tuning - Structured Data Models</title><link rel="shortcut icon" href="_static/nvidia.svg"/><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="NIM Inference" href="nim.html" /><link rel="prev" title="NanoTabICL" href="nanotabicl.html" /><script>
+    function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
+    setColorMode(localStorage._theme||"auto");
+  </script><link rel="stylesheet" type="text/css" href="_static/pygments.css?v=e1a1ceaf" />
+    <link rel="stylesheet" type="text/css" href="_static/shibuya.css?v=2ceb65ce" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link media="print" rel="stylesheet" type="text/css" href="_static/print.css?v=20ff2c19" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=29e2959f" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sy-f-text: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+  --sy-f-heading: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+}
+</style>
+    
+  <meta property="og:type" content="website"/><meta property="og:title" content="Fine-Tuning"/>
+    <meta name="twitter:card" content="summary"/>
+  </head>
+<body><div class="sy-head">
+  <div class="sy-head-blur"></div>
+  <div class="sy-head-inner sy-container mx-auto">
+    <a class="sy-head-brand" href="index.html">
+      <img class="light-logo" src="_static/nvidia.svg" alt="Structured Data Models" height="28" loading="lazy" />
+      <img class="dark-logo" src="_static/nvidia.svg" alt="Structured Data Models" height="28" loading="lazy" />
+      <strong>Structured Data Models</strong>
+    </a>
+    <div class="sy-head-nav" id="head-nav">
+      <nav class="sy-head-links"></nav>
+      <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <kbd>/</kbd>
+</form><div class="sy-head-socials">
+  <a href="https://github.com/NVIDIA/structured-data-models" aria-label="GitHub">
+    <iconify-icon icon="simple-icons:github"></iconify-icon>
+  </a></div></div>
+    </div>
+    <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
+data-aria-auto="Switch to light color mode"
+data-aria-light="Switch to dark color mode"
+data-aria-dark="Switch to auto color mode">
+<i class="i-lucide theme-icon"></i>
+</button><button class="md:hidden flex items-center js-menu" aria-label="Menu" type="button" aria-controls="head-nav" aria-expanded="false">
+        <div class="hamburger">
+          <span class="hamburger_1"></span>
+          <span class="hamburger_2"></span>
+          <span class="hamburger_3"></span>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="sy-page sy-container flex mx-auto">
+  <aside id="lside" class="sy-lside md:w-72 md:shrink-0 print:hidden">
+    <div class="sy-lside-inner md:sticky">
+      <div class="sy-scrollbar p-6">
+        <div class="globaltoc" data-expand-depth="0"><p class="caption" role="heading" aria-level="3"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+</ul>
+<p class="caption" role="heading" aria-level="3"><span class="caption-text">Guides</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="tensor.html">Table Semantics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icl.html">In-Context Learning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="forecasting.html">Time Series Forecasting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing.html">Data Processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nanotabicl.html">NanoTabICL</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Fine-Tuning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nim.html">NIM Inference</a></li>
+</ul>
+<p class="caption" role="heading" aria-level="3"><span class="caption-text">API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/sdm.html">sdm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.Stype.html">Stype</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.infer_stypes.html">infer_stypes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.Task.html">Task</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/tensor.html">sdm.tensor</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.VarLenTensor.html">VarLenTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.StringTensor.html">StringTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.NullableTensor.html">NullableTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html">TableTensor</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/relational.html">sdm.relational</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.Relationship.html">Relationship</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.RelationalData.html">RelationalData</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.TaskLink.html">TaskLink</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html">RelatedTables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.relational.RelationalSampler.html">RelationalSampler</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/processing.html">sdm.processing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.base.Processor.html">Processor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.target.TargetAwareEnsembleProcessor.html">TargetAwareEnsembleProcessor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.series.SeriesEnsembleProcessor.html">SeriesEnsembleProcessor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Callable.html">Callable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Sequential.html">Sequential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.DropStypes.html">DropStypes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.TableDispatch.html">TableDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.EnsembleProcessorAdapter.html">EnsembleProcessorAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.SelectColumns.html">SelectColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Cast.html">Cast</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Clip.html">Clip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.RankGaussian.html">RankGaussian</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.RobustScale.html">RobustScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.MinMaxScale.html">MinMaxScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.FlipSign.html">FlipSign</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Asinh.html">Asinh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.PCA.html">PCA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.RandomProjection.html">RandomProjection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Detrend.html">Detrend</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Interpolate.html">Interpolate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.AddCategoryCounts.html">AddCategoryCounts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.text.TFIDF.html">TFIDF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.text.SentenceTransformer.html">SentenceTransformer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.AverageEstimators.html">AverageEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.Softmax.html">Softmax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.SortQuantiles.html">SortQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.ClipNonnegative.html">ClipNonnegative</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/nn.html">sdm.nn</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.SinusoidalEmbedding.html">SinusoidalEmbedding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.ResidualMLP.html">ResidualMLP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.SwiGLU.html">SwiGLU</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.SoftplusScale.html">SoftplusScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.RMSNorm.html">RMSNorm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.RevIN.html">RevIN</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.QueryScaling.html">QueryScaling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.QASSMax.html">QASSMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.LogScale.html">LogScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.GatedLogScale.html">GatedLogScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.SDPA.html">SDPA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.Attention.html">Attention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.TransformerBlock.html">TransformerBlock</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.nn.InducedTransformerBlock.html">InducedTransformerBlock</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/models.html">sdm.models</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.Model.html">Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.ICLModel.html">ICLModel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TabICLv2.html">TabICLv2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TabFM.html">TabFM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoTabular.html">KumoTabular</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoRelational.html">KumoRelational</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoForecast.html">KumoForecast</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoAnomaly.html">KumoAnomaly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.Chronos2.html">Chronos2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TimesFM3.html">TimesFM3</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/explain.html">sdm.explain</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.explain.ICLExplainer.html">ICLExplainer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.explain.GradientExplainer.html">GradientExplainer</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api/evaluation.html">sdm.evaluation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html">to_class_indices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_binary_class.html">to_binary_class</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div class="lside-overlay js-menu" role="button" aria-label="Close left sidebar" aria-controls="lside" aria-expanded="false"></div>
+  <aside id="rside" class="sy-rside pb-3 w-64 shrink-0 order-last">
+    <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
+      <i class="i-lucide close"></i>
+    </button>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#when-to-fine-tune">When to Fine-Tune</a></li>
+<li><a class="reference internal" href="#how-it-works">How It Works</a><ul>
+<li><a class="reference internal" href="#data-preparation">Data Preparation</a></li>
+<li><a class="reference internal" href="#model-preparation">Model Preparation</a></li>
+<li><a class="reference internal" href="#training">Training</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#choosing-hyperparameters">Choosing Hyperparameters</a></li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+  </aside>
+  <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
+  <main class="sy-main w-full max-sm:max-w-full print:pt-6">
+<div class="sy-breadcrumbs" role="navigation">
+  <div class="sy-breadcrumbs-inner flex items-center">
+    <div class="md:hidden mr-3">
+      <button class="js-menu" aria-label="Menu" type="button" aria-controls="lside" aria-expanded="false">
+        <i class="i-lucide menu"></i>
+      </button>
+    </div>
+    <ol class="flex-1" itemscope itemtype="https://schema.org/BreadcrumbList"><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="index.html"><span itemprop="name">Structured Data Models</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="1" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <strong itemprop="name">Fine-Tuning</strong>
+        <meta itemprop="position" content="2" />
+      </li></ol>
+    <div class="xl:hidden ml-1">
+      <button class="js-menu" aria-label="Show table of contents" type="button" aria-controls="rside"
+        aria-expanded="false">
+        <i class="i-lucide outdent"></i>
+      </button>
+    </div>
+  </div>
+</div><div class="flex flex-col break-words justify-between">
+      <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
+  <article class="yue" role="main">
+          <section id="fine-tuning">
+<h1>Fine-Tuning<a class="headerlink" href="#fine-tuning" title="Link to this heading">#</a></h1>
+<p>Pretrained foundation models for structured data solve novel tasks through <a class="reference internal" href="icl.html"><span class="doc std std-doc">in-context learning</span></a>: they read labeled rows and predict for unseen rows without updating their model weights.
+These models can also adapt to your dataset through <strong>fine-tuning</strong>, which updates pretrained weights using gradient descent.
+The fine-tuned model uses the same interface and still requires labeled context rows at inference.
+Fine-tuning can improve predictive accuracy or achieve comparable performance with fewer context rows, reducing inference cost.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>All <a class="reference internal" href="api/models.html"><span class="doc std std-doc">models</span></a> in this package support fine-tuning through a differentiable forward pass.</p>
+</div>
+<section id="when-to-fine-tune">
+<h2>When to Fine-Tune<a class="headerlink" href="#when-to-fine-tune" title="Link to this heading">#</a></h2>
+<p>Start by evaluating the pretrained model on a held-out validation set.
+Consider fine-tuning when its accuracy does not meet your needs, or when you want to reduce inference cost by using fewer context rows.
+Compare the fine-tuned model against this baseline to determine whether it improves accuracy or offers a better accuracy–cost tradeoff.</p>
+<p>Fine-tuning can overfit, especially on small datasets.
+For data that changes over time, use a temporal validation split to assess whether the gains carry over to later observations.
+Alternatives to fine-tuning include context selection, increasing the number of ensemble estimators, and modifying <a class="reference internal" href="processing.html"><span class="doc std std-doc">preprocessing recipes</span></a>.</p>
+</section>
+<section id="how-it-works">
+<h2>How It Works<a class="headerlink" href="#how-it-works" title="Link to this heading">#</a></h2>
+<p>The challenge of fine-tuning an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> is that training data serves two roles: labeled context rows provide model input, while separate query rows provide the labels used to compute the loss.
+These sets must be strictly disjoint within each training step to prevent target leakage.</p>
+<figure class="light-only align-default">
+<a class="reference internal image-reference" href="_images/finetuning_light.svg"><img alt="_images/finetuning_light.svg" src="_images/finetuning_light.svg" style="width: 100%;" />
+</a>
+</figure>
+<figure class="dark-only align-default">
+<a class="reference internal image-reference" href="_images/finetuning_dark.svg"><img alt="_images/finetuning_dark.svg" src="_images/finetuning_dark.svg" style="width: 100%;" />
+</a>
+</figure>
+<p>Fine-tuning repeats the following steps over sampled mini-batches:</p>
+<ol class="arabic simple">
+<li><p>Sample rows from the training split and divide them into disjoint context and query sets.</p></li>
+<li><p>Run the model on the labeled context rows and the query features.</p></li>
+<li><p>Compute the loss between the query predictions and their labels.</p></li>
+<li><p>Backpropagate and update the model weights.</p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>A full example of fine-tuning a tabular foundation model such as <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> or <a class="reference internal" href="api/generated/sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a> is provided in <a class="reference external" href="https://github.com/NVIDIA/structured-data-models/blob/main/examples/tabular/finetune.py"><code class="docutils literal notranslate"><span class="pre">examples/tabular/finetune.py</span></code></a>, for both classification and regression tasks.</p>
+</div>
+<section id="data-preparation">
+<h3>Data Preparation<a class="headerlink" href="#data-preparation" title="Link to this heading">#</a></h3>
+<p>Split your dataset into three disjoint sets:</p>
+<ul class="simple">
+<li><p><strong>Training</strong> rows are sampled into disjoint context and query sets at each training step.</p></li>
+<li><p><strong>Validation</strong> rows are used to tune hyperparameters and select the best checkpoint.</p></li>
+<li><p><strong>Test</strong> rows are reserved for final evaluation.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
+</span><span data-line="2"><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+</span><span data-line="3">
+</span><span data-line="4"><span class="n">table</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
+</span><span data-line="5">    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+</span><span data-line="6">    <span class="n">stypes</span><span class="o">=</span><span class="n">sdm</span><span class="o">.</span><span class="n">infer_stypes</span><span class="p">(</span><span class="n">df</span><span class="p">),</span>
+</span><span data-line="7">    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
+</span><span data-line="8"><span class="p">)</span>
+</span><span data-line="9">
+</span><span data-line="10"><span class="c1"># Random 60/20/20 split:</span>
+</span><span data-line="11"><span class="n">table</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)]</span>
+</span><span data-line="12"><span class="n">train_table</span><span class="p">,</span> <span class="n">val_table</span><span class="p">,</span> <span class="n">test_table</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">tensor_split</span><span class="p">([</span>
+</span><span data-line="13">    <span class="nb">int</span><span class="p">(</span><span class="mf">0.6</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">)),</span>
+</span><span data-line="14">    <span class="nb">int</span><span class="p">(</span><span class="mf">0.8</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">)),</span>
+</span><span data-line="15"><span class="p">])</span>
+</span></pre></div>
+</div>
+</section>
+<section id="model-preparation">
+<h3>Model Preparation<a class="headerlink" href="#model-preparation" title="Link to this heading">#</a></h3>
+<p>As in a standard PyTorch training workflow, initialize the pretrained model and an optimizer to update its parameters.
+Note that every <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> ships a default <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> whose output pipeline is built for inference: it combines the outputs of the ensemble members and, <em>e.g.</em>, turns classification logits into probabilities.
+In order to compute the loss directly on model outputs, replace it with <a class="reference internal" href="api/generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-class docutils literal notranslate"><span class="pre">Identity</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="n">task</span> <span class="o">=</span> <span class="s2">"classification"</span>  <span class="c1"># ... or "regression".</span>
+</span><span data-line="4"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">KumoTabular</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+</span><span data-line="5"><span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">)</span>
+</span><span data-line="6">
+</span><span data-line="7"><span class="n">recipe</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">default_recipe</span><span class="p">()</span>
+</span><span data-line="8"><span class="n">recipe</span><span class="o">.</span><span class="n">output</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">Identity</span><span class="p">()</span>  <span class="c1"># No post-processing.</span>
+</span></pre></div>
+</div>
+<p>The feature and target pipelines stay unchanged: they turn raw columns into the inputs that the pretrained model expects.
+Some processors are random.
+For example, <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a> reorders feature columns, and <a class="reference internal" href="api/generated/sdm.processing.categorical.ShuffleCategories.html#sdm.processing.categorical.ShuffleCategories" title="sdm.processing.categorical.ShuffleCategories"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleCategories</span></code></a> relabels classes.
+Keep these processors to use their transformations as data augmentation during fine-tuning, or remove them if those invariances are not desired for your task.</p>
+<p>For regression tasks with <a class="reference internal" href="api/generated/sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a>, additionally remove the random <a class="reference internal" href="api/generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-class docutils literal notranslate"><span class="pre">FlipSign</span></code></a> from the target pipeline.
+The default recipe inverts the sign flip via <a class="reference internal" href="api/generated/sdm.processing.output.SortQuantiles.html#sdm.processing.output.SortQuantiles" title="sdm.processing.output.SortQuantiles"><code class="xref py py-class docutils literal notranslate"><span class="pre">SortQuantiles</span></code></a>, but the <a class="reference internal" href="api/generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-class docutils literal notranslate"><span class="pre">Identity</span></code></a> output will not:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">recipe</span><span class="o">.</span><span class="n">target</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">StypeDispatch</span><span class="p">(</span>  <span class="c1"># Default target pipeline without FlipSign.</span>
+</span><span data-line="2">    <span class="n">categorical</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="3">        <span class="n">sp</span><span class="o">.</span><span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s2">"value"</span><span class="p">),</span>
+</span><span data-line="4">        <span class="n">sp</span><span class="o">.</span><span class="n">ShuffleCategories</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s2">"shift"</span><span class="p">),</span>
+</span><span data-line="5">    <span class="p">],</span>
+</span><span data-line="6">    <span class="n">numerical</span><span class="o">=</span><span class="n">sp</span><span class="o">.</span><span class="n">Standardize</span><span class="p">(),</span>
+</span><span data-line="7"><span class="p">)</span>
+</span></pre></div>
+</div>
+</section>
+<section id="training">
+<h3>Training<a class="headerlink" href="#training" title="Link to this heading">#</a></h3>
+<p>An <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> automatically enables gradient tracking in <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">train()</span></code></a> mode.
+Fine-tuning then follows a standard PyTorch training loop: each step runs a single estimator on newly sampled context and query rows, computes the loss, and updates the model weights:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="n">context_size</span> <span class="o">=</span> <span class="mi">256</span>
+</span><span data-line="4"><span class="n">query_size</span> <span class="o">=</span> <span class="mi">128</span>
+</span><span data-line="5">
+</span><span data-line="6"><span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+</span><span data-line="7"><span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">30</span><span class="p">):</span>
+</span><span data-line="8">    <span class="n">perm</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randperm</span><span class="p">(</span><span class="n">train_table</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+</span><span data-line="9">    <span class="n">context</span> <span class="o">=</span> <span class="n">train_table</span><span class="p">[</span><span class="n">perm</span><span class="p">[:</span><span class="n">context_size</span><span class="p">]]</span>
+</span><span data-line="10">    <span class="n">query</span> <span class="o">=</span> <span class="n">train_table</span><span class="p">[</span><span class="n">perm</span><span class="p">[</span><span class="n">context_size</span><span class="p">:</span><span class="n">context_size</span> <span class="o">+</span> <span class="n">query_size</span><span class="p">]]</span>
+</span><span data-line="11">
+</span><span data-line="12">    <span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+</span><span data-line="13">        <span class="n">x_context</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
+</span><span data-line="14">        <span class="n">y_context</span><span class="o">=</span><span class="n">context</span><span class="p">[</span><span class="s2">"target"</span><span class="p">],</span>
+</span><span data-line="15">        <span class="n">x_query</span><span class="o">=</span><span class="n">query</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
+</span><span data-line="16">        <span class="n">num_estimators</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+</span><span data-line="17">        <span class="n">recipe</span><span class="o">=</span><span class="n">recipe</span><span class="p">,</span>
+</span><span data-line="18">    <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span data-line="19">
+</span><span data-line="20">    <span class="n">logits</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">evaluation</span><span class="o">.</span><span class="n">to_class_indices</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">query</span><span class="p">[</span><span class="s2">"target"</span><span class="p">])</span>
+</span><span data-line="21">    <span class="n">loss</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+</span><span data-line="22">
+</span><span data-line="23">    <span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+</span><span data-line="24">    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</span><span data-line="25">    <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+</span></pre></div>
+</div>
+<p>The identity output keeps a leading estimator dimension, so <code class="docutils literal notranslate"><span class="pre">[0]</span></code> selects the single estimator.
+For classification, the output has one logit column per class in the sampled context, which <a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html#sdm.evaluation.to_class_indices" title="sdm.evaluation.to_class_indices"><code class="xref py py-func docutils literal notranslate"><span class="pre">sdm.evaluation.to_class_indices()</span></code></a> aligns with the query targets.
+Ensure that every class represented in the query also appears in the context.
+Otherwise, the model cannot predict those query labels.</p>
+<p>For regression tasks, <a class="reference internal" href="api/generated/sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a> predicts 999 quantiles.
+Use the pinball loss to train it:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">diff</span> <span class="o">=</span> <span class="n">query</span><span class="p">[</span><span class="s2">"target"</span><span class="p">]</span><span class="o">.</span><span class="n">numerical</span> <span class="o">-</span> <span class="n">out</span><span class="o">.</span><span class="n">numerical</span>  <span class="c1"># [Q, 999]</span>
+</span><span data-line="2"><span class="n">level</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.999</span><span class="p">,</span> <span class="mi">999</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+</span><span data-line="3"><span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">level</span> <span class="o">*</span> <span class="n">diff</span><span class="p">,</span> <span class="p">(</span><span class="n">level</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+</span></pre></div>
+</div>
+</section>
+</section>
+<section id="choosing-hyperparameters">
+<h2>Choosing Hyperparameters<a class="headerlink" href="#choosing-hyperparameters" title="Link to this heading">#</a></h2>
+<p>Use a held-out validation set to tune hyperparameters and select the best checkpoint.
+Evaluate the pretrained model first to establish a baseline, then evaluate after a fixed number of steps using a deterministic inference setting.</p>
+<ul class="simple">
+<li><p><strong>Learning rate:</strong> Start with a learning rate between <code class="docutils literal notranslate"><span class="pre">1e-6</span></code> and <code class="docutils literal notranslate"><span class="pre">1e-5</span></code>, which worked best in our experiments.
+This is conservative and preserves pretrained knowledge.
+If the training loss spikes or diverges, reduce the learning rate.</p></li>
+<li><p><strong>Context size:</strong> Use as many context rows as GPU memory allows.
+A larger context size worked best in our experiments and more closely matches the context size used at inference.</p></li>
+<li><p><strong>Query size:</strong> Choose it based on validation performance and available GPU memory.</p></li>
+<li><p><strong>Training duration:</strong> Monitor validation loss closely and frequently to detect overfitting, and stop if validation performance degrades. More training might not always improve generalization.
+Keep the checkpoint with the best validation performance, including the pretrained model as a candidate.</p></li>
+</ul>
+<p>These settings are starting points.
+The best configuration depends on the model and dataset.
+Reserve the test set for evaluating the final selected configuration.</p>
+</section>
+</section>
+
+        </article><button class="back-to-top" type="button">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+  </svg>
+  <span>Back to top</span>
+</button><div class="navigation flex print:hidden"><div class="navigation-prev">
+    <a href="nanotabicl.html">
+      <i class="i-lucide chevron-left"></i>
+      <div class="page-info">
+        <span>Previous</span><div class="title">NanoTabICL</div></div>
+    </a>
+  </div><div class="navigation-next">
+    <a href="nim.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">NIM Inference</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
+    </a>
+  </div></div></div>
+    </div>
+  </main>
+</div>
+
+      <script src="_static/documentation_options.js?v=70febc84"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=ccdb6887"></script>
+      <script src="_static/shibuya.js?v=50760d75"></script></body>
+</html>
