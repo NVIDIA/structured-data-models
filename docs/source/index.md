@@ -32,8 +32,8 @@ tensor
 icl
 forecasting
 processing
-finetuning
 nanotabicl
+finetuning
 nim
 ```
 
