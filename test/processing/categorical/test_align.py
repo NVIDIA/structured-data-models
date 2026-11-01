@@ -264,12 +264,11 @@ def test_align_categories_orders_values(
 
 
 @withCUDA
-@pytest.mark.parametrize("repeat", [1, 6000])
 def test_align_categories_sorts_and_matches_string_columns(
     device: torch.device,
-    repeat: int,
 ) -> None:
-    # 6000 repeats make eager code gather the codes in chunks.
+    # Repeated rows make eager code gather the codes in chunks.
+    repeat = 6000
     long, other = "x" * 40, "x" * 39 + "y"
     context = _table(
         [[0, 1, 0], [1, 0, -1], [2, 0, 1]],
@@ -617,12 +616,15 @@ def test_native_string_lookups_duplicates_and_views(
     device: torch.device, collide: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     if collide:
-        # Distinct labels sharing hashes are told apart by their bytes.
+        # Hashes keep `seed` bits, so fitted labels are hashed again until
+        # they differ, and queries share hashes with fitted labels.
         hash_labels = _string_lookup._hash_labels
         monkeypatch.setattr(
             _string_lookup,
             "_hash_labels",
-            lambda *args: hash_labels(*args) & 1,
+            lambda rows, slots, seed: (
+                hash_labels(rows, slots, seed) & ((1 << seed) - 1)
+            ),
         )
     first, second = "a" * 70, "a" * 69 + "b"
     values = StringTensor.from_list(

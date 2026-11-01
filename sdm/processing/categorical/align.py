@@ -97,7 +97,7 @@ class AlignCategories(EnsembleProcessor):
         # of each fitted string tensor. They derive from the fitted
         # categories, so they are not saved; loading them hashes again.
         self._string_slots: list[list[int]] = []
-        self._string_depth = 1
+        self._string_seed = 0
         for name in ("_string_hashes", "_string_rows", "_string_starts"):
             self.register_buffer(
                 name, torch.empty(0, dtype=torch.int64), persistent=False
@@ -374,7 +374,7 @@ class AlignCategories(EnsembleProcessor):
                     hashes=self._string_hashes,
                     rows=self._string_rows,
                     starts=self._string_starts,
-                    depth=self._string_depth,
+                    seed=self._string_seed,
                 ),
                 dtype=codes.dtype,
             )
@@ -511,7 +511,7 @@ class AlignCategories(EnsembleProcessor):
         lookups_by_column: list[dict[int, Tensor]],
         string_requests: list[tuple[int, int, StringTensor, Tensor, int]],
     ) -> Tensor:
-        """Remap ``[B, N, C]`` codes of columns whose lookups are pending.
+        """Remap ``[B, N, C]`` codes with the lookups of their columns.
 
         Lookups are released once they are joined into one table.
         """
@@ -571,11 +571,10 @@ class AlignCategories(EnsembleProcessor):
         del lookups, missing
         # First position of each column's block in the flat table.
         starts = widths.cumsum(0, dtype=index_dtype) - widths
-        if codes.size(0) > 1:
-            batches = torch.arange(
-                codes.size(0), dtype=index_dtype, device=codes.device
-            )
-            starts = starts + (batches * lookup_table.size(1))[:, None, None]
+        batches = torch.arange(
+            codes.size(0), dtype=index_dtype, device=codes.device
+        )
+        starts = starts + (batches * lookup_table.size(1))[:, None, None]
         table = lookup_table.flatten()
 
         def gather(chunk: Tensor) -> Tensor:
@@ -630,7 +629,7 @@ def _index_strings(processor: AlignCategories, *_: object) -> None:
     processor._string_hashes = index.hashes
     processor._string_rows = index.rows
     processor._string_starts = index.starts
-    processor._string_depth = index.depth
+    processor._string_seed = index.seed
 
 
 # Eager code gathers aligned codes in chunks of about this many codes.

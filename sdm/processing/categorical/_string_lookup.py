@@ -4,7 +4,6 @@
 """Match string categories by hashing whole labels and comparing bytes."""
 
 from collections.abc import Callable, Sequence
-from functools import reduce
 from typing import NamedTuple, cast
 
 import torch
@@ -19,9 +18,9 @@ _CHUNK = 64
 _BLOCK = 1 << 11
 
 
-def _odd_constants(count: int) -> list[int]:
+def _odd_constants(count: int, seed: int = 0) -> list[int]:
     """Return odd 64-bit constants as signed integers (SplitMix64)."""
-    constants, state = [], 0
+    constants, state = [], seed
     for _ in range(count):
         state = (state + 0x9E3779B97F4A7C15) % (1 << 64)
         value = state
@@ -32,11 +31,6 @@ def _odd_constants(count: int) -> list[int]:
     return constants
 
 
-# Weights of the 32-bit words of a chunk, then of chunk offsets, label
-# lengths and slots. Narrow words keep changes of high bits from cancelling.
-*_WORD_WEIGHTS, _OFFSET_WEIGHT, _LENGTH_WEIGHT, _SLOT_WEIGHT = _odd_constants(
-    _CHUNK // 4 + 3
-)
 _MIXERS = _odd_constants(2)
 
 
@@ -53,18 +47,18 @@ class _StringRows(NamedTuple):
 
 
 class _StringIndex(NamedTuple):
-    """Sorted hashes of distinct fitted labels.
+    """Sorted, distinct hashes of distinct fitted labels.
 
     ``rows`` holds the joined fitted row of each hash, and ``starts`` the
-    first row of each slot's labels, then the number of rows. ``depth`` is
-    the largest number of distinct labels sharing a hash, one unless 64-bit
-    hashes collide.
+    first row of each slot's labels, then the number of rows. Labels are
+    hashed with ``seed``, the first under which distinct labels do not
+    share a hash.
     """
 
     hashes: Tensor
     rows: Tensor
     starts: Tensor
-    depth: int
+    seed: int
 
 
 def _string_index(values: Sequence[StringTensor]) -> _StringIndex:
@@ -79,35 +73,33 @@ def _string_index(values: Sequence[StringTensor]) -> _StringIndex:
     starts = F.pad(counts.cumsum(0), (1, 0))
     if not values:
         empty = torch.empty(0, dtype=torch.int64)
-        return _StringIndex(empty, empty, starts, depth=1)
+        return _StringIndex(empty, empty, starts, seed=0)
     rows = _join_rows(values)
     device = rows.data.device
     slots = torch.arange(len(values), device=device).repeat_interleave(
         counts.to(device)
     )
-    hashes, order = _hash_labels(rows, slots).sort(stable=True)
-    # Labels sharing a hash form runs; drop each label equal to a later one
-    # of its run, then measure the longest run.
-    depth = 1
-    while depth < hashes.numel():
-        first = (hashes[depth:] == hashes[:-depth]).nonzero().squeeze(1)
-        if not first.numel():
-            break
+    seed = 0
+    while True:
+        hashes, order = _hash_labels(rows, slots, seed).sort(stable=True)
+        # Equal labels form runs of equal hashes; all labels of a run must
+        # be equal, and only the last is kept.
+        first = (hashes[1:] == hashes[:-1]).nonzero().squeeze(1)
         earlier = _select_rows(rows, order[first])
-        later = _select_rows(rows, order[first + depth])
-        equal = (slots[order[first]] == slots[order[first + depth]]) & (
+        later = _select_rows(rows, order[first + 1])
+        equal = (slots[order[first]] == slots[order[first + 1]]) & (
             earlier.lengths == later.lengths
         )
         equal &= _labels_equal(
             earlier._replace(lengths=earlier.lengths.where(equal, 0)), later
         )
-        if not equal.any():
-            depth += 1
-            continue
-        keep = torch.ones_like(hashes, dtype=torch.bool)
-        keep[first[equal]] = False
-        hashes, order, depth = hashes[keep], order[keep], 1
-    return _StringIndex(hashes, order, starts.to(device), depth)
+        if equal.all():
+            break
+        # Distinct labels share a hash; hash all labels again.
+        seed += 1
+    keep = torch.ones_like(hashes, dtype=torch.bool)
+    keep[first] = False
+    return _StringIndex(hashes[keep], order[keep], starts.to(device), seed)
 
 
 def _native_string_lookups(
@@ -128,8 +120,12 @@ def _native_string_lookups(
     device = query.data.device
     pairs = _pairs(queries, device)
     slot = torch.tensor(slots, device=device)
-    hashes = _hash_labels(query, slot[pairs])
-    end = torch.searchsorted(index.hashes, hashes, right=True)
+    hashes = _hash_labels(query, slot[pairs], index.seed)
+    # Fitted hashes are distinct, so only the last one not above a query's
+    # hash may match it.
+    position = torch.searchsorted(index.hashes, hashes, right=True) - 1
+    position = position.clamp_min(0)
+    fitted = _join_rows(right)
     # Rows of each pair's slot start here in the index, and in `fitted`.
     low = index.starts[slot]
     size = index.starts[slot + 1] - low
@@ -138,36 +134,20 @@ def _native_string_lookups(
         dtype=torch.int64,
         device=device,
     ).cumsum(0)
-
-    def candidates(step: int) -> tuple[Tensor, Tensor]:
-        """Return each query's step-th candidate, and if it may match.
-
-        A candidate may match if it has the query's hash and slot.
-        """
-        position = (end - step).clamp_min(0)
-        local = index.rows[position] - low[pairs]
-        return local, (
-            (end >= step)
-            & (index.hashes[position] == hashes)
-            & (local >= 0)
-            & (local < size[pairs])
-        )
-
-    def match(step: int) -> Tensor:
-        """Return the ID of each query's step-th candidate if equal, or -1."""
-        local, found = candidates(step)
-        candidate = _select_rows(
-            fitted, (first[pairs] + local).clamp(0, fitted.starts.numel() - 1)
-        )
-        found &= candidate.lengths == query.lengths
-        # Only candidates' bytes are compared.
-        compared = query._replace(lengths=query.lengths.where(found, 0))
-        found &= _labels_equal(compared, candidate)
-        return local.where(found, -1)
-
-    fitted = _join_rows(right)
-    # Fitted labels are distinct, so at most one candidate matches.
-    output = reduce(torch.maximum, map(match, range(1, index.depth + 1)))
+    local = index.rows[position] - low[pairs]
+    found = (
+        (index.hashes[position] == hashes)
+        & (local >= 0)
+        & (local < size[pairs])
+    )
+    candidate = _select_rows(
+        fitted, (first[pairs] + local).clamp(0, fitted.starts.numel() - 1)
+    )
+    found &= candidate.lengths == query.lengths
+    # Only candidates' bytes are compared.
+    compared = query._replace(lengths=query.lengths.where(found, 0))
+    found &= _labels_equal(compared, candidate)
+    output = local.where(found, -1)
     return tuple(
         part.to(dtype).expand(value.numel())
         for part, value in zip(
@@ -270,8 +250,8 @@ def _label_values(
             mask = True
         else:
             short = (lengths > 0) & (lengths < _CHUNK)
-            total, short = torch.stack([ends[-1], short.sum()]).tolist()
-            mask = short > 0
+            total, shorts = torch.stack([ends[-1], short.sum()]).tolist()
+            mask = shorts > 0
         chunk = torch.arange(total, device=lengths.device)
         label = torch.searchsorted(ends, chunk, right=True).clamp_max(count)
         offset = torch.minimum(
@@ -329,13 +309,19 @@ def _mix(value: Tensor) -> Tensor:
     return value ^ shift(value)
 
 
-def _hash_labels(rows: _StringRows, slots: Tensor) -> Tensor:
-    """Hash all bytes, the length and the slot of each label.
+def _hash_labels(rows: _StringRows, slots: Tensor, seed: int) -> Tensor:
+    """Hash all bytes, the length and the slot of each label with ``seed``.
 
     A chunk's hash weights its signed 32-bit words, then mixes in its
     offset; compiled code weights bytes instead, with the same result.
     """
-    words = torch.tensor(_WORD_WEIGHTS, device=rows.data.device)
+    # Weights of the 32-bit words of a chunk, then of chunk offsets, label
+    # lengths and slots. Narrow words keep changes of high bits from
+    # cancelling.
+    *word_weights, offset_weight, length_weight, slot_weight = _odd_constants(
+        _CHUNK // 4 + 3, seed
+    )
+    words = torch.tensor(word_weights, device=rows.data.device)
 
     def weigh(offset: Tensor | int, chunk: Tensor) -> Tensor:
         if not torch.compiler.is_compiling():
@@ -347,12 +333,12 @@ def _hash_labels(rows: _StringRows, slots: Tensor) -> Tensor:
             # The last byte of a word carries its sign.
             value = value - (value >> 7 << 8) * (place == 3)
             value = value * (words.repeat_interleave(4) << 8 * place)
-        return _mix(value.sum(-1) + offset * _OFFSET_WEIGHT)
+        return _mix(value.sum(-1) + offset * offset_weight)
 
     return _mix(
         _label_values(rows.lengths, (rows,), weigh)
-        + rows.lengths * _LENGTH_WEIGHT
-        + slots * _SLOT_WEIGHT
+        + rows.lengths * length_weight
+        + slots * slot_weight
     )
 
 
