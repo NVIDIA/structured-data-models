@@ -33,6 +33,7 @@ icl
 forecasting
 processing
 nanotabicl
+finetuning
 nim
 ```
 
