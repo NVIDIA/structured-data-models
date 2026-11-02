@@ -93,7 +93,7 @@ class AlignCategories(EnsembleProcessor):
         self.sort_by = sort_by
         self.min_frequency = min_frequency
         self._categories: BufferList[BufferList[Tensor]] = BufferList()
-        # An index of fitted string labels for native lookups (see
+        # An index of fitted string categories for native lookups (see
         # `_StringIndex`), and the slot of each fitted string tensor, by
         # ensemble member and column. They derive from the fitted
         # categories, so they are not saved; loading them hashes again.
@@ -612,7 +612,7 @@ class AlignCategories(EnsembleProcessor):
 
 
 def _index_strings(processor: AlignCategories, *_: object) -> None:
-    """Hash fitted string labels, one slot per distinct string tensor."""
+    """Hash fitted string categories, one slot per distinct string tensor."""
     values: list[StringTensor] = []
     slots: dict[int, int] = {}
     processor._string_slots = []

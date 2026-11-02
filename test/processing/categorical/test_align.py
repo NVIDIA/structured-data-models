@@ -572,10 +572,10 @@ def test_align_categories_ensemble_matches_member_fits(
 
 @withCUDA
 @pytest.mark.parametrize("width", [64, 1023])
-def test_align_categories_compares_long_labels(
+def test_align_categories_compares_long_categories(
     width: int, device: torch.device
 ) -> None:
-    # Long labels sharing their ends differ only in the bytes in between.
+    # Long categories sharing their ends differ only in the bytes in between.
     def long(middle: str) -> str:
         return "a" * width + middle + "b" * width
 
@@ -593,7 +593,7 @@ def test_align_categories_compares_long_labels(
         categories=(tuple(fitted),),
         device=device,
     )
-    # A loaded processor hashes its fitted labels again.
+    # A loaded processor hashes its fitted categories again.
     processor = AlignCategories()
     processor.load_state_dict(AlignCategories().fit(context).state_dict())
     output = processor.transform(
@@ -616,14 +616,14 @@ def test_native_string_lookups_duplicates_and_views(
     device: torch.device, collide: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     if collide:
-        # Hashes keep `seed` bits, so fitted labels are hashed again until
-        # they differ, and queries share hashes with fitted labels.
-        hash_labels = _string_lookup._hash_labels
+        # Hashes keep `seed` bits, so fitted categories are hashed again until
+        # they differ, and queries share hashes with fitted categories.
+        hash_categories = _string_lookup._hash_categories
         monkeypatch.setattr(
             _string_lookup,
-            "_hash_labels",
+            "_hash_categories",
             lambda rows, slots, seed: (
-                hash_labels(rows, slots, seed) & ((1 << seed) - 1)
+                hash_categories(rows, slots, seed) & ((1 << seed) - 1)
             ),
         )
     first, second = "a" * 70, "a" * 69 + "b"
@@ -634,7 +634,7 @@ def test_native_string_lookups_duplicates_and_views(
         tuple[StringTensor, ...],
         (values[:4], values[:3], values[:1].expand(2)),
     )
-    # The last duplicate fitted label wins, also in a broadcast view.
+    # The last duplicate fitted category wins, also in a broadcast view.
     actual = _native_string_lookups(
         left=cast(
             tuple[StringTensor, ...],
