@@ -44,7 +44,6 @@ from sdm.processing.numerical import (
     RandomProjection,
     Detrend,
     Interpolate,
-    WarpTails,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -100,7 +99,6 @@ __all__ = [
     "RandomProjection",
     "Detrend",
     "Interpolate",
-    "WarpTails",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",

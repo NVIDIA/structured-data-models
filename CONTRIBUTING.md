@@ -127,15 +127,15 @@ implementation of the issue, ask them in the issue instead of the PR.
 The structured-data-models repository has two main branches:
 
 1. `main` branch: it contains the last released version. Only hotfixes are targeted and merged into it.
-2. `branch-x.y`: it is the development branch which contains the upcoming release. All the new features should be based on this branch and Merge/Pull request should target this branch (with the exception of hotfixes).
+2. `release/X.Y`: it is the development branch which contains the upcoming release. All the new features should be based on this branch and Merge/Pull request should target this branch (with the exception of hotfixes).
 
 ### Additional details
 
-For every new version `x.y` of structured-data-models there is a corresponding branch called `branch-x.y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by GitHub users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
+For every new version `X.Y` of structured-data-models there is a corresponding branch called `release/X.Y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by GitHub users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
 
 For all development, your changes should be pushed into a branch (created using the naming instructions below) in your own fork of structured-data-models and then create a pull request when the code is ready.
 
-A few days before releasing version `x.y` the code of the current development branch (`branch-x.y`) will be frozen and a new branch, 'branch-x+1.y' will be created to continue development.
+A few days before releasing version `X.Y` the code of the current development branch (`release/X.Y`) will be frozen and a new branch for the next version (for example, `release/0.3` after `release/0.2`) will be created to continue development.
 
 ### Branch naming
 

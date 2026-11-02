@@ -43,9 +43,41 @@ QUANTILES = (0.01, *[i / 100 for i in range(5, 100, 5)], 0.99)
 
 
 class Chronos2(ICLModel):
-    """The time series forecasting model from the
+    """The time series forecasting foundation model from the
     `"Chronos-2: From Univariate to Universal Forecasting"
     <https://arxiv.org/abs/2510.15821>`_ paper.
+
+    .. figure:: /images/chronos2_light.svg
+        :figclass: light-only
+        :width: 100%
+
+    .. figure:: /images/chronos2_dark.svg
+        :figclass: dark-only
+        :width: 100%
+
+    :class:`Chronos2` is a time-series foundation model for multivariate
+    forecasting. It extends `Chronos <https://arxiv.org/abs/2403.07815>`_ with
+    native support for jointly forecasting multiple coevolving target series,
+    incorporating historical covariates, and using dynamic covariates that are
+    known across both the past and future forecast horizon.
+
+    Architecturally, it combines patch-based time-series tokenization with
+    alternating temporal attention and group attention, allowing forecasts to
+    use both within-series history and information shared across targets and
+    covariates. Each patch encodes scaled values, time indices, and observation
+    masks. It returns 21 quantile forecasts: the 1st and 99th percentiles and
+    every fifth percentile from the 5th to the 95th, for each target series
+    and query time step. Forecasts of up to 1,024 time steps are decoded in
+    a single forward pass; longer horizons use autoregressive rollout.
+
+    Within the :class:`~sdm.models.ICLModel` protocol, :class:`Chronos2`
+    treats rows as ordered time steps and uses up to 8,192 time steps as
+    context. In a default forward pass, ``x_context`` contains historical
+    covariates, ``y_context`` contains one or more past target series, and
+    ``x_query`` contains future-known covariates (which must also be present in
+    ``x_context``). By default, examples in a batch are forecasted
+    independently; ``cross_learning=True`` allows group attention to share
+    information across examples in the batch.
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.

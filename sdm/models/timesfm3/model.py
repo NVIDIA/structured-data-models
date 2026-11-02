@@ -56,9 +56,9 @@ class TimesFM3(ICLModel):
         :figclass: dark-only
         :width: 100%
 
-    :class:`TimesFM3` is a zero-shot time-series foundation model for
-    multivariate forecasting. It extends earlier univariate TimesFM models with
-    native support for jointly forecasting multiple coevolving target series,
+    :class:`TimesFM3` is a time-series foundation model for multivariate
+    forecasting. It extends earlier univariate TimesFM models with native
+    support for jointly forecasting multiple coevolving target series,
     incorporating historical covariates, and using dynamic covariates that are
     known across both the past and future forecast horizon.
 
