@@ -93,7 +93,7 @@ recipe = sp.Recipe(
     output=[
         sp.AverageEstimators(),
         sp.TaskDispatch(
-            classification=sp.Softmax(temperature=0.9),
+            classification=sp.Softmax(),
         ),
     ],
 )
