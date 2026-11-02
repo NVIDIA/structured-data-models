@@ -47,12 +47,16 @@ class _StringRows(NamedTuple):
 
 
 class _StringIndex(NamedTuple):
-    """Sorted, distinct hashes of distinct fitted labels.
+    """Sorted hashes of distinct fitted labels, for binary search.
 
-    ``rows`` holds the joined fitted row of each hash, and ``starts`` the
-    first row of each slot's labels, then the number of rows. Labels are
-    hashed with ``seed``, the first under which distinct labels do not
-    share a hash.
+    Each fitted string tensor has a slot, and its labels are rows, joined
+    slot by slot. ``hashes`` holds the sorted hashes of each label with its
+    slot, ``rows`` the row of each hash, and ``starts`` the first row of
+    each slot, then the number of rows. A label's code is its row minus its
+    slot's start. For example, slots ``["blue", "red"]`` and ``["L", "M"]``
+    give rows 0 to 3, ``starts == [0, 2, 4]``, and code 1 for row 3, "M".
+    Labels are hashed with ``seed``, the first under which distinct labels
+    do not share a hash.
     """
 
     hashes: Tensor
@@ -126,28 +130,29 @@ def _native_string_lookups(
     position = torch.searchsorted(index.hashes, hashes, right=True) - 1
     position = position.clamp_min(0)
     fitted = _join_rows(right)
-    # Rows of each pair's slot start here in the index, and in `fitted`.
-    low = index.starts[slot]
-    size = index.starts[slot + 1] - low
+    # Each slot's rows start here, and each fitted tensor's at `first` in
+    # `fitted`.
+    start = index.starts[slot]
+    size = index.starts[slot + 1] - start
     first = torch.tensor(
         [0, *(value.numel() for value in right[:-1])],
         dtype=torch.int64,
         device=device,
     ).cumsum(0)
-    local = index.rows[position] - low[pairs]
+    # The candidate's code in its slot: its row minus the slot's start.
+    code = index.rows[position] - start[pairs]
+    # It may match only with the query's hash, within the query's slot.
     found = (
-        (index.hashes[position] == hashes)
-        & (local >= 0)
-        & (local < size[pairs])
+        (index.hashes[position] == hashes) & (code >= 0) & (code < size[pairs])
     )
     candidate = _select_rows(
-        fitted, (first[pairs] + local).clamp(0, fitted.starts.numel() - 1)
+        fitted, (first[pairs] + code).clamp(0, fitted.starts.numel() - 1)
     )
     found &= candidate.lengths == query.lengths
     # Only candidates' bytes are compared.
     compared = query._replace(lengths=query.lengths.where(found, 0))
     found &= _labels_equal(compared, candidate)
-    output = local.where(found, -1)
+    output = code.where(found, -1)
     return tuple(
         part.to(dtype).expand(value.numel())
         for part, value in zip(
