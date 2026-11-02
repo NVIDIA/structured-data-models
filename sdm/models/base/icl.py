@@ -335,22 +335,19 @@ class ICLModel(Model):
                 )
 
             if x.is_cuda and len(contexts) > 1:
-                # Class labels are metadata; preserve their original device.
-                classes = batch_cache["classes"]
+                # Keep class labels on GPU for compiled prediction.
+                classes = batch_cache.pop("classes")
                 try:  # Copy to pinned CPU memory:
                     batch_cache = batch_cache._apply_tensor(
-                        lambda tensor, classes=classes: (
-                            tensor
-                            if tensor is classes
-                            else torch.ops.aten._to_copy.default(
-                                tensor,
-                                device="cpu",
-                                pin_memory=True,
-                                non_blocking=True,  # Needed for `pin_memory`.
-                            )
+                        lambda tensor: torch.ops.aten._to_copy.default(
+                            tensor,
+                            device="cpu",
+                            pin_memory=True,
+                            non_blocking=True,  # Required for `pin_memory`.
                         )
                     )
                 finally:
+                    batch_cache["classes"] = classes
                     torch.cuda.current_stream(x.device).synchronize()
 
             cache[i] = batch_cache
