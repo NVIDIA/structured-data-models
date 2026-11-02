@@ -3,12 +3,12 @@
 `structured-data-models` is a GPU-native library of foundation models,
 tensor subclasses, and data processors for structured data.
 
-Foundation models via in-context learning are becoming a central direction for learning over structured data.
+Foundation models based on in-context learning are becoming a central direction for learning over structured data.
 A foundation model in this domain needs more than the neural network itself: typed data representation, flexible preprocessing pipelines, estimator ensembling, and caching.
 `structured-data-models` keeps these concerns explicit while moving the full modeling workflow into GPU-accelerated PyTorch.
 In particular, this library provides:
 
-- [**Models**](icl): Reference implementations of structured data foundation models such as the tabular {py:class}`~sdm.models.TabICLv2` and relational {py:class}`~sdm.models.KumoRelational`, built on a unified interface with room for future model families.
+- [**Models**](icl): Reference implementations of structured data foundation models, including tabular models ({py:class}`~sdm.models.TabICLv2`, {py:class}`~sdm.models.KumoTabular`, *etc*), relational models ({py:class}`~sdm.models.KumoRelational`), and time series models ({py:class}`~sdm.models.Chronos2`, {py:class}`~sdm.models.KumoForecast`, {py:class}`~sdm.models.TimesFM3`, {py:class}`~sdm.models.KumoAnomaly`, *etc*), built on a unified interface with room for future model families.
 - [**Tensor semantics**](tensor): PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - [**Data processing**](processing): Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -27,7 +27,7 @@ Together, these layers provide a common foundation for building, studying, and s
 ## Quick Tour
 
 The typical workflow starts by converting a data frame into a {py:class}`~sdm.tensor.TableTensor`.
-Semantic types ({py:class}`~sdm.Stype`) describe the role of each column, such that the model can distinguish numerical features from categorical, datetime, or text features:
+Semantic types ({py:class}`~sdm.Stype`) describe the role of each column so that the model can distinguish numerical features from categorical, datetime, or text features:
 
 ```python
 import sdm
@@ -63,7 +63,7 @@ model.clear()
 ```
 
 Preprocessing and postprocessing are defined by an explicit {py:class}`~sdm.processing.recipe.Recipe`.
-A {py:class}`~sdm.processing.recipe.Recipe` denotes how features and targets are transformed before model execution, and how outputs are postprocessed afterwards, making model-specific data handling inspectable, extensible, and replaceable.
+A {py:class}`~sdm.processing.recipe.Recipe` defines how features and targets are transformed before model execution, and how outputs are postprocessed afterwards, making model-specific data handling inspectable, extensible, and replaceable.
 The resulting {py:class}`~sdm.processing.recipe.Recipe` can be passed to the model's {py:meth}`~sdm.models.ICLModel.forward` or {py:meth}`~sdm.models.ICLModel.fit` calls:
 
 ```python
@@ -93,7 +93,7 @@ recipe = sp.Recipe(
     output=[
         sp.AverageEstimators(),
         sp.TaskDispatch(
-            classification=sp.Softmax(temperature=0.9),
+            classification=sp.Softmax(),
         ),
     ],
 )
@@ -106,4 +106,8 @@ For example, datetime columns can be expanded into calendar features, and text c
 These components are reusable across model families rather than tied to a single model implementation, and are designed for ensemble-aware, GPU-accelerated execution across the entire processing stack.
 
 For relational tasks, {py:class}`~sdm.relational.RelatedTables` allow foundation models to attach to surrounding tables and relationships.
-Models that support relational context, such as {py:class}`~sdm.models.KumoRelational`, can process these {py:class}`~sdm.relational.RelatedTables` through the same {py:meth}`~sdm.models.ICLModel.fit`, {py:meth}`~sdm.models.ICLModel.predict`, {py:class}`~sdm.processing.recipe.Recipe`, and {py:class}`~sdm.tensor.TableTensor` interfaces.
+A model that {py:attr}`~sdm.models.ICLModel.supports_related_tables`, such as {py:class}`~sdm.models.KumoRelational`, can process these {py:class}`~sdm.relational.RelatedTables` through the same {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.fit`, {py:meth}`~sdm.models.ICLModel.predict`, {py:class}`~sdm.processing.recipe.Recipe`, and {py:class}`~sdm.tensor.TableTensor` interfaces.
+See [here](relational-context) for the accompanying guide.
+
+Time series forecasting models such as {py:class}`~sdm.models.Chronos2` and {py:class}`~sdm.models.TimesFM3` use the same in-context learning interface: context rows represent the observed past, and query rows represent future time steps.
+See the [time series forecasting](forecasting) guide for how to represent these inputs with {py:class}`~sdm.tensor.TableTensor`, how to jointly forecast multiple targets, and how to use past-only and known future covariates to inform the prediction.
