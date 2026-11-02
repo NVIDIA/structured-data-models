@@ -825,7 +825,9 @@ def _to_dtype_layout(
     storage_offset = int(inp.storage_offset())
     span_len = _span_len(inp.size(), inp.stride())
     offset = inp._offset[storage_offset : storage_offset + span_len + 1]
-    data = inp._data[offset[0] : offset[-1]].to(
+    data = inp._data
+    data = data[:0] if inp.numel() == 0 else data[offset[0] : offset[-1]]
+    data = data.to(
         device=device,
         dtype=dtype,
         non_blocking=non_blocking,
