@@ -115,7 +115,7 @@ if args.text_dim > 0:  # Embed entity table text:
         device=device,
     )
 
-context, query = task_table.tensor_split([len(dfs[0]) + len(dfs[1])])
+context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
 num_estimators = args.num_estimators
 if len(context) > args.context_size:  # Sample different context per estimator:
     width = args.context_size * num_estimators
