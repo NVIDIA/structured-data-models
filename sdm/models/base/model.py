@@ -3,6 +3,7 @@
 
 import abc
 from collections.abc import Iterator, Sequence
+from functools import partial
 from typing import ClassVar, Generic, Self, TypeVar
 
 import torch
@@ -91,6 +92,38 @@ class Model(torch.nn.Module, abc.ABC):
             )
 
 
+def _copy_to_device(
+    tensor: Tensor,
+    device: torch.device,
+    stream: torch.cuda.Stream,
+) -> Tensor:
+    """Keep copy allocations separate from the parent graph's buffer reuse."""
+    with torch.cuda.stream(stream):
+        return tensor.to(device=device, non_blocking=True)
+
+
+if hasattr(torch.compiler, "nested_compile_region"):
+    _copy_to_device = torch.compiler.nested_compile_region(_copy_to_device)
+
+
+def _transfer(
+    item: T,
+    device: torch.device,
+    stream: torch.cuda.Stream,
+) -> T:
+    """Move a tensor or tensor container onto the prefetch stream."""
+    if not torch.compiler.is_compiling():
+        with torch.cuda.stream(stream):
+            return item.to(device=device, non_blocking=True)  # type: ignore
+    if isinstance(item, DeviceMixin):
+        return item._apply_tensor(
+            partial(_transfer, device=device, stream=stream)
+        )
+    if item.device == device:
+        return item
+    return _copy_to_device(item, device, stream)  # type: ignore
+
+
 class _Prefetcher(Generic[T]):
     def __init__(
         self,
@@ -112,11 +145,11 @@ class _Prefetcher(Generic[T]):
         if self._transfer_stream is not None:
             self._compute_stream = torch.cuda.current_stream(self._device)
             try:
-                with torch.cuda.stream(self._transfer_stream):
-                    self._next = self._items[0].to(  # type: ignore
-                        device=self._device,
-                        non_blocking=True,
-                    )
+                self._next = _transfer(
+                    item=self._items[0],
+                    device=self._device,
+                    stream=self._transfer_stream,
+                )
             except BaseException:
                 self._transfer_stream.synchronize()
                 raise
@@ -153,11 +186,11 @@ class _Prefetcher(Generic[T]):
 
             if self._next is not None:
                 if self._transfer_stream is not None:
-                    with torch.cuda.stream(self._transfer_stream):
-                        self._next = self._next.to(  # type: ignore
-                            device=self._device,
-                            non_blocking=True,
-                        )
+                    self._next = _transfer(
+                        item=self._next,
+                        device=self._device,
+                        stream=self._transfer_stream,
+                    )
                 else:
                     self._next = self._next.to(self._device)  # type: ignore
 

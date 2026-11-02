@@ -354,6 +354,10 @@ class ICLModel(Model):
 
         self._cache = cache.freeze()
 
+        # Prepare the stream before compiled predict to avoid recompilation.
+        if x.is_cuda and x.device not in self._transfer_streams:
+            self._transfer_streams[x.device] = torch.cuda.Stream(x.device)
+
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
