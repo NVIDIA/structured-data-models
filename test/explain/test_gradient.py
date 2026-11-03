@@ -9,6 +9,7 @@ import torch
 from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.explain import GradientExplainer
+from sdm.explain.gradient import CaptureContext, EnableContextGradients
 from sdm.models import ICLModel
 from sdm.processing import Softmax
 
@@ -137,3 +138,66 @@ def test_differentiates_final_prediction(fitted: bool) -> None:
     )
     torch.testing.assert_close(x_attributions.numerical, expected.unsqueeze(1))
     assert related_attributions is None
+
+
+class _ContextMeanModel(ICLModel):
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical})
+    supports_multi_target = False
+    supports_context_only_columns = True
+    supports_related_tables = False
+
+    def __init__(self) -> None:
+        super().__init__(task=None)
+        self.eval()
+
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        x_context_only: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        assert x_context is not None
+        assert y_context is not None
+        assert x_query is not None
+        assert x_context_only is not None
+        numerical = (
+            2.0 * x_context.numerical.mean(dim=-2, keepdim=True)
+            + 3.0 * y_context.numerical.mean(dim=-2, keepdim=True)
+            + 5.0 * x_context_only.numerical.mean(dim=-2, keepdim=True)
+        )
+        return x_query.replace_blocks(numerical=numerical)
+
+    @classmethod
+    def default_recipe(cls) -> Recipe:
+        return Recipe()
+
+
+def test_context_gradients() -> None:
+    capture = CaptureContext()
+    out = _ContextMeanModel()(
+        x_context=TableTensor(  # Column "b" is context-only.
+            columns={Stype.numerical: ("a", "b")}, numerical=torch.ones(4, 2)
+        ),
+        y_context=torch.ones(4, 1),
+        x_query=TableTensor(
+            columns={Stype.numerical: ("a",)}, numerical=torch.ones(1, 1)
+        ),
+        callbacks=[EnableContextGradients(), capture],
+    )
+
+    ((x, y, x_context_only, related_tables),) = capture.contexts
+    assert x_context_only is not None
+    assert related_tables is None
+    gradients = torch.autograd.grad(
+        out.numerical.sum(),
+        [x.numerical, y.numerical, x_context_only.numerical],
+    )
+    for gradient, weight in zip(gradients, [2.0, 3.0, 5.0], strict=True):
+        torch.testing.assert_close(gradient, torch.full((4, 1), weight / 4))
