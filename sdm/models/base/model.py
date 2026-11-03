@@ -102,7 +102,7 @@ def _copy_to_device(
         return tensor.to(device=device, non_blocking=True)
 
 
-# Keep eager imports working on older supported PyTorch versions.
+# Keep eager imports working on PyTorch 2.7; this API was added in 2.8.
 if hasattr(torch.compiler, "nested_compile_region"):
     _copy_to_device = torch.compiler.nested_compile_region(_copy_to_device)
 
