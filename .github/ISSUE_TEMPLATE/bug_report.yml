@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible problem with structured-data-models.
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Describe what you expected to happen and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Complete minimal reproducer
+      description: |
+        Paste a complete, minimal Python script, including imports, input data or data-generation code, and the call that reproduces the problem. Include any required checkpoint name or revision and the command used to run the script.
+        Use synthetic or publicly available data so others can run it independently.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Full error messages or observed output
+      description: |
+        Paste the complete traceback and relevant output as text. If there is no exception, include output that demonstrates the incorrect behavior.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: |
+        Include your structured-data-models version or Git commit and how you installed it (for example, pip, an editable source checkout, or a container image and tag).
+        Run `python -m torch.utils.collect_env` in the affected environment and paste its output below. This reports Python, PyTorch, OS, and CUDA details. If the command fails, include those details manually.
+      render: text
+    validations:
+      required: true
