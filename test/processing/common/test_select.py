@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Literal
+
 import pytest
 import torch
 
@@ -46,3 +48,25 @@ def test_select_columns_round_robin_routes_members() -> None:
             columns=columns,
         )
         assert out[member_id].equal(expected)
+
+
+@pytest.mark.parametrize("method", ["first", "round_robin"])
+def test_select_columns_preserves_mixed_datetime_units(
+    method: Literal["first", "round_robin"],
+) -> None:
+    table = TableTensor(
+        columns={"datetime": ("us", "ns", "other_us")},
+        datetime=torch.tensor([[1, 1_001, 2], [2, 2_001, 3]]),
+        datetime_units=("us", "ns", "us"),
+    )
+    output = SelectColumns(
+        max_columns=2, method=method
+    ).fit_transform_ensemble(EnsembleTable.from_table(table, num_members=3))
+    columns = (
+        [("us", "ns")] * 3
+        if method == "first"
+        else [("us", "ns"), ("other_us", "us"), ("ns", "other_us")]
+    )
+    original = table.to_arrow()
+    for i, names in enumerate(columns):
+        assert output[i].to_arrow().equals(original.select(names))

@@ -171,6 +171,7 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
                 table.column_groups,
+                table.datetime_units,
                 tuple(
                     (
                         stype,

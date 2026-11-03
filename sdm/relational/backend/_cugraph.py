@@ -11,6 +11,7 @@ from torch import Tensor
 from sdm import NaT, TableTensor
 from sdm._warnings import warn_once
 from sdm.relational import RelationalData, TaskLink
+from sdm.relational.backend._time import TemporalClock
 from sdm.relational.join import join_index
 
 _INTEGER_DTYPES = {
@@ -46,6 +47,15 @@ class CuGraphRelationalSampler:
 
         self.data = data
         self.time_columns = time_columns
+        self._clock = TemporalClock(
+            {
+                name: (
+                    data.tables[name][column].datetime.squeeze(-1),
+                    data.tables[name][column].datetime_units[0],
+                )
+                for name, column in time_columns.items()
+            }
+        )
 
         self._cp = cp
         self._pylibcugraph = pylibcugraph
@@ -115,7 +125,10 @@ class CuGraphRelationalSampler:
                     torch.iinfo(torch.int64).max,
                 )
             else:
-                seed_time = task_table[task_time_column].datetime.squeeze(-1)
+                table = task_table[task_time_column]
+                seed_time = self._clock.query_time(
+                    table.datetime.squeeze(-1), table.datetime_units[0]
+                )
 
             if self._num_edges == 0 or len(num_neighbors) == 0:
                 return self._seed_nodes(seed=seed, task_link=task_link)
@@ -153,12 +166,7 @@ class CuGraphRelationalSampler:
         edge_types: list[Tensor] = []
         edge_times: list[Tensor] = []
 
-        times = {
-            table_name: self.data.tables[table_name][
-                column_name
-            ].datetime.squeeze(-1)
-            for table_name, column_name in self.time_columns.items()
-        }
+        times = self._clock.times
 
         for i, (relationship, edge_index) in enumerate(
             zip(self.data.relationships, edge_indices)

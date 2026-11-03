@@ -9,10 +9,7 @@ from torch import Tensor
 
 from sdm import NaT, Stype, TableTensor
 from sdm.processing import Processor
-
-US_PER_MINUTE = 60 * 1_000_000
-US_PER_HOUR = 60 * US_PER_MINUTE
-US_PER_DAY = 24 * US_PER_HOUR
+from sdm.tensor.datetime import units_per_day
 
 
 class AddCalendarFields(Processor):
@@ -53,11 +50,12 @@ class AddCalendarFields(Processor):
             return table
 
         datetime = table.datetime
+        per_day = units_per_day(table.datetime_units, datetime.device)
         na_mask = datetime == NaT
 
         days: Tensor | None = None
         if len({"weekday", "day_of_month", "month"} & set(self.fields)) > 0:
-            days = datetime.div(US_PER_DAY, rounding_mode="floor")
+            days = datetime.div(per_day, rounding_mode="floor")
 
         year = month = day = None
         if len({"day_of_month", "month"} & set(self.fields)) > 0:
@@ -66,19 +64,21 @@ class AddCalendarFields(Processor):
 
         time_of_day: Tensor | None = None
         if len({"minute", "hour"} & set(self.fields)) > 0:
-            time_of_day = datetime.remainder(US_PER_DAY)
+            time_of_day = datetime.remainder(per_day)
 
         outs: dict[str, Tensor] = {}
         for field in self.fields:
             if field == "minute":
                 assert time_of_day is not None
-                out = time_of_day.div(US_PER_MINUTE, rounding_mode="floor")
+                out = time_of_day.div(
+                    per_day // (24 * 60), rounding_mode="floor"
+                )
                 outs[field] = out.remainder(60)
                 continue
 
             if field == "hour":
                 assert time_of_day is not None
-                out = time_of_day.div(US_PER_HOUR, rounding_mode="floor")
+                out = time_of_day.div(per_day // 24, rounding_mode="floor")
                 outs[field] = out
                 continue
 

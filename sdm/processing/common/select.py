@@ -58,7 +58,9 @@ class SelectColumns(EnsembleProcessor):
                     stype: block[..., : self.max_columns]
                     for stype, block in TableTensor.items(group)
                 }
-                groups.append(group.__class__(columns=columns, **blocks))
+                groups.append(
+                    group._new_with_blocks(columns=columns, **blocks)
+                )
             return ensemble_table.replace_groups(groups)
 
         assert self.method == "round_robin"
@@ -97,7 +99,7 @@ class SelectColumns(EnsembleProcessor):
                     dim=-1,
                 )
             tables.append(
-                table.__class__(
+                table._new_with_blocks(
                     columns=columns,
                     **blocks,
                 )
