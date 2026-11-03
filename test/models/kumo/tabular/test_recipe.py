@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
 from sdm.testing import withCUDA
 
@@ -43,10 +43,7 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     for member_id in range(len(output)):
         member = output[member_id]
         expected_missing = torch.tensor(
-            [
-                missing_by_column[column]
-                for column in member.columns[Stype.numerical]
-            ],
+            [missing_by_column[column] for column in member.numerical_columns],
             device=device,
         ).T
         assert torch.equal(member.numerical.isnan(), expected_missing)
@@ -73,7 +70,7 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
     numerical_correlations = []
     for member_id in range(len(output)):
         member = output[member_id]
-        for index, column in enumerate(member.columns[Stype.numerical]):
+        for index, column in enumerate(member.numerical_columns):
             values = member.numerical[:, index]
             if column == "cat_0":
                 reference = features.categorical.code[:, 0].float()
@@ -125,9 +122,7 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
     if cardinality > 50:
         expected_columns.add("cat_0__count")
     for member_id in range(len(output)):
-        assert (
-            set(output[member_id].columns[Stype.numerical]) == expected_columns
-        )
+        assert set(output[member_id].numerical_columns) == expected_columns
 
 
 def test_default_recipe_reduces_outputs_per_task() -> None:

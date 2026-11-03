@@ -60,7 +60,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         )
 
     @property
-    def handles_stypes(self) -> frozenset[Stype]:
+    def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         return self.processor.handles_stypes
 

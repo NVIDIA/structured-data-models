@@ -20,6 +20,7 @@ from sdm.tensor.io import (
     to_arrow,
     to_cudf,
 )
+from sdm.tensor.mixin import _record_compiled_stream
 
 if TYPE_CHECKING:
     import cudf
@@ -385,6 +386,9 @@ class NullableTensor(Tensor):
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             return handler(*args, **(kwargs or {}))
 
+        if str(func) == "streams.record_stream.default":
+            return _record_compiled_stream(*args, **(kwargs or {}))
+
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
         )
@@ -729,6 +733,18 @@ def _flatten(
     return cast(
         NullableTensor,
         aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
+
+
+@NullableTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: NullableTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> NullableTensor:
+    return cast(
+        NullableTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
     )
 
 

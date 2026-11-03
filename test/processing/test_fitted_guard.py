@@ -54,7 +54,7 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 
 
 class StatelessProcessor(Processor):
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -62,7 +62,7 @@ class StatelessProcessor(Processor):
 
 
 class StatefulProcessor(Processor):
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def _fit(

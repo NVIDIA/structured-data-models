@@ -504,3 +504,39 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
         assert fitted_query_output[member_id].equal(expected_query)
+
+
+def test_string_category_lookups_compile(compilation: None) -> None:
+    fitted = (
+        StringTensor.from_list(["a", "b"]),
+        StringTensor.from_list(["a", "x"]),
+    )
+    codes = torch.empty((), dtype=torch.int32)
+
+    def lookups(categories: StringTensor) -> tuple[torch.Tensor, ...]:
+        return AlignCategories._string_category_lookups(
+            input_categories=(categories, categories),
+            fitted_categories=fitted,
+            codes=codes,
+        )
+
+    compiled = torch.compile(lookups, backend="inductor", fullgraph=True)
+    first, second = compiled(StringTensor.from_list(["b", "z", "a"]))
+    torch.testing.assert_close(
+        actual=first,
+        expected=torch.tensor([1, -1, 0], dtype=codes.dtype),
+    )
+    torch.testing.assert_close(
+        actual=second,
+        expected=torch.tensor([-1, -1, 0], dtype=codes.dtype),
+    )
+
+    first, second = compiled(StringTensor.from_list(["x", "z", "q"]))
+    torch.testing.assert_close(
+        actual=first,
+        expected=torch.tensor([-1, -1, -1], dtype=codes.dtype),
+    )
+    torch.testing.assert_close(
+        actual=second,
+        expected=torch.tensor([1, -1, -1], dtype=codes.dtype),
+    )

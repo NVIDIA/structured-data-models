@@ -43,16 +43,12 @@ class TaskDispatch(EnsembleProcessor):
         self._task: Literal["classification", "regression"] | None = None
 
     @property
-    def handles_stypes(self) -> frozenset[Stype]:
+    def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
         if self._task is None:
-            return frozenset(
-                stype
-                for processor in self.processors.values()
-                for stype in processor.handles_stypes
-            )
+            return self._merge_stypes(self.processors.values())
         if self._task not in self.processors:
-            return frozenset()
+            return ()
         return self.processors[self._task].handles_stypes
 
     def _processor(self) -> EnsembleProcessor:

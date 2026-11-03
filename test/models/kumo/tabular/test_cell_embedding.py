@@ -45,6 +45,28 @@ def test_cell_embedding(device: torch.device) -> None:
     torch.testing.assert_close(chunked, expected)
 
 
+@withCUDA
+def test_cell_embedding_num_columns(device: torch.device) -> None:
+    module = CellEmbedding(
+        channels=8, group_size=3, num_frequencies=2, device=device
+    )
+    x = torch.randn(2, 6, 5, device=device)
+    x[:, 1, 1] = torch.nan
+    categorical_mask = torch.tensor(
+        [[False, True, False, False, True], [True, False, False, True, False]],
+        device=device,
+    )
+    num_columns = torch.tensor([3, 4], device=device)
+    actual = module(x, categorical_mask, train_size=3, num_columns=num_columns)
+    for index, columns in enumerate([3, 4]):
+        expected = module(
+            x[index, :, :columns],
+            categorical_mask[index, :columns],
+            train_size=3,
+        )
+        torch.testing.assert_close(actual[index, :, :columns], expected)
+
+
 def test_cell_embedding_imputes_from_context_only() -> None:
     module = CellEmbedding(
         channels=4,

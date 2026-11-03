@@ -33,12 +33,12 @@ def _context(
 @pytest.mark.parametrize(
     ("size", "num_classes", "num_columns", "fit_size", "query_size"),
     [
-        ("small", 0, 30, 4, 620),
-        ("medium", 3, 30, 1, 868),
-        ("large", 10, 30, 1, 786),
-        ("small", 11, 30, 1, 204),
-        ("medium", 100, 30, 1, 75),
-        ("large", 0, 500, 1, 101),
+        ("small", 0, 30, 4, 641),
+        ("medium", 3, 30, 1, 911),
+        ("large", 10, 30, 1, 858),
+        ("small", 11, 30, 1, 224),
+        ("medium", 100, 30, 1, 79),
+        ("large", 0, 500, 1, 102),
     ],
 )
 def test_estimate_batch_sizes(

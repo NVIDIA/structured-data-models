@@ -30,7 +30,11 @@ overview
 
 tensor
 icl
+forecasting
 processing
+nanotabicl
+finetuning
+nim
 ```
 
 ```{toctree}

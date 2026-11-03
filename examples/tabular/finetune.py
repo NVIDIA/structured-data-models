@@ -25,6 +25,8 @@ parser.add_argument(
     choices=("classification", "regression"),
     default="classification",
 )
+# Optimal values for the hyperparameters below depend on the model and
+# dataset. Select them based on validation performance.
 parser.add_argument("--max-epochs", type=int, default=10)
 parser.add_argument("--steps-per-epoch", type=int, default=30)
 parser.add_argument("--context-size", type=int, default=256)

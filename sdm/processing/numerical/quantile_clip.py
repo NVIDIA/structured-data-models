@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
@@ -20,8 +21,11 @@ class ClipQuantiles(Processor):
             bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
+
+    lower_bound: Tensor
+    upper_bound: Tensor
 
     def __init__(
         self,
@@ -51,8 +55,8 @@ class ClipQuantiles(Processor):
             dim=-2,
             keepdim=True,
         )
-        self.lower_bound = q_low
-        self.upper_bound = q_high
+        self._set_buffer("lower_bound", q_low)
+        self._set_buffer("upper_bound", q_high)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Clamp ``table`` to the fitted lower and upper bounds."""

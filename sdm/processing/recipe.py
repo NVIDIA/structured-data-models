@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Self
+
+from torch.nn import Module
 
 import sdm.processing as sp
 from sdm.processing import EnsembleProcessor, Processor
@@ -52,9 +54,9 @@ class Recipe:
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-        self.features = features
-        self.target = target
-        self.output = output
+        self._set_features(features)
+        self._set_target(target)
+        self._set_output(output)
 
     @property
     def features(self) -> EnsembleProcessor:
@@ -63,6 +65,12 @@ class Recipe:
 
     @features.setter
     def features(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
+        self._set_features(processor)
+
+    def _set_features(
         self,
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
@@ -80,15 +88,25 @@ class Recipe:
         self,
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
+        self._set_target(processor)
+
+    def _set_target(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
         if processor is None:
             processor = sp.Identity()
         self._target = EnsembleProcessor.as_processor(processor)
 
-        if any(isinstance(m, sp.TaskDispatch) for m in self.target.modules()):
+        if any(
+            isinstance(m, sp.TaskDispatch) for m in _iter_modules(self.target)
+        ):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
             )
-        if any(isinstance(m, sp.TableDispatch) for m in self.target.modules()):
+        if any(
+            isinstance(m, sp.TableDispatch) for m in _iter_modules(self.target)
+        ):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.target'"
             )
@@ -103,11 +121,19 @@ class Recipe:
         self,
         processor: Processor | Iterable[Processor] | None,
     ) -> None:
+        self._set_output(processor)
+
+    def _set_output(
+        self,
+        processor: Processor | Iterable[Processor] | None,
+    ) -> None:
         if processor is None:
             processor = sp.Identity()
         self._output = EnsembleProcessor.as_processor(processor)
 
-        if any(isinstance(m, sp.TableDispatch) for m in self.output.modules()):
+        if any(
+            isinstance(m, sp.TableDispatch) for m in _iter_modules(self.output)
+        ):
             raise ValueError(
                 "'TableDispatch' is not supported in 'Recipe.output'"
             )
@@ -152,3 +178,19 @@ class Recipe:
             f"  output={self.output.__repr__(indent=2)[2:]},\n"
             ")"
         )
+
+
+def _iter_modules(
+    module: Module, seen: set[Module] | None = None
+) -> Iterator[Module]:
+    # torch.compile can reject modules()/named_modules() while tracing
+    # processor initialization. Call Module.named_children directly to visit
+    # their registered children.
+    if seen is None:
+        seen = set()
+    if module in seen:
+        return
+    seen.add(module)
+    yield module
+    for _, child in Module.named_children(module):
+        yield from _iter_modules(child, seen)

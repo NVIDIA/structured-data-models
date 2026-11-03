@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import torch
 
-from sdm import StringTensor, Stype, TableTensor
+from sdm import StringTensor, TableTensor
 from sdm.processing import SentenceTransformer
 from sdm.processing.text.sentence_transformer import _CuDFTokenizer, _Encoder
 from sdm.testing import onlyCUDA, withCUDA
@@ -256,7 +256,7 @@ def test_forward(device: torch.device) -> None:
 
     output = SentenceTransformer(MODEL_NAME).to(device)(table)
 
-    assert output.columns[Stype.numerical] == tuple(
+    assert output.numerical_columns == tuple(
         f"{column}__emb{i}"
         for column in ("text_0", "text_1")
         for i in range(128)

@@ -13,6 +13,7 @@ from sdm.processing.categorical._categorical import (
     _check_categorical_codes,
     _check_categories,
 )
+from sdm.tensor.categorical import _iter_categories
 
 
 class AddCategoryCounts(Processor):
@@ -32,8 +33,11 @@ class AddCategoryCounts(Processor):
             vocabulary size. Defaults to 0.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
+
+    _log_counts: Tensor
+    _num_categories: Tensor
 
     def __init__(self, min_cardinality: int = 0) -> None:
         super().__init__()
@@ -61,16 +65,19 @@ class AddCategoryCounts(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         _check_categorical_codes(table)
+        categorical = table.categorical
         self._columns = tuple(
             column
             for column, categories in zip(
-                table.columns[Stype.categorical], table.categorical.categories
+                table.categorical_columns, _iter_categories(categorical)
             )
             if categories.numel() > self.min_cardinality
         )
         categorical = table.select_columns(self._columns).categorical
         codes = categorical.code  # [*batch, num_rows, num_columns]
-        sizes = [categories.numel() for categories in categorical.categories]
+        sizes = [
+            categories.numel() for categories in _iter_categories(categorical)
+        ]
         num_categories = codes.new_tensor(sizes, dtype=torch.long)
         # Negative codes accumulate in the slot behind their column's
         # vocabulary: [*batch, num_columns, max(sizes) + 1].
@@ -89,9 +96,12 @@ class AddCategoryCounts(Processor):
             if dtype in {torch.float16, torch.bfloat16}
             else dtype
         )
-        self._log_counts = counts.to(count_dtype).log1p().to(dtype)
-        self._num_categories = num_categories
-        self._categories = BufferList(table.categorical.categories)
+        self._set_buffer(
+            name="_log_counts",
+            value=counts.to(count_dtype).log1p().to(dtype),
+        )
+        self._set_buffer("_num_categories", num_categories)
+        self._categories = BufferList(_iter_categories(table.categorical))
 
     def _transform(self, table: TableTensor) -> TableTensor:
         _check_categories(table, self._categories)
@@ -104,7 +114,7 @@ class AddCategoryCounts(Processor):
 
         out_table = TableTensor(
             columns={
-                Stype.numerical: tuple(
+                Stype.numerical.value: tuple(
                     f"{column}__count" for column in self._columns
                 ),
             },

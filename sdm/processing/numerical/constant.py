@@ -27,7 +27,7 @@ class DropConstantColumns(EnsembleProcessor):
             Must be positive.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(
@@ -76,7 +76,7 @@ class DropConstantColumns(EnsembleProcessor):
         table: TableTensor,
         kept_indices: tuple[int, ...],
     ) -> TableTensor:
-        numerical_columns = table.columns[Stype.numerical]
+        numerical_columns = table.numerical_columns
         if len(kept_indices) == len(numerical_columns):
             return table
         kept_numerical_columns = tuple(
@@ -84,7 +84,7 @@ class DropConstantColumns(EnsembleProcessor):
         )
         columns = [
             column
-            for stype, stype_columns in table.columns.items()
+            for stype, stype_columns in table.column_groups
             for column in (
                 kept_numerical_columns
                 if stype == Stype.numerical
@@ -138,7 +138,7 @@ class DropConstantColumns(EnsembleProcessor):
                     tensor=self._keep_mask(group.numerical)
                     .to(dtype=group.numerical.dtype)
                     .unsqueeze(-2),
-                    columns=group.columns[Stype.numerical],
+                    columns=group.numerical_columns,
                 )
                 for group in groups
             ]

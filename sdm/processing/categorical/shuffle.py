@@ -9,6 +9,7 @@ from torch import Tensor
 from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
+from sdm.tensor.categorical import _iter_categories
 
 
 class ShuffleCategories(EnsembleProcessor):
@@ -27,7 +28,7 @@ class ShuffleCategories(EnsembleProcessor):
             offset, cycling through every offset in random order.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
 
     def __init__(
@@ -61,7 +62,7 @@ class ShuffleCategories(EnsembleProcessor):
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
-                column_name = table.columns[Stype.categorical][column_index]
+                column_name = table.categorical_columns[column_index]
                 key = (column_name, n_classes)
                 offsets = unused_offsets.get(key)
                 if offsets is None or offsets.numel() == 0:
@@ -183,13 +184,19 @@ class ShuffleCategories(EnsembleProcessor):
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
-        for index, (category, permutation) in enumerate(
-            zip(table.categorical.categories, permutations, strict=True)
+        for index, category in zip(
+            range(len(permutations)),
+            _iter_categories(table.categorical),
+            strict=True,
         ):
+            permutation = permutations[index]
             codes = code[..., index]
             valid = valid_mask[..., index]
-            valid_codes = codes[valid].to(torch.long)
-            codes[valid] = permutation[valid_codes].to(codes.dtype)
+            if permutation.numel() > 0:
+                mapped = permutation[codes.clamp_min(0).long()]
+                code[..., index] = torch.where(
+                    valid, mapped.to(codes.dtype), codes
+                )
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(

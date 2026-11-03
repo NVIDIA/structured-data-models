@@ -141,7 +141,7 @@ def test_stype_dispatch_routes_text() -> None:
 
     output = dispatch.fit_transform(table)
 
-    assert output.columns[Stype.text] == ("text_0",)
+    assert output.text_columns == ("text_0",)
     assert output.text.equal(table.text)
 
 

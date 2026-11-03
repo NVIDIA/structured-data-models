@@ -293,9 +293,9 @@ def test_tabiclv2_many_classes_forward_and_cache(
 
 @onlyCUDA
 @onlyFullTest
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_compile(dtype: torch.dtype) -> None:
-    torch._dynamo.reset()
     model = TabICLv2(pretrained=False, device="cuda")
 
     R_context, R_query, C = 5, 3, 6

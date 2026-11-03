@@ -16,7 +16,7 @@ A {py:class}`~sdm.processing.base.Processor` is fully composable:
 - A {py:class}`~sdm.processing.common.StypeDispatch` processor applies a processor per [semantic type](api/generated/sdm.Stype).
 - A {py:class}`~sdm.processing.common.TaskDispatch` processor applies a processor per task (*e.g.*, classification or regression).
 
-Processors let you define powerful recipes that manage the full pre-processing pipeline of input features and targets, as well as post-processing pipelines of model outputs.
+Processors let you define powerful recipes that manage the full preprocessing pipeline of input features and targets, as well as postprocessing pipelines of model outputs.
 In particular:
 
 - [`Recipe.features`](api/generated/sdm.processing.recipe.Recipe): a {py:class}`~sdm.processing.base.Processor` that operates on model inputs, transformed before the model.
@@ -25,7 +25,7 @@ In particular:
 
 ## Usage
 
-Each model defines a default recipe that closely mimics pre- and postprocessing routines of its official implementation (*e.g.*, take a look at the default recipe of {py:class}`~sdm.models.TabICLv2`).
+Each model defines a default recipe that closely mimics the preprocessing and postprocessing routines of its official implementation (*e.g.*, take a look at the default recipe of {py:class}`~sdm.models.TabICLv2`).
 
 Recipes are plain Python objects, so they can be inspected, copied and modified.
 This makes it easy to keep the default model contract while changing one part of the pipeline.

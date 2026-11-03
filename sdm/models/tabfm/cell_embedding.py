@@ -57,6 +57,7 @@ class CellEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C],
         categorical_mask: Tensor,  # [..., C],
         *,
+        num_columns: Tensor | None = None,  # [...]
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
         **kwargs: Tensor,  # [..., R, C],
@@ -67,16 +68,37 @@ class CellEmbedding(torch.nn.Module):
             )
 
         *B, R, C = x.size()
+        if out is not None and out.size() != (*B, R, C, self.channels):
+            raise ValueError("'out' has an incorrect shape")
 
         # Feature grouping:
         index = torch.arange(C, device=x.device)
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
-        index = (index.view(C, 1) + shift.view(1, self.group_size)) % C
-        x = x[..., index]  # [..., R, C, G]
-        kwargs = {key: value[..., index] for key, value in kwargs.items()}
+        index = index.view(C, 1) + shift.view(1, self.group_size)
+        if num_columns is None:
+            index = index % C
+            x = x[..., index]  # [..., R, C, G]
+            kwargs = {key: value[..., index] for key, value in kwargs.items()}
+            categorical_mask = categorical_mask[..., None, index]
+        else:
+            # Circular groups wrap around each table's valid column prefix.
+            index = index % num_columns[..., None, None]
+            index = index.flatten(-2)
+            row_index = index.unsqueeze(-2).expand(*B, R, -1)
+            x = x.gather(-1, row_index).unflatten(-1, (C, self.group_size))
+            kwargs = {
+                key: value.gather(-1, row_index).unflatten(
+                    -1, (C, self.group_size)
+                )
+                for key, value in kwargs.items()
+            }
+            categorical_mask = categorical_mask.expand(*B, C).gather(-1, index)
+            categorical_mask = categorical_mask.unflatten(
+                -1, (C, self.group_size)
+            )
+            categorical_mask = categorical_mask.unsqueeze(-3)
 
         # Compute Fourier features per semantic type (row-agnostic):
-        categorical_mask = categorical_mask[..., None, index]  # [..., 1, C, G]
         freq = torch.where(
             categorical_mask.unsqueeze(-1),  # [..., 1, C, G, 1]
             self.cat_freq.to(torch.float32),  # [G, F]
@@ -108,7 +130,7 @@ class CellEmbedding(torch.nn.Module):
         ).sum(dim=-2)  # [..., 1, C, D]
         bias = bias.to(dtype)
 
-        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+        if torch.is_grad_enabled():
             return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         if batch_size_limit == "auto":
@@ -181,14 +203,18 @@ class CellEmbedding(torch.nn.Module):
             x = x.to(torch.float32).unsqueeze(-1) * freq  # [..., R, C, G, F]
         else:
             tmp = x.new_empty((*B, C, R, G, F), dtype=torch.float32)
-            torch.mul(x.unsqueeze(-1), freq, out=tmp.transpose(-4, -3))
+            torch.mul(
+                input=x.transpose(-3, -2).unsqueeze(-1),
+                other=freq.transpose(-4, -3),
+                out=tmp,
+            )
             x = tmp.transpose(-4, -3)  # [..., R, C, G, F]
             del tmp
 
         # Store rows within each column so the projection uses views.
         fourier = x.new_empty((*B, C, R, G, 2 * F), dtype=weight.dtype)
         fourier = fourier.transpose(-4, -3)  # [..., R, C, G, 2F]
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or torch.compiler.is_compiling():
             fourier[..., : x.size(-1)] = x.sin()
             fourier[..., x.size(-1) :] = x.cos()
         else:
@@ -200,7 +226,11 @@ class CellEmbedding(torch.nn.Module):
         weight = weight.transpose(-3, -2).flatten(-2).squeeze(-4).mT
         # fourier: [..., C, R, G*2F]
         fourier = fourier.transpose(-4, -3).flatten(-2)
-        if out is None or out.dtype != weight.dtype:
+        if (
+            out is None
+            or out.dtype != weight.dtype
+            or torch.compiler.is_compiling()
+        ):
             # projected: [..., R, C, D]
             projected = torch.matmul(fourier, weight).transpose(-3, -2)
             if out is None:

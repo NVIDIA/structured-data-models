@@ -20,7 +20,7 @@ class RandomProjection(EnsembleProcessor):
             ``1 / sqrt(channels)``.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(

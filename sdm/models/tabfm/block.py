@@ -21,9 +21,15 @@ import math
 from typing import Any
 
 import torch
-from torch.nn import RMSNorm, Sequential
+from torch.nn import Sequential
 
-from sdm.nn import RotaryEmbedding, SoftplusScale, SwiGLU, TransformerBlock
+from sdm.nn import (
+    RMSNorm,
+    RotaryEmbedding,
+    SoftplusScale,
+    SwiGLU,
+    TransformerBlock,
+)
 
 
 class TabFMTransformerBlock(TransformerBlock):
@@ -78,8 +84,7 @@ class TabFMTransformerBlock(TransformerBlock):
     ) -> int:
         r""":meta private:"""  # noqa: D415
         length = max(query_length, key_value_length or 0)
-        factor = 18 if element_size <= 2 else 16
-        return factor * length * element_size * self.attn.q_dim
+        return 17 * length * element_size * self.attn.q_dim
 
 
 if __name__ == "__main__":

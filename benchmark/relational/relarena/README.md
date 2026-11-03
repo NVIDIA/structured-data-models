@@ -1,4 +1,4 @@
-# Relational Models on RelArena-α
+# Relational Foundation Models on RelArena-α
 
 This benchmark evaluates `structured-data-models` on the [RelArena-α](https://github.com/PriorLabs/relarena) benchmark.
 

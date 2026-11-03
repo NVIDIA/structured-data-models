@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import DropConstantColumns
 from sdm.testing import withCUDA
 
@@ -24,7 +24,7 @@ def test_unique_filter(device: torch.device) -> None:
 
     output = DropConstantColumns().fit_transform(table)
 
-    assert output.columns[Stype.numerical] == (
+    assert output.numerical_columns == (
         "1",
         "2",
         "3",
@@ -48,7 +48,7 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
 
     output = DropConstantColumns(threshold=2).fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("2",)
+    assert output.numerical_columns == ("2",)
 
 
 def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
@@ -140,5 +140,5 @@ def test_unique_filter_nan(device: torch.device) -> None:
 
     output = DropConstantColumns(threshold=2).fit_transform(table)
 
-    assert output.columns[Stype.numerical] == ("2",)
+    assert output.numerical_columns == ("2",)
     torch.testing.assert_close(output.numerical, data[:, [2]], equal_nan=True)

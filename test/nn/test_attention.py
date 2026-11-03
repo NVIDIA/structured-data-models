@@ -35,7 +35,7 @@ def reference_sdpa(
         query=query.transpose(-3, -2),
         key=key.transpose(-3, -2),
         value=value.transpose(-3, -2),
-        attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
+        attn_mask=attn_mask,
         scale=scale,
     ).transpose(-3, -2)
 
@@ -94,7 +94,7 @@ def test_sdpa(
     query = torch.randn(2, 3, num_query_heads, channels, device=device)
     key = torch.randn(5, num_key_value_heads, channels, device=device)
     value = torch.randn(1, 5, num_key_value_heads, channels, device=device)
-    attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool, device=device)
+    attn_mask = torch.randint(0, 2, (1, 3, 5), dtype=torch.bool, device=device)
 
     out = module(
         query=query,
@@ -161,8 +161,8 @@ def test_sdpa(
     key_index = torch.arange(key_value_len, device=device).view(
         1, 1, key_value_len
     )
-    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
-    attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1, 1)
+    attn_mask = attn_mask.expand(batch_size, 1, query_len, key_value_len)
     expected = reference_sdpa(
         query=query,
         key=key,
@@ -232,6 +232,27 @@ def test_sdpa_scale(device: torch.device) -> None:
 
 
 @withCUDA
+def test_sdpa_additive_bias(device: torch.device) -> None:
+    module = SDPA(num_query_heads=2)
+    query = torch.randn(2, 4, 2, 8, device=device)
+    key = torch.randn(5, 2, 8, device=device)
+    value = torch.randn_like(key)
+    bias = torch.randn(2, 2, 1, 5, device=device, requires_grad=True)
+
+    out = module(query=query, key=key, value=value, attn_mask=bias)
+    expected = reference_sdpa(
+        query=query,
+        key=key,
+        value=value,
+        attn_mask=bias,
+    )
+    torch.testing.assert_close(out, expected)
+    (gradient,) = torch.autograd.grad(out.square().sum(), bias)
+    (expected_gradient,) = torch.autograd.grad(expected.square().sum(), bias)
+    torch.testing.assert_close(gradient, expected_gradient)
+
+
+@withCUDA
 @pytest.mark.parametrize("value_channels", [8, 4])
 def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     # Empty key/value batches should give empty results, even with queries.
@@ -281,17 +302,6 @@ def test_sdpa_errors() -> None:
             seqused_key_value=torch.tensor([1], dtype=torch.int64),
         )
 
-    with pytest.raises(
-        ValueError,
-        match=r"`attn_mask` must have dtype torch\.bool",
-    ):
-        module(
-            query=query,
-            key=key,
-            value=value,
-            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
-        )
-
     with pytest.raises(ValueError, match="must be divisible"):
         SDPA(num_query_heads=4, num_key_value_heads=3)
 
@@ -334,7 +344,9 @@ def test_attention(
 
     query = torch.randn(2, 4, channels, device=device)
     key_value = torch.randn(2, 5, channels, device=device)
-    attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool, device=device)
+    attn_mask = torch.randint(
+        0, 2, (2, 1, 4, 5), dtype=torch.bool, device=device
+    )
 
     out = module(query=query, key_value=None)
     assert out.shape == query.shape
@@ -382,7 +394,7 @@ def test_attention_kv_cache(qassmax: bool) -> None:
             [True, True, True, True, True],
         ],
         dtype=torch.bool,
-    ).expand(2, -1, -1)
+    ).expand(2, 1, -1, -1)
 
     direct_out = module(
         query=query,
@@ -444,7 +456,7 @@ def test_attention_errors() -> None:
         module(
             query=query,
             seqused_key_value=torch.tensor([4, 4], dtype=torch.int32),
-            attn_mask=torch.randint(0, 2, (2, 4, 5), dtype=torch.bool),
+            attn_mask=torch.randint(0, 2, (2, 1, 4, 5), dtype=torch.bool),
         )
 
     with pytest.raises(
@@ -454,15 +466,6 @@ def test_attention_errors() -> None:
         module(
             query=query,
             seqused_key_value=torch.tensor([4, 4], dtype=torch.int64),
-        )
-
-    with pytest.raises(
-        ValueError,
-        match=r"`attn_mask` must have dtype torch\.bool",
-    ):
-        module(
-            query=query,
-            attn_mask=torch.ones(2, 4, 4, dtype=torch.float32),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
@@ -512,6 +515,7 @@ def test_attention_batch_size_limit_propagation() -> None:
     torch.testing.assert_close(out, expected)
 
 
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize(
     ("requires_grad", "compiling"),
     [
@@ -519,7 +523,7 @@ def test_attention_batch_size_limit_propagation() -> None:
         pytest.param(False, True, id="compiling"),
     ],
 )
-def test_transformer_block_batch_size_limit_bypass(
+def test_transformer_block_batch_size_limit(
     requires_grad: bool,
     compiling: bool,
 ) -> None:
@@ -536,18 +540,13 @@ def test_transformer_block_batch_size_limit_bypass(
         lambda _module, args: batch_sizes.append(args[0].size(0))
     )
 
-    with (
-        torch.set_grad_enabled(requires_grad),
-        patch.object(
-            torch.compiler,
-            "is_compiling",
-            return_value=compiling,
-        ),
-    ):
+    if compiling:
+        module = torch.compile(module, backend="eager", fullgraph=True)
+    with torch.set_grad_enabled(requires_grad):
         module(query=query, batch_size_limit=2)
     handle.remove()
 
-    assert batch_sizes == [5]
+    assert batch_sizes == ([5] if requires_grad else [2, 2, 1])
 
 
 def test_return_key_value_positional_compatibility() -> None:
@@ -598,8 +597,8 @@ def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     key_index = torch.arange(key_value_len, device=device).view(
         1, 1, key_value_len
     )
-    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
-    attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1, 1)
+    attn_mask = attn_mask.expand(batch_size, 1, query_len, key_value_len)
 
     out = module(query=query)
     assert out.size() == query.size()

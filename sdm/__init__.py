@@ -3,6 +3,12 @@
 
 """Structured data modeling primitives."""
 
+__lazy_modules__ = {
+    "sdm.models",
+    "sdm.evaluation",
+    "sdm.explain",
+}
+
 from importlib.metadata import PackageNotFoundError, version
 
 from sdm._constants import NaT
@@ -24,7 +30,9 @@ from sdm.relational import (
     RelatedTables,
 )
 from sdm.processing import Recipe
-from sdm import models, evaluation, explain
+import sdm.models as models
+import sdm.evaluation as evaluation
+import sdm.explain as explain
 
 try:
     __version__ = version("structured-data-models")

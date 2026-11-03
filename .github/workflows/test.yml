@@ -17,6 +17,10 @@ permissions:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.15']
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
@@ -24,7 +28,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
           activate-environment: true
 
       - name: Install package
@@ -33,18 +37,25 @@ jobs:
           uv pip install \
             --torch-backend=cpu \
             --find-links=https://data.pyg.org/whl/torch-2.14.0+cpu.html \
-            --group=test \
+            --group=test-cpu \
             -e .
 
       - name: Run tests
         env:
           FULL_TEST: ${{ ((github.event_name == 'push' && github.ref_name == 'main') || contains(github.event.pull_request.labels.*.name, 'ci-full-test')) && '1' || '0' }}
         run: |
-          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
+          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10 --junitxml=junit.xml
 
-      # TODO: Uncomment when we make the repo public.
-      # - name: Upload coverage
-      #   if: ${{ runner.os == 'Linux' }}
-      #   uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v7.0.0
-      #   with:
-      #     fail_ci_if_error: false
+      - name: Upload coverage
+        if: ${{ runner.os == 'Linux' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results

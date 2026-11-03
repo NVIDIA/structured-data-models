@@ -93,7 +93,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         output_distribution: Distribution to map the empirical quantiles to.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     _quantiles: Tensor
@@ -186,8 +186,8 @@ class QuantileTransform(Processor, InvertibleMixin):
             )
             .movedim(-1, -2)
         )
-        self._quantiles = quantiles
-        self._references = references
+        self._set_buffer("_quantiles", quantiles)
+        self._set_buffer("_references", references)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical
