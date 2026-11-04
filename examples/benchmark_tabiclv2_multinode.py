@@ -46,6 +46,7 @@ import argparse
 import atexit
 import importlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -53,6 +54,8 @@ import sys
 import tempfile
 import time
 import traceback
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
@@ -137,16 +140,51 @@ def barrier(world: int, device: torch.device) -> None:
         dist.barrier(device_ids=[device.index])
 
 
+@contextmanager
+def coordinated(
+    ready: Tensor, rank: int, world: int, message: str
+) -> Iterator[None]:
+    """Abort all ranks if one rank's local work fails.
+
+    Status storage is allocated before fallible work. Data collectives
+    stay outside this context: transport failures cannot be recovered by
+    attempting another reduction on the same process group.
+    """
+    ready.fill_(1)
+    try:
+        yield
+    except Exception:  # noqa: BLE001 - reported, then a joint abort
+        traceback.print_exc()
+        ready.zero_()
+    if world > 1:
+        dist.all_reduce(ready, op=dist.ReduceOp.MIN)
+    if not ready.item():
+        abort(message, rank=rank, world=world)
+
+
 def gather_stats(
-    value: float, world: int, device: torch.device
+    value: float, world: int, device: torch.device, *, ready: Tensor
 ) -> list[float]:
     """Collect one scalar from every rank."""
     if world == 1:
-        return [value]
-    tensor = torch.tensor([value], device=device)
-    out = [torch.zeros_like(tensor) for _ in range(world)]
+        return [float(value)]
+    rank = dist.get_rank()
+    with coordinated(
+        ready=ready,
+        rank=rank,
+        world=world,
+        message="statistics preparation failed on at least one rank",
+    ):
+        tensor = torch.tensor([float(value)], device=device)
+        out = [torch.zeros_like(tensor) for _ in range(world)]
     dist.all_gather(out, tensor)
-    return [t.item() for t in out]
+    with coordinated(
+        ready=ready,
+        rank=rank,
+        world=world,
+        message="statistics conversion failed on at least one rank",
+    ):
+        return [t.item() for t in out]
 
 
 def prepare_model(
@@ -246,7 +284,8 @@ def rank_agreement_gate(
     rank: int,
     world: int,
     device: torch.device,
-) -> tuple[bool, list[list[float]]]:
+    ready: Tensor | None = None,
+) -> tuple[bool, list[list[float | None]]]:
     """Gate rank agreement on the padded, masked path the phases time.
 
     Every rank predicts the same broadcast off-grid table through
@@ -254,11 +293,14 @@ def rank_agreement_gate(
     variable-length path when enabled - are what get compared), and
     per-rank deviations from rank 0 are gated on decision margins.
     Returns the verdict and the per-rank ``[max_abs_diff, margin_ratio,
-    top1]`` statistics.
+    top1]`` statistics, with non-finite report values represented as ``None``.
     """
     # Reuse preallocated status storage so reporting a local allocation
     # failure does not require another device allocation.
-    ready = torch.ones((), device=device)
+    if ready is None:
+        ready = torch.ones((), device=device)
+    else:
+        ready.fill_(1)
     # Input allocation can fail before a rank reaches the first broadcast.
     # Coordinate that failure before any peer enters the broadcast.
     x = y = None
@@ -357,7 +399,10 @@ def rank_agreement_gate(
     try:
         spread = torch.stack(gathered)
         verdict = agreement_verdict(spread)
-        reported = spread.tolist()
+        reported = [
+            [value if math.isfinite(value) else None for value in row]
+            for row in spread.tolist()
+        ]
         if rank == 0:
             # Torch reductions propagate NaN (Python's ``max`` would skip it).
             print(
@@ -465,61 +510,55 @@ def main() -> None:
     args = parser.parse_args()
 
     rank, world, device = init_distributed(args.duration)
-    torch.set_float32_matmul_precision("high")
-    # Startup costs are cold-cache numbers: each rank compiles into its own
-    # fresh Inductor cache (the single-node driver does the same per cell).
-    cache_dir = tempfile.mkdtemp(prefix="inductor-multinode-")
-    os.environ["TORCHINDUCTOR_CACHE_DIR"] = cache_dir
-    # Normal completion, ``abort`` and an exception in this rank all reach
-    # the exit handler. A peer's failure arrives as ``SIGTERM`` from the
-    # elastic agent, which would skip it, so turn that into ``SystemExit``
-    # too; a rank blocked inside a collective at that moment still keeps
-    # its directory, as the agent escalates to ``SIGKILL``.
-    atexit.register(shutil.rmtree, cache_dir, ignore_errors=True)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))
-
-    # Preparation can fail on one rank alone (weights, OOM, a broken
-    # optional wheel). Under ``srun`` that rank's exit does not reap its
-    # peers, which would then sit in the varlen gate or the agreement
-    # broadcast for the whole NCCL timeout, so reduce a success flag first
-    # and abort every rank together, like the varlen gate below.
-    prepare_error: Exception | None = None
-    try:
+    # Allocate once, before any recoverable local work. A failure to
+    # establish this initial control storage cannot itself be coordinated.
+    ready = torch.ones((), device=device)
+    model = None
+    timings: dict[str, float] = {}
+    with coordinated(
+        ready=ready,
+        rank=rank,
+        world=world,
+        message="model preparation failed on at least one rank",
+    ):
+        torch.set_float32_matmul_precision("high")
+        # Fresh caches keep startup costs cold on every rank.
+        cache_dir = tempfile.mkdtemp(prefix="inductor-multinode-")
+        os.environ["TORCHINDUCTOR_CACHE_DIR"] = cache_dir
+        atexit.register(shutil.rmtree, cache_dir, ignore_errors=True)
+        # An elastic agent's SIGTERM must also reach the cache cleanup.
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))
         model, timings = prepare_model(device, use_varlen=args.use_varlen)
-    except Exception as exc:  # noqa: BLE001 - reported, then a joint abort
-        prepare_error = exc
-        traceback.print_exc()
-        model, timings = None, {}
-    prepared = torch.tensor(float(prepare_error is None), device=device)
-    if world > 1:
-        dist.all_reduce(prepared, op=dist.ReduceOp.MIN)
-    if not prepared.item():
-        abort(
-            "model preparation failed on at least one rank (its traceback "
-            "is above) - aborting before any collective phase",
-            rank=rank,
-            world=world,
-        )
     assert model is not None
     if args.use_varlen:
-        # Every rank must have the wheel and every warmed shape must serve
-        # on a cuDNN graph; reduce before deciding so no rank aborts alone.
-        engaged = torch.tensor(
-            [timings["varlen_active"], timings["varlen_graphs_built"]],
-            device=device,
-        )
-        failures = torch.tensor(
-            timings["varlen_build_failures"], device=device
-        )
+        # Prepare every reduction input before any peer enters it.
+        with coordinated(
+            ready=ready,
+            rank=rank,
+            world=world,
+            message="variable-length statistics failed on at least one rank",
+        ):
+            engaged = torch.tensor(
+                [timings["varlen_active"], timings["varlen_graphs_built"]],
+                device=device,
+            )
+            failures = torch.tensor(
+                timings["varlen_build_failures"], device=device
+            )
         if world > 1:
             dist.all_reduce(engaged, op=dist.ReduceOp.MIN)
             dist.all_reduce(failures, op=dist.ReduceOp.MAX)
-        # Warmup passes counts for every masked bucket, so the path was
-        # exercised on every rank; the wheel itself is the extra term.
-        active, built = engaged.tolist()
-        if not active or not varlen_engaged(
-            int(built), int(failures.item()), exercised=True
+        with coordinated(
+            ready=ready,
+            rank=rank,
+            world=world,
+            message="variable-length verdict failed on at least one rank",
         ):
+            active, built = engaged.tolist()
+            varlen_ok = bool(active) and varlen_engaged(
+                int(built), int(failures.item()), exercised=True
+            )
+        if not varlen_ok:
             abort(
                 "--use-varlen requested but the cuDNN variable-length path "
                 "did not fully engage on at least one rank "
@@ -529,73 +568,91 @@ def main() -> None:
                 rank=rank,
                 world=world,
             )
-    environment = {
-        "device": torch.cuda.get_device_name(device),
-        "torch": torch.__version__,
-        "cuda": torch.version.cuda,
-        # The cuDNN attention plan build JIT-compiles its kernel through
-        # the driver, which caches the result on disk; the fresh-shape
-        # costs inside the warmup are warm- or cold-cache numbers
-        # depending on this state (see the single-node driver).
-        "cuda_cache_disabled": os.environ.get("CUDA_CACHE_DISABLE") == "1",
-        "cuda_cache_path": os.environ.get("CUDA_CACHE_PATH"),
-        "cudnn": torch.backends.cudnn.version(),
-        "sdm": sdm.__version__,
-    }
-    if args.use_varlen:
-        # The engagement gate above proved the frontend imports; its
-        # version is part of the varlen numbers' provenance.
-        environment["cudnn_frontend"] = importlib.import_module(
-            "cudnn"
-        ).__version__
-    report: dict[str, Any] = {
-        "world_size": world,
-        "duration_s": args.duration,
-        "use_varlen": args.use_varlen,
-        # Rank 0 writes the report, so this names its device and stack.
-        "environment": environment,
-        "row_buckets": ROW_BUCKETS,
-        "startup": {
-            key: gather_stats(value, world, device)
-            for key, value in timings.items()
-        },
-    }
-
-    agreement, agreement_stats = rank_agreement_gate(
-        model=model,
+    report: dict[str, Any] = {}
+    with coordinated(
+        ready=ready,
         rank=rank,
         world=world,
-        device=device,
+        message="report setup failed on at least one rank",
+    ):
+        environment = {
+            "device": torch.cuda.get_device_name(device),
+            "torch": torch.__version__,
+            "cuda": torch.version.cuda,
+            # cuDNN plan builds can reuse the driver cache even with a
+            # fresh Inductor cache; record this distinction.
+            "cuda_cache_disabled": os.environ.get("CUDA_CACHE_DISABLE") == "1",
+            "cuda_cache_path": os.environ.get("CUDA_CACHE_PATH"),
+            "cudnn": torch.backends.cudnn.version(),
+            "sdm": sdm.__version__,
+        }
+        if args.use_varlen:
+            environment["cudnn_frontend"] = importlib.import_module(
+                name="cudnn"
+            ).__version__
+        report = {
+            "world_size": world,
+            "duration_s": args.duration,
+            "use_varlen": args.use_varlen,
+            "environment": environment,
+            "row_buckets": ROW_BUCKETS,
+            "startup": {},
+        }
+        startup_keys = tuple(timings)
+    for key in startup_keys:
+        values = gather_stats(timings[key], world, device, ready=ready)
+        with coordinated(
+            ready=ready,
+            rank=rank,
+            world=world,
+            message="startup report failed on at least one rank",
+        ):
+            report["startup"][key] = values
+
+    agreement, agreement_stats = rank_agreement_gate(
+        model=model, rank=rank, world=world, device=device, ready=ready
     )
-    report["rank_agreement"] = agreement
-    report["rank_agreement_stats"] = agreement_stats
-    if not agreement:
-        # The verdict is identical everywhere, so no rank reaches the phase
-        # barriers - timing an unverified fleet would publish numbers the
-        # gate disowns.
-        if rank == 0:
+    with coordinated(
+        ready=ready,
+        rank=rank,
+        world=world,
+        message="agreement report failed on at least one rank",
+    ):
+        report["rank_agreement"] = agreement
+        report["rank_agreement_stats"] = agreement_stats
+        if not agreement and rank == 0:
             with open(args.out, "w") as handle:
-                json.dump(report, handle, indent=2)
+                json.dump(report, handle, indent=2, allow_nan=False)
+    if not agreement:
         abort(
             "rank agreement FAILED - aborting before any timing",
             rank=rank,
             world=world,
         )
 
-    # Throughput-scaling phases with the first k ranks active. Inactive
-    # ranks wait at the barriers, so every phase runs on an otherwise
-    # idle machine set.
-    phases = sorted({1, 4, 8, 16, 24, 32, world} & set(range(1, world + 1)))
-    report["phases"] = {}
+    # First k ranks serve their independent streams for the same duration.
+    with coordinated(
+        ready=ready,
+        rank=rank,
+        world=world,
+        message="phase setup failed on at least one rank",
+    ):
+        phases = sorted(
+            {1, 4, 8, 16, 24, 32, world} & set(range(1, world + 1))
+        )
+        report["phases"] = {}
     for active in phases:
         barrier(world, device)
-        # Same joint-abort contract as model preparation: a serving
-        # failure on one rank must not leave its peers at the barrier
-        # below for the NCCL timeout.
-        phase_ok = torch.ones((), device=device)
         count, elapsed = 0, 0.0
-        if rank < active:
-            try:
+        with coordinated(
+            ready=ready,
+            rank=rank,
+            world=world,
+            message=(
+                f"serving failed on at least one rank in phase ranks={active}"
+            ),
+        ):
+            if rank < active:
                 count, elapsed = serve_tables(
                     model=model,
                     rank=rank,
@@ -603,46 +660,51 @@ def main() -> None:
                     device=device,
                     seed_base=100_000_000 * active,
                 )
-            except Exception:  # noqa: BLE001 - reported, then a joint abort
-                traceback.print_exc()
-                phase_ok.zero_()
-        if world > 1:
-            dist.all_reduce(phase_ok, op=dist.ReduceOp.MIN)
-        if not phase_ok.item():
-            abort(
-                f"serving failed on at least one rank in phase ranks={active} "
-                "(its traceback is above) - aborting all ranks",
-                rank=rank,
-                world=world,
-            )
         barrier(world, device)
-        counts = gather_stats(float(count), world, device)
-        elapsed_all = gather_stats(elapsed, world, device)
-        phase = phase_summary(counts, elapsed_all, active)
-        report["phases"][str(active)] = phase
-        if rank == 0:
-            per_rank = phase["per_rank_tables_per_s"]
-            row = (
-                f"phase ranks={active}: {phase['tables_per_s']:.2f} tables/s "
-                f"(per-rank {min(per_rank):.2f}-{max(per_rank):.2f} tables/s, "
-                f"spread {100 * phase['per_rank_spread']:.1f}%)"
-            )
-            # Mirrors the single-node driver's DRIFT flag: a rank more than
-            # 5% behind the fastest one marks the phase in the log.
-            if phase["per_rank_spread"] > 0.05:
-                row += " SPREAD"
-            print(row, flush=True)
+        counts = gather_stats(count, world, device, ready=ready)
+        elapsed_all = gather_stats(elapsed, world, device, ready=ready)
+        with coordinated(
+            ready=ready,
+            rank=rank,
+            world=world,
+            message="phase report failed on at least one rank",
+        ):
+            phase = phase_summary(counts, elapsed_all, active)
+            report["phases"][str(active)] = phase
+            if rank == 0:
+                per_rank = phase["per_rank_tables_per_s"]
+                row = (
+                    f"phase ranks={active}: "
+                    f"{phase['tables_per_s']:.2f} tables/s "
+                    f"(per-rank {min(per_rank):.2f}-{max(per_rank):.2f} "
+                    "tables/s, "
+                    f"spread {100 * phase['per_rank_spread']:.1f}%)"
+                )
+                if phase["per_rank_spread"] > 0.05:
+                    row += " SPREAD"
+                print(row, flush=True)
 
-    if rank == 0:
-        base = report["phases"].get("1", {}).get("tables_per_s", 0.0)
-        for active, phase in report["phases"].items():
-            phase["efficiency_vs_1"] = (
-                phase["tables_per_s"] / (int(active) * base) if base else None
+    with coordinated(
+        ready=ready,
+        rank=rank,
+        world=world,
+        message="final report failed on at least one rank",
+    ):
+        if rank == 0:
+            base = report["phases"].get("1", {}).get("tables_per_s", 0.0)
+            for active, phase in report["phases"].items():
+                phase["efficiency_vs_1"] = (
+                    phase["tables_per_s"] / (int(active) * base)
+                    if base
+                    else None
+                )
+            with open(args.out, "w") as handle:
+                json.dump(report, handle, indent=2, allow_nan=False)
+            print(
+                json.dumps(report["phases"], indent=2, allow_nan=False),
+                flush=True,
             )
-        with open(args.out, "w") as handle:
-            json.dump(report, handle, indent=2)
-        print(json.dumps(report["phases"], indent=2), flush=True)
-        print(f"rank agreement: {agreement}", flush=True)
+            print(f"rank agreement: {agreement}", flush=True)
 
     if world > 1:
         dist.destroy_process_group()
