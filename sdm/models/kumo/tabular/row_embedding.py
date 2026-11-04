@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, Linear, ModuleList, Parameter
 
-from sdm._token_buffer import TokenBuffer, run_column_layers
+from sdm._token_buffer import TokenBuffer
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
@@ -165,57 +165,90 @@ class RowEmbedding(torch.nn.Module):
             offload=offload,
         )
 
-        def embed(cells: Tensor, columns: slice) -> None:  # [..., N, R, D]
+        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
+            tokens[..., :K, :] = self.readout_token.to(tokens.dtype)
             self.cell_embedding(
-                x=x,
+                x=x[..., rows, :],
                 categorical_mask=categorical_mask,
                 impute_mean=impute_mean,
-                columns=slice(columns.start - K, columns.stop - K),
                 num_columns=num_columns,
                 batch_size_limit="auto",
-                out=cells.transpose(-2, -3),
+                out=tokens[..., K:, :],
             )
-            if y_emb is not None:
-                cells[..., :R_train, :] += y_emb.unsqueeze(-3).to(cells.dtype)
+            stop = min(rows.stop, R_train)
+            if y_emb is not None and stop > rows.start:
+                tokens[..., : stop - rows.start, K:, :] += y_emb[
+                    ..., rows.start : stop, None, :
+                ].to(tokens.dtype)
 
+        # Column block `i` lets every cell attend to `H_i`, its column's
+        # inducing points after attending to the column's context cells. Only
+        # `H_i` needs whole columns, and since attention over the context rows
+        # can be accumulated chunk by chunk (`summarize` merges chunks by
+        # log-sum-exp), it can be built during a row pass. So instead of
+        # alternating column and row passes (`2 * L` passes), pass `i`
+        # streams the buffer once and, for each row chunk:
+        #   1. completes column block `i - 1` with `H_{i-1}` (pass 0 embeds
+        #      the cells instead),
+        #   2. runs row block `i - 1` (none in pass 0), and
+        #   3. accumulates the chunk's context rows into `H_i` (none in the
+        #      last pass).
+        # `H_i` is complete when pass `i` ends, ready for pass `i + 1`, which
+        # gives `L + 1` passes in total.
+        L = len(self.row_blocks)
+        col_blocks = cast(list[InducedTransformerBlock], self.col_blocks)
+        replaying = cache is not None and cache.is_replaying
         with buffer:
             readout = buffer.readout(K)  # [..., R, K, D]
-            for i, (col_block, row_block) in enumerate(
-                zip(self.col_blocks, self.row_blocks)
-            ):
-                run_column_layers(
-                    buffer,
-                    [(f"row_embedding.col_block{i}", col_block)],
-                    tokens=slice(K, K + C),
-                    key_rows=[slice(R_train)],
-                    cache=cache,
-                    embed=embed if i == 0 else None,
-                )
-                y_emb = None
-
-                first = i == 0
-                last = i == len(self.row_blocks) - 1
+            key_value: KVCacheEntry | None = None
+            for i in range(L + 1):
+                summary: tuple[Tensor, Tensor] | None = None
 
                 def update(
                     tokens: Tensor,  # [..., N, K + C, D]
                     rows: slice,
-                    row_block: torch.nn.Module = row_block,
-                    first: bool = first,
-                    last: bool = last,
+                    i: int = i,
+                    key_value: KVCacheEntry | None = key_value,
                 ) -> None:
-                    if first:
-                        tokens[..., :K, :] = self.readout_token.to(
-                            tokens.dtype
+                    nonlocal summary
+                    if i == 0:
+                        embed(tokens, rows)
+                    else:
+                        cells = tokens[..., K:, :].transpose(-2, -3)
+                        col_blocks[i - 1](
+                            query=cells,  # [..., C, N, D]
+                            key_value=key_value,
+                            batch_size_limit="auto",
+                            out=cells,
                         )
-                    row_block(
-                        query=tokens[..., :K, :] if last else tokens,
-                        key_value=tokens,
-                        seqused_key_value=row_key_lengths,
-                        batch_size_limit="auto",
-                        out=readout[..., rows, :, :] if last else tokens,
-                    )
+                        self.row_blocks[i - 1](
+                            query=tokens[..., :K, :] if i == L else tokens,
+                            key_value=tokens,
+                            seqused_key_value=row_key_lengths,
+                            batch_size_limit="auto",
+                            out=readout[..., rows, :, :] if i == L else tokens,
+                        )
+                    stop = min(rows.stop, R_train) - rows.start
+                    if i < L and not replaying and stop > 0:
+                        summary = col_blocks[i].summarize(
+                            tokens[..., :stop, K:, :].transpose(-2, -3),
+                            key_len=R_train,
+                            summary=summary,
+                            batch_size_limit="auto",
+                        )
 
-                buffer.rows(update, store=not last)
+                buffer.rows(update, load=i > 0, store=i < L)
+                y_emb = None
+                if i < L:
+                    key = f"row_embedding.col_block{i}"
+                    if replaying:
+                        assert cache is not None
+                        key_value = cast(KVCacheEntry, cache[key])
+                    else:
+                        assert summary is not None
+                        key_value = col_blocks[i].induced_key_value(summary)
+                        if cache is not None and cache.is_recording:
+                            cache[key] = key_value
 
         return self.norm(readout).flatten(-2)
 
