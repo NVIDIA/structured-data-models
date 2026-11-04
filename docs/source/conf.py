@@ -32,7 +32,9 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
+    "sphinxcontrib.mermaid",
 ]
+myst_fence_as_directive = ["mermaid"]
 templates_path = ["_templates"]
 html_theme = "shibuya"
 html_title = project
