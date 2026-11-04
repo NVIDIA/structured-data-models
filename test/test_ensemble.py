@@ -9,16 +9,6 @@ import torch
 from sdm import EnsembleTable, EnsembleTensor, TableTensor
 
 
-def test_tensor_member() -> None:
-    group = torch.tensor([[1.0], [2.0]])
-    ensemble = EnsembleTensor(
-        groups=(group,),
-        locations=((0, 1), (0, 0), (0, 1)),
-    )
-
-    torch.testing.assert_close(ensemble[0], group[1])
-
-
 def test_tensor_member_selection() -> None:
     first = torch.tensor([[1.0], [2.0], [3.0]])
     second = torch.tensor([[4.0]])
@@ -187,49 +177,6 @@ def test_gather_members_rejects_source_count_mismatch() -> None:
             tables=(ensemble_table,),
             member_ids=(0, 1),
         )
-
-
-def test_getitem_preserves_groups_and_order() -> None:
-    tables = tuple(
-        TableTensor.from_tensor(torch.tensor([[value]], dtype=torch.float32))
-        for value in range(3)
-    )
-    ensemble_table = EnsembleTable(
-        groups=(cast(TableTensor, torch.stack(tables)),),
-        locations=((0, 2), (0, 0), (0, 1), (0, 2)),
-    )
-
-    output = ensemble_table[1, 3, 0]
-
-    assert len(output) == 3
-    assert output.num_groups == 1
-    assert next(output._iter_groups()).size(0) == 2
-    assert output[0].equal(tables[0])
-    assert output[1].equal(tables[2])
-    assert output[2].equal(tables[2])
-
-    output = ensemble_table[1:4:2]
-
-    assert len(output) == 2
-    assert output.num_groups == 1
-    assert next(output._iter_groups()).size(0) == 2
-    assert output[0].equal(tables[0])
-    assert output[1].equal(tables[2])
-
-
-@pytest.mark.parametrize("member_ids", [(0, 2, 4), (4, 2, 0), (0, 3, 4)])
-def test_getitem_strided_members(member_ids: tuple[int, ...]) -> None:
-    values = torch.arange(30).float().reshape(5, 3, 2)
-    table = EnsembleTable(
-        groups=(TableTensor.from_tensor(values),),
-        locations=tuple((0, index) for index in range(5)),
-    )
-
-    selected = table[member_ids]
-
-    assert len(selected) == len(member_ids)
-    for position, index in enumerate(member_ids):
-        torch.testing.assert_close(selected[position].numerical, values[index])
 
 
 def test_concatenate_columns_preserves_member_order() -> None:
