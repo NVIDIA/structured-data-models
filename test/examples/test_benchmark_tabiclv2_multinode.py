@@ -369,3 +369,111 @@ def test_main_aborts_after_local_failure(
     with pytest.raises(SystemExit, match="1"):
         multinode.main()
     assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    argnames="peer_failure",
+    argvalues=["prepare", "serve", None],
+    ids=["peer-prepare", "peer-serve", "healthy"],
+)
+def test_main_coordinates_peer_failure(
+    multinode: ModuleType,
+    main_setup: tuple[Path, torch.Tensor, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch,
+    peer_failure: str | None,
+) -> None:
+    path, _, _ = main_setup
+    prepare_model = multinode.prepare_model
+    serve_tables = multinode.serve_tables
+    phase_summary = multinode.phase_summary
+    trace = []
+    completed = []
+    stage = None
+    failed = False
+
+    def record(event: str) -> None:
+        assert not failed, f"Reached {event} after a peer failed"
+        if stage is not None and stage == peer_failure:
+            assert event == "reduce", f"Reached {event} before checking peers"
+        trace.append(event)
+
+    def prepare(*args: object, **kwargs: object) -> object:
+        nonlocal stage
+        record("prepare")
+        result = prepare_model(*args, **kwargs)
+        completed.append("prepare")
+        stage = "prepare"
+        return result
+
+    def serve(**kwargs: object) -> object:
+        nonlocal stage
+        record("serve")
+        result = serve_tables(**kwargs)
+        completed.append("serve")
+        stage = "serve"
+        return result
+
+    def reduce(tensor: torch.Tensor, op: object) -> None:
+        nonlocal stage, failed
+        record("reduce")
+        if stage is not None and stage == peer_failure:
+            # Local work succeeded; only the peer contributes a zero.
+            assert op == multinode.dist.ReduceOp.MIN
+            assert tensor.numel() == 1
+            assert tensor.item() == 1
+            tensor.zero_()
+            failed = True
+            trace.append("peer_failure")
+        stage = None
+
+    def gather(out: list[torch.Tensor], tensor: torch.Tensor) -> None:
+        record("gather")
+        for value in out:
+            value.copy_(tensor)
+
+    def broadcast(*args: object, **kwargs: object) -> None:
+        record("broadcast")
+
+    def barrier(**kwargs: object) -> None:
+        record("barrier")
+
+    def summarize(*args: object, **kwargs: object) -> object:
+        record("phase_summary")
+        return phase_summary(*args, **kwargs)
+
+    monkeypatch.setattr(
+        target=multinode,
+        name="init_distributed",
+        value=lambda duration: (0, 2, torch.device("cpu")),
+    )
+    for name, value in (
+        ("prepare_model", prepare),
+        ("serve_tables", serve),
+        ("phase_summary", summarize),
+    ):
+        monkeypatch.setattr(target=multinode, name=name, value=value)
+    for name, value in (
+        ("get_rank", lambda: 0),
+        ("all_reduce", reduce),
+        ("all_gather", gather),
+        ("broadcast", broadcast),
+        ("barrier", barrier),
+        ("destroy_process_group", lambda: trace.append("destroy")),
+    ):
+        monkeypatch.setattr(target=multinode.dist, name=name, value=value)
+    if peer_failure is not None:
+        with pytest.raises(SystemExit) as exc:
+            multinode.main()
+        assert exc.value.code == 1
+        assert peer_failure in completed
+        assert trace[-2:] == ["peer_failure", "destroy"]
+        assert not path.exists()
+    else:
+        assert multinode.main() is None
+        assert trace[-1] == "destroy"
+        report = json.loads(path.read_text())
+        json.dumps(report, allow_nan=False)
+        assert report["world_size"] == 2
+        assert report["rank_agreement"] is True
+        assert report["startup"]["load_s"] == [1.0, 1.0]
+        assert report["phases"]["2"]["per_rank_tables"] == [2.0, 2.0]
