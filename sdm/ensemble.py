@@ -286,18 +286,18 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
             # must match for torch.stack to preserve member semantics.
             compatibility_key: tuple[object, ...] = (
                 table.column_groups,
+                table.device,
+                vocabulary_key,
                 tuple(
                     (
                         stype,
                         type(block),
-                        block.size(),
                         block.layout,
                         block.dtype,
+                        block.size(),
                     )
                     for stype, block in TableTensor.items(table)
                 ),
-                table.device,
-                vocabulary_key,
             )
             if torch.compiler.is_compiling():
                 # Hash group IDs to avoid fixing row and column counts during
