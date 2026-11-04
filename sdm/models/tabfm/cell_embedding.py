@@ -171,7 +171,6 @@ class CellEmbedding(torch.nn.Module):
             )
 
         rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
-        # Specialize on chunk count rather than the exact row count.
         for chunk_index in range((R + rows_per_chunk - 1) // rows_per_chunk):
             start = chunk_index * rows_per_chunk
             self._forward(
