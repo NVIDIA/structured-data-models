@@ -885,30 +885,35 @@ def spawn_cell(
     env["TORCHINDUCTOR_CACHE_DIR"] = tempfile.mkdtemp(
         prefix=f"inductor-{spec['config']}-", dir=workdir
     )
-    proc = subprocess.run(
-        [
-            sys.executable,
-            os.path.abspath(__file__),
-            "--run-cell",
-            json.dumps(spec),
-            "--out",
-            out_path,
-            "--workdir",
-            workdir,
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=1800,
-    )
-    if proc.returncode != 0:
-        record = dict(spec)
-        record["error"] = proc.stderr[-2000:]
-        with open(out_path, "a") as handle:
-            handle.write(json.dumps(record) + "\n")
-        return record
-    with open(out_path) as handle:
-        return json.loads(handle.readlines()[-1])
+    try:
+        proc = subprocess.run(
+            args=[
+                sys.executable,
+                os.path.abspath(__file__),
+                "--run-cell",
+                json.dumps(spec),
+                "--out",
+                out_path,
+                "--workdir",
+                workdir,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+    except subprocess.TimeoutExpired as exc:
+        error = str(exc)
+    else:
+        if proc.returncode == 0:
+            with open(out_path) as handle:
+                return json.loads(handle.readlines()[-1])
+        error = proc.stderr[-2000:]
+    record = dict(spec)
+    record["error"] = error
+    with open(out_path, "a") as handle:
+        handle.write(json.dumps(record) + "\n")
+    return record
 
 
 def main() -> None:
@@ -993,6 +998,7 @@ def main() -> None:
         and r.get("p50_s")
         and r["config"] != "c0-fp32"
         and r.get("accuracy", {}).get("pass")
+        and not r.get("table_stream_errors")
     ]
     # Rank by the worst of steady-state and both per-fresh-table passes so
     # a config that recompiles per shape cannot win on p50 alone, and keep

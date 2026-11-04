@@ -130,10 +130,8 @@ class RowEmbedding(torch.nn.Module):
         # attention mask below excludes.
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
-        # Clamping keeps gather indices in bounds for (documented as
-        # invalid) non-positive or over-C counts, avoiding device-side
-        # undefined reads; over-counts degrade to full-width grouping,
-        # consistent with the saturating row-attention key mask below.
+        # Keep gather indices in bounds for non-positive or over-C counts;
+        # the row-attention mask below uses the same bounded count.
         num_cols = (
             C if seqused_cols is None else seqused_cols.clamp(min=1, max=C)
         )
@@ -237,7 +235,7 @@ class RowEmbedding(torch.nn.Module):
         attn_mask = None
         if seqused_cols is not None:
             key_index = torch.arange(K + C, device=x.device)
-            attn_mask = (key_index < K + seqused_cols).view(1, K + C)
+            attn_mask = (key_index < K + num_cols).view(1, K + C)
 
         # Row-wise attention (B * R as the batch axis).
         row_batch_size_limit = attention_batch_size_limit(

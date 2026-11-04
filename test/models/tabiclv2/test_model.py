@@ -859,28 +859,60 @@ def test_seqused_cpu_counts(fit_device: str) -> None:
     )
 
 
-def test_seqused_cols_validates() -> None:
-    model = TabICLv2(pretrained=False)
-    x_context = torch.randn(6, 5)
-    x_query = torch.randn(2, 5)
-    y_context = torch.randint(0, 10, (6, 1))
+@withCUDA
+def test_seqused_cols_validates(device: torch.device) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+    x_context = torch.randn(6, 5, device=device)
+    x_query = torch.randn(2, 5, device=device)
+    y_context = torch.tensor([[5], [7], [5], [7], [5], [7]], device=device)
 
     with pytest.raises(ValueError, match=r"torch\.int32"):
         model(
-            x_context,
-            y_context,
-            x_query,
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
             recipe=Recipe(),
-            seqused_cols=torch.tensor(5),
+            seqused_cols=torch.tensor(5, device=device),
         )
     with pytest.raises(ValueError, match="scalar"):
         model(
-            x_context,
-            y_context,
-            x_query,
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
             recipe=Recipe(),
-            seqused_cols=torch.tensor([5], dtype=torch.int32),
+            seqused_cols=torch.tensor([5], dtype=torch.int32, device=device),
         )
+
+    for count, bounded in ((-100, 1), (-1, 1), (0, 1), (60, 5)):
+        expected = model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            recipe=Recipe(),
+            seqused_cols=torch.tensor(
+                bounded, dtype=torch.int32, device=device
+            ),
+        )
+        seqused_cols = torch.tensor(count, dtype=torch.int32, device=device)
+        actual = model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            recipe=Recipe(),
+            seqused_cols=seqused_cols,
+        )
+        torch.testing.assert_close(actual.numerical, expected.numerical)
+        model.fit(
+            x=x_context,
+            y=y_context,
+            recipe=Recipe(),
+            seqused_cols=seqused_cols,
+        )
+        torch.testing.assert_close(
+            model.predict(x_query).numerical, expected.numerical
+        )
+        assert seqused_cols.item() == count
 
 
 def test_seqused_requires_pass_through_recipe() -> None:
