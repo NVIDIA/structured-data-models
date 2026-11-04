@@ -4,56 +4,56 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: >
-        #### Before submitting, please review the [contributing guidelines](https://github.com/Nvidia/structured-data-models/blob/main/CONTRIBUTING.md) and [AI policy](https://github.com/Nvidia/structured-data-models/blob/main/AGENTS.md#ai-policy). Issues that do not follow these practices may be closed.
-  - type: markdown
+      value: |
+        Thanks for taking the time to report this problem! Issues that do not follow the checklist below may be closed.
+  - type: checkboxes
     attributes:
-      value: >
-        #### Before submitting a bug, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/Nvidia/structured-data-models/issues?q=is%3Aissue+sort%3Acreated-desc+). If possible, check whether the issue also reproduces on the latest `main`, as it may already be fixed.
+      label: Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: I have reviewed the [contributing guidelines](https://github.com/Nvidia/structured-data-models/blob/main/CONTRIBUTING.md) and [AI policy](https://github.com/Nvidia/structured-data-models/blob/main/AGENTS.md#ai-policy).
+          required: true
+        - label: I have searched the [existing and past issues](https://github.com/Nvidia/structured-data-models/issues?q=is%3Aissue+sort%3Acreated-desc+) and this bug has not been reported yet.
+          required: true
+        - label: I have checked whether the bug also reproduces on the latest `main`.
   - type: textarea
     attributes:
       label: 🐛 Describe the bug
+      description: A clear and concise description of what the bug is, and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproducible code example
       description: |
-        Please provide a clear and concise description of what the bug is.
-
-        If relevant, add a minimal example so that we can reproduce the error by running the code. It is very important for the snippet to be as succinct (minimal) as possible, so please take time to trim down any irrelevant code to help us debug efficiently.
-        Your example should be fully self-contained: use synthetic or publicly available data, and include any required checkpoint name or revision.
-        For example:
-
-        ```python
+        A minimal, self-contained script that we can copy and run to reproduce the bug. Please trim down any irrelevant code.
+        Use synthetic or publicly available data, and include any required checkpoint name or revision.
+      render: python
+      placeholder: |
         # All necessary imports at the beginning
         import torch
         import sdm
 
         # A succinct reproducing example trimmed down to the essential parts:
         ...
-        ```
-
-        Please also paste or describe the results you observe instead of the expected results. If you observe an error, please paste the error message including the **full** traceback of the exception. It may be relevant to wrap error messages in ```` ```triple quotes blocks``` ````.
-      placeholder: |
-        A clear and concise description of what the bug is.
-
-        ```python
-        # Sample code to reproduce the problem
-        ```
-
-        ```
-        The error message you got, with the full traceback.
-        ```
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Error message or observed output
+      description: The **full** traceback of the exception, or the output that shows the incorrect behavior.
+      render: text
     validations:
       required: true
   - type: textarea
     attributes:
       label: Versions
       description: |
-        Please include your structured-data-models version or Git commit and how you installed it (for example, pip, an editable source checkout, or a container image and tag).
-        Then run the following in the affected environment and paste the output below:
-        ```sh
-        python -m torch.utils.collect_env
-        ```
+        Your structured-data-models version or Git commit, how you installed it (e.g. pip, editable source checkout, or container image and tag), and the output of `python -m torch.utils.collect_env`.
+      render: text
     validations:
       required: true
   - type: markdown
     attributes:
-      value: >
+      value: |
         Thanks for contributing 🎉!
