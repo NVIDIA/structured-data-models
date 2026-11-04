@@ -37,6 +37,37 @@ class EnsembleData(abc.ABC, Generic[T]):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
+        self._validate()
+
+    def _validate(self) -> None:
+        group_sizes = tuple(self._group_size(group) for group in self._groups)
+        actual_locations = set(self._locations)
+        if len(actual_locations) == sum(group_sizes) and all(
+            0 <= group_id < len(group_sizes)
+            and 0 <= position < group_sizes[group_id]
+            for group_id, position in actual_locations
+        ):
+            return
+
+        # Detailed diagnostics only for invalid input.
+        expected_locations = {
+            (group_id, position)
+            for group_id, size in enumerate(group_sizes)
+            for position in range(size)
+        }
+        missing_locations = expected_locations - actual_locations
+        if missing_locations:
+            raise ValueError(
+                "Expected 'locations' to cover all group positions "
+                f"(missing {sorted(missing_locations)})"
+            )
+
+        invalid_locations = actual_locations - expected_locations
+        if invalid_locations:
+            raise ValueError(
+                "Expected 'locations' to reference existing group positions "
+                f"(got {sorted(invalid_locations)})"
+            )
 
     def __len__(self) -> int:
         return len(self._locations)
@@ -60,6 +91,11 @@ class EnsembleData(abc.ABC, Generic[T]):
 
     @staticmethod
     @abc.abstractmethod
+    def _group_size(group: T) -> int:
+        pass
+
+    @staticmethod
+    @abc.abstractmethod
     def _select_member(group: T, position: int) -> T:
         pass
 
@@ -75,6 +111,10 @@ class EnsembleTensor(EnsembleData[TensorT]):
         groups: Tensors containing the ensemble members.
         locations: Group index and position for each ensemble member.
     """
+
+    @staticmethod
+    def _group_size(group: TensorT) -> int:
+        return group.size(0)
 
     @staticmethod
     def _select_member(
@@ -166,7 +206,7 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
 
         Args:
             table: Table used across members.
-            num_members: Number of ensemble members.
+            num_members: Positive number of ensemble members.
 
         Returns:
             An :class:`~sdm.EnsembleTable` with one group.
