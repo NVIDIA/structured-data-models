@@ -6,7 +6,8 @@ into three categories:
 1. You want to report a bug, feature request, or documentation issue
    - File an [issue](https://github.com/NVIDIA/structured-data-models/issues/new/choose)
      describing what you encountered or what you want to see changed.
-   - Please run `python -m torch.utils.collect_env` and paste its output while reporting a bug to gather and report relevant environment details.
+   - Please run and paste the output of the `structured-data-models/print_env.sh` script while
+     reporting a bug to gather and report relevant environment details.
    - The RAPIDS team will evaluate the issues and triage them, scheduling
      them for a release. If you believe the issue needs priority attention
      comment on the issue to notify the team.
