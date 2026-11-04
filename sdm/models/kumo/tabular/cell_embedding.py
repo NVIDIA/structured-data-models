@@ -61,25 +61,25 @@ class CellEmbedding(TabFMCellEmbedding):
         *,
         train_size: int | None = None,
         impute_mean: Tensor | None = None,  # [..., 1, C]
+        columns: slice = slice(None),
         num_columns: Tensor | None = None,  # [...]
         cache: Cache | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
-    ) -> Tensor:  # [..., R, C, D]
-        missing = x.isnan()
+    ) -> Tensor:  # [..., R, N, D] for the N columns in `columns`
         if impute_mean is None:
             impute_mean = self.impute_mean(
                 x, train_size=train_size, cache=cache
             )
-        x = torch.where(missing, impute_mean, x)
 
         return super().forward(
             x,
             categorical_mask,
+            columns=columns,
             num_columns=num_columns,
             batch_size_limit=batch_size_limit,
             out=out,
-            missing=missing,
+            impute_mean=impute_mean.expand_as(x),
         )
 
     def _forward(  # type: ignore
@@ -89,9 +89,11 @@ class CellEmbedding(TabFMCellEmbedding):
         weight: Tensor,  # [..., 1, C, G, D, 2F]
         bias: Tensor,  # [..., 1, C, D]
         *,
-        missing: Tensor,  # [..., R, C, G]
+        impute_mean: Tensor,  # [..., R, C, G]
         out: Tensor | None = None,
     ) -> Tensor:
+        missing = x.isnan()
+        x = torch.where(missing, impute_mean, x)
 
         out = super()._forward(x, freq, weight, bias, out=out)
         out += self.nan_lin(missing.to(out.dtype))

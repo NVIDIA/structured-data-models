@@ -31,7 +31,7 @@ from torch.nn import (
     Sequential,
 )
 
-from sdm._token_buffer import TokenBuffer, add_labels, run_column_layers
+from sdm._token_buffer import TokenBuffer, run_column_layers
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabfm.block import TabFMTransformerBlock
 from sdm.models.tabfm.cell_embedding import CellEmbedding
@@ -181,21 +181,18 @@ class RowEmbedding(torch.nn.Module):
             offload=offload,
         )
 
-        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
-            tokens[..., :K, :] = self.readout_token.to(tokens.dtype)
+        def embed(cells: Tensor, columns: slice) -> None:  # [..., N, R, D]
             self.cell_embedding(
-                x[..., rows, :],
+                x,
                 categorical_mask,
+                columns=slice(columns.start - K, columns.stop - K),
                 batch_size_limit="auto",
-                out=tokens[..., K:, :],
+                out=cells.transpose(-2, -3),
             )
             if y_emb is not None:
-                add_labels(tokens[..., K:, :], y_emb, rows)
+                cells[..., :R_train, :] += y_emb.unsqueeze(-3).to(cells.dtype)
 
         with buffer:
-            buffer.rows(embed, load=False)
-            y_emb = None
-
             readout = buffer.readout(K)  # [..., R, K, D]
             for i, (col_layers, col_proj, row_layers, row_norm) in enumerate(
                 zip(
@@ -215,11 +212,14 @@ class RowEmbedding(torch.nn.Module):
                     tokens=slice(K if i == 0 else 0, K + C),
                     key_rows=[slice(R_train)] * len(col_layers),
                     cache=cache,
+                    embed=embed if i == 0 else None,
                     epilogue=lambda cells, col_proj=col_proj: cells.copy_(
                         col_proj(cells)
                     ),
                 )
+                y_emb = None
 
+                first = i == 0
                 last = i == len(self.row_blocks) - 1
 
                 def update(
@@ -227,8 +227,13 @@ class RowEmbedding(torch.nn.Module):
                     rows: slice,
                     row_layers: ModuleList = row_layers,
                     row_norm: torch.nn.Module = row_norm,
+                    first: bool = first,
                     last: bool = last,
                 ) -> None:
+                    if first:
+                        tokens[..., :K, :] = self.readout_token.to(
+                            tokens.dtype
+                        )
                     x = tokens
                     for j, row_layer in enumerate(row_layers):
                         if last and j == len(row_layers) - 1:

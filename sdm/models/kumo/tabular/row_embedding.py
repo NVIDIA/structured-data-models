@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, Linear, ModuleList, Parameter
 
-from sdm._token_buffer import TokenBuffer, add_labels, run_column_layers
+from sdm._token_buffer import TokenBuffer, run_column_layers
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
@@ -165,23 +165,20 @@ class RowEmbedding(torch.nn.Module):
             offload=offload,
         )
 
-        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
-            tokens[..., :K, :] = self.readout_token.to(tokens.dtype)
+        def embed(cells: Tensor, columns: slice) -> None:  # [..., N, R, D]
             self.cell_embedding(
-                x=x[..., rows, :],
+                x=x,
                 categorical_mask=categorical_mask,
                 impute_mean=impute_mean,
+                columns=slice(columns.start - K, columns.stop - K),
                 num_columns=num_columns,
                 batch_size_limit="auto",
-                out=tokens[..., K:, :],
+                out=cells.transpose(-2, -3),
             )
             if y_emb is not None:
-                add_labels(tokens[..., K:, :], y_emb, rows)
+                cells[..., :R_train, :] += y_emb.unsqueeze(-3).to(cells.dtype)
 
         with buffer:
-            buffer.rows(embed, load=False)
-            y_emb = None
-
             readout = buffer.readout(K)  # [..., R, K, D]
             for i, (col_block, row_block) in enumerate(
                 zip(self.col_blocks, self.row_blocks)
@@ -192,16 +189,24 @@ class RowEmbedding(torch.nn.Module):
                     tokens=slice(K, K + C),
                     key_rows=[slice(R_train)],
                     cache=cache,
+                    embed=embed if i == 0 else None,
                 )
+                y_emb = None
 
+                first = i == 0
                 last = i == len(self.row_blocks) - 1
 
                 def update(
                     tokens: Tensor,  # [..., N, K + C, D]
                     rows: slice,
                     row_block: torch.nn.Module = row_block,
+                    first: bool = first,
                     last: bool = last,
                 ) -> None:
+                    if first:
+                        tokens[..., :K, :] = self.readout_token.to(
+                            tokens.dtype
+                        )
                     row_block(
                         query=tokens[..., :K, :] if last else tokens,
                         key_value=tokens,

@@ -13,7 +13,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, ModuleList, Parameter
 
-from sdm._token_buffer import TokenBuffer, add_labels, run_column_layers
+from sdm._token_buffer import TokenBuffer, run_column_layers
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding
@@ -185,26 +185,20 @@ class RowEmbedding(torch.nn.Module):
             offload=offload,
         )
 
-        def embed(tokens: Tensor, rows: slice) -> None:  # [..., N, K + C, D]
-            cells = tokens[..., K:, :]
+        def embed(cells: Tensor, columns: slice) -> None:  # [..., N, R, D]
+            group = index[columns.start - K : columns.stop - K]  # [N, G]
+            group = x[..., group].transpose(-2, -3).contiguous()
             if num_digits > 1:
-                self.lin(x[..., rows, :][..., index], out=cells[0])
+                self.lin(group, out=cells[0])
                 cells[1:] = cells[:1]
             else:
-                self.lin(x[..., rows, :][..., index], out=cells)
+                self.lin(group, out=cells)
             if y_emb is None:
                 return
-            if train_mask is None:
-                add_labels(cells, y_emb, rows)
-            else:
-                cells[..., train_mask, :, :] += y_emb.unsqueeze(-2).to(
-                    cells.dtype
-                )
+            rows = slice(R_train) if train_mask is None else train_mask
+            cells[..., rows, :] += y_emb.unsqueeze(-3).to(cells.dtype)
 
         with buffer:
-            buffer.rows(embed, load=False)
-            y_emb = None
-
             run_column_layers(
                 buffer,
                 [
@@ -214,7 +208,9 @@ class RowEmbedding(torch.nn.Module):
                 tokens=slice(K, K + C),
                 key_rows=key_rows,
                 cache=cache,
+                embed=embed,
             )
+            y_emb = None
 
         if num_digits > 1:  # Average over mixed-radix digits.
             buffer = TokenBuffer.from_tensor(buffer.tensor.mean(dim=0))

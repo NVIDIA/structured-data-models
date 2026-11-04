@@ -185,19 +185,23 @@ class TokenBuffer:
 
     def columns(
         self,
-        compute: Callable[[Tensor], object],
+        compute: Callable[[Tensor, slice], object],
         tokens: slice,
+        *,
+        load: bool = True,
     ) -> None:
         r"""Update the token columns ``tokens`` in place, in chunks.
 
         Args:
-            compute: Called as ``compute(cells)`` on chunks of ``N``
-                consecutive token columns, in order, with ``cells`` of shape
-                ``[..., N, R, D]``.
+            compute: Called as ``compute(cells, columns)`` on chunks of ``N``
+                consecutive token columns ``columns``, in order, with
+                ``cells`` of shape ``[..., N, R, D]``.
             tokens: The token columns to update.
+            load: Whether ``compute`` reads ``cells``. If ``False``,
+                ``compute`` must fill them.
         """
         if self.offload is None:
-            compute(self.tensor[..., tokens, :, :])
+            compute(self.tensor[..., tokens, :, :], tokens)
             return
 
         *B, R, _, D = self.size
@@ -218,8 +222,10 @@ class TokenBuffer:
             compute=lambda slot, k: compute(
                 slot.view(self.dtype).view(
                     *B, chunks[k].stop - chunks[k].start, R, D
-                )
+                ),
+                chunks[k],
             ),
+            load=load,
         )
 
     def _stream(
@@ -302,6 +308,7 @@ def run_column_layers(
     tokens: slice,
     key_rows: Sequence[Any],
     cache: Cache | None,
+    embed: Callable[[Tensor, slice], object] | None = None,
     epilogue: Callable[[Tensor], object] | None = None,
 ) -> None:
     r"""Run consecutive column layers over ``buffer`` in a single pass.
@@ -314,6 +321,8 @@ def run_column_layers(
         tokens: The token columns to update.
         key_rows: Per layer, the row index of context cells to attend to.
         cache: The cache to record into or replay from, or ``None``.
+        embed: If given, called as ``embed(cells, columns)`` to fill each
+            chunk of cells before the first layer, instead of loading them.
         epilogue: Called on each chunk of cells after the last layer.
     """
     recording = cache is not None and cache.is_recording
@@ -322,7 +331,9 @@ def run_column_layers(
     assert not replaying or buffer.offload is None
     entries: dict[str, list[KVCacheEntry]] = {key: [] for key, _ in layers}
 
-    def compute(cells: Tensor) -> None:  # [..., N, R, D]
+    def compute(cells: Tensor, columns: slice) -> None:  # [..., N, R, D]
+        if embed is not None:
+            embed(cells, columns)
         for (key, layer), rows in zip(layers, key_rows, strict=True):
             result = layer(
                 query=cells,
@@ -339,7 +350,7 @@ def run_column_layers(
         if epilogue is not None:
             epilogue(cells)
 
-    buffer.columns(compute, tokens)
+    buffer.columns(compute, tokens, load=embed is None)
 
     if recording:
         assert cache is not None
@@ -353,16 +364,3 @@ def run_column_layers(
                     value=torch.cat([part.value for part in parts], dim=dim),
                 )
             )
-
-
-def add_labels(
-    cells: Tensor,  # [..., N, C, D]
-    y_emb: Tensor,  # [..., R_train, D]
-    rows: slice,
-) -> None:
-    r"""Add label embeddings to the context rows among ``rows``."""
-    stop = min(rows.stop, y_emb.size(-2))
-    if stop > rows.start:
-        cells[..., : stop - rows.start, :, :] += y_emb[
-            ..., rows.start : stop, None, :
-        ].to(cells.dtype)
