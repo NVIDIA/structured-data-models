@@ -132,13 +132,13 @@ class EnsembleTensor(EnsembleData[TensorT]):
                     )
                 )
 
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        ensemble._locations = tuple(
-            (group_ids[group_id], positions_by_group[group_id][position])
-            for group_id, position in locations
+        return self.__class__(
+            groups=groups,
+            locations=tuple(
+                (group_ids[group_id], positions_by_group[group_id][position])
+                for group_id, position in locations
+            ),
         )
-        return ensemble
 
 
 class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
