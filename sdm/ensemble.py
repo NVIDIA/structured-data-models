@@ -36,6 +36,25 @@ class EnsembleData(abc.ABC, Generic[T]):
     ) -> None:
         self._groups = tuple(groups)
         self._locations = tuple(locations)
+        self._validate()
+
+    def _validate(self) -> None:
+        expected_locations = {
+            (group_id, position)
+            for group_id, group in enumerate(self._groups)
+            for position in range(self._group_size(group))
+        }
+        actual_locations = set(self._locations)
+        missing_locations = expected_locations - actual_locations
+        if missing_locations:
+            raise ValueError(
+                f"Missing locations for group positions: "
+                f"{sorted(missing_locations)}"
+            )
+
+        invalid_locations = actual_locations - expected_locations
+        if invalid_locations:
+            raise ValueError(f"Invalid locations: {sorted(invalid_locations)}")
 
     def __len__(self) -> int:
         return len(self._locations)
@@ -56,6 +75,11 @@ class EnsembleData(abc.ABC, Generic[T]):
 
     def _iter_groups(self) -> Iterator[T]:
         return iter(self._groups)
+
+    @staticmethod
+    @abc.abstractmethod
+    def _group_size(group: T) -> int:
+        pass
 
     @staticmethod
     @abc.abstractmethod
@@ -81,35 +105,9 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
         locations: ``(group, batch)`` location of each ensemble member.
     """
 
-    def __init__(
-        self,
-        groups: Sequence[TableTensor],
-        locations: Sequence[tuple[int, int]],
-    ) -> None:
-        super().__init__(groups=groups, locations=locations)
-        self._validate(self._groups, self._locations)
-
     @staticmethod
-    def _validate(
-        groups: Sequence[TableTensor],
-        locations: Sequence[tuple[int, int]],
-    ) -> None:
-        expected_locations = {
-            (group_id, position)
-            for group_id, group in enumerate(groups)
-            for position in range(group.size(0))
-        }
-        actual_locations = set(locations)
-        missing_locations = expected_locations - actual_locations
-        if missing_locations:
-            raise ValueError(
-                f"Missing locations for group positions: "
-                f"{sorted(missing_locations)}"
-            )
-
-        invalid_locations = actual_locations - expected_locations
-        if invalid_locations:
-            raise ValueError(f"Invalid locations: {sorted(invalid_locations)}")
+    def _group_size(group: TableTensor) -> int:
+        return group.size(0)
 
     @classmethod
     def from_table(

@@ -1,12 +1,56 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import cast
+from collections.abc import Sequence
+from typing import Self, cast
 
 import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, TableTensor
+from sdm import CategoricalTensor, EnsembleData, EnsembleTable, TableTensor
+
+
+class _TupleEnsemble(EnsembleData[tuple[int, ...]]):
+    @staticmethod
+    def _group_size(group: tuple[int, ...]) -> int:
+        return len(group)
+
+    @staticmethod
+    def _select_member(group: tuple[int, ...], position: int) -> tuple[int, ...]:
+        return group[position : position + 1]
+
+    def _select_members(self, member_ids: Sequence[int]) -> Self:
+        return self.__class__(
+            groups=tuple(self[index] for index in member_ids),
+            locations=tuple((index, 0) for index in range(len(member_ids))),
+        )
+
+
+def test_ensemble_data_allows_shared_members() -> None:
+    ensemble = _TupleEnsemble(
+        groups=((10, 20), (30,)),
+        locations=((0, 1), (0, 0), (1, 0), (0, 1)),
+    )
+
+    assert list(ensemble) == [(20,), (10,), (30,), (20,)]
+    assert list(ensemble[1:3]) == [(10,), (30,)]
+
+
+@pytest.mark.parametrize(
+    ("locations", "message"),
+    [
+        (((0, 0),), "Missing locations"),
+        (((0, 0), (0, 1), (0, 2)), "Invalid locations"),
+        (((0, 0), (0, 1), (1, 0)), "Invalid locations"),
+        (((0, 0), (0, 1), (0, -1)), "Invalid locations"),
+    ],
+)
+def test_ensemble_data_rejects_invalid_locations(
+    locations: tuple[tuple[int, int], ...],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _TupleEnsemble(groups=((10, 20),), locations=locations)
 
 
 @pytest.mark.parametrize(
