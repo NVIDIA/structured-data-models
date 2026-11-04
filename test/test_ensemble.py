@@ -19,6 +19,31 @@ def test_tensor_member() -> None:
     torch.testing.assert_close(ensemble[0], group[1])
 
 
+def test_tensor_member_selection() -> None:
+    first = torch.tensor([[1.0], [2.0], [3.0]])
+    second = torch.tensor([[4.0]])
+    ensemble = EnsembleTensor(
+        groups=(first, second),
+        locations=((0, 0), (1, 0), (0, 2), (0, 1), (1, 0)),
+    )
+
+    selected = ensemble[4, 1, 2, 4, 0]
+
+    assert isinstance(selected, EnsembleTensor)
+    assert len(selected) == 5
+    torch.testing.assert_close(
+        torch.stack([selected[index] for index in range(len(selected))]),
+        torch.tensor([[4.0], [4.0], [3.0], [4.0], [1.0]]),
+    )
+    assert selected[0].data_ptr() == selected[1].data_ptr()
+    assert selected[0].data_ptr() == selected[3].data_ptr()
+    sliced = ensemble[:3:2]
+    torch.testing.assert_close(torch.stack((sliced[0], sliced[1])), first[::2])
+    assert sliced[0].data_ptr() == first[0].data_ptr()
+    assert ensemble[:] is ensemble
+    assert len(ensemble[()]) == 0
+
+
 def test_shared_member_table() -> None:
     data = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     ensemble_table = EnsembleTable.from_table(data, num_members=3)
