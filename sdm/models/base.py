@@ -86,8 +86,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 recommended - masking adds ``-inf`` to attention logits
                 after the query/key product, so non-finite or overflowing
                 padded values poison the softmax with ``NaN``).
-                Padded ``y_context`` entries must still be valid targets (for
-                example ``0``). Together with padded query rows (whose extra
+                Padded categorical ``y_context`` entries must repeat classes
+                present in the valid context; a new class would change the
+                output columns, including for cached prediction. Padded
+                regression targets must be finite and moderate in magnitude.
+                Together with padded query rows (whose extra
                 outputs callers simply discard), this lets streams of varying
                 table sizes be padded to a small set of bucketed shapes so
                 compiled graphs and per-shape kernel selection are reused
@@ -128,6 +131,8 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 num_estimators=num_estimators,
                 generator=generator,
                 callbacks=callbacks,
+                seqused_train=seqused_train,
+                seqused_cols=seqused_cols,
                 **kwargs,
             )
 

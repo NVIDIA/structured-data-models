@@ -292,7 +292,8 @@ def test_model_recipe_generator_does_not_advance_global_rng(
     assert torch.equal(torch.get_rng_state(), state)
 
 
-def test_callback() -> None:
+@pytest.mark.parametrize("padded", [False, True])
+def test_callback(padded: bool) -> None:
     events: list[str] = []
     callbacks = (
         MyCallback("1", scale=1.0, offset=1.0, events=events),
@@ -303,6 +304,12 @@ def test_callback() -> None:
     y_context = torch.tensor([[0.0], [1.0]])
     x_query = torch.tensor([[3.0]])
     marker = object()
+    options: dict[str, Any] = {}
+    if padded:
+        options = {
+            "seqused_train": torch.tensor(2, dtype=torch.int32),
+            "seqused_cols": torch.tensor(1, dtype=torch.int32),
+        }
 
     output = model(
         x_context,
@@ -310,6 +317,7 @@ def test_callback() -> None:
         x_query,
         callbacks=callbacks,
         marker=marker,
+        **options,
     )
     model.fit(
         x_context,
@@ -340,8 +348,12 @@ def test_callback() -> None:
         "num_estimators": 1,
         "generator": None,
         "callbacks": callbacks,
+        "seqused_train": options.get("seqused_train"),
+        "seqused_cols": options.get("seqused_cols"),
         "marker": marker,
     }
+    assert start_kwargs["seqused_train"] is options.get("seqused_train")
+    assert start_kwargs["seqused_cols"] is options.get("seqused_cols")
 
     predict_model, predict_args, predict_kwargs = callback.start_calls[1]
     assert predict_model is model

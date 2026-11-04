@@ -427,7 +427,9 @@ def test_seqused_train_padding(
     if dtype.is_floating_point:
         y_context = torch.randn(R_context, 1, device=device)
     else:
-        y_context = torch.randint(0, 10, (R_context, 1), device=device)
+        y_context = (torch.arange(R_context, device=device) % 2 * 2 + 5).view(
+            -1, 1
+        )
 
     expected = model(x_context, y_context, x_query, recipe=Recipe())
 
@@ -456,6 +458,8 @@ def test_seqused_train_padding(
     )
 
     assert out.size(-2) == R_query + 3
+    if not dtype.is_floating_point:
+        assert out.column_names == expected.column_names == {"5", "7"}
     # Masked and unmasked attention select different kernels, so allow
     # kernel-switch-scale noise; junk leaking through a masking bug would
     # show up as O(0.1) differences or NaN.
@@ -519,7 +523,9 @@ def test_seqused_train_fit_predict(device: torch.device) -> None:
     R_context, R_query, C = 11, 6, 5
     x_context = torch.randn(R_context, C, device=device)
     x_query = torch.randn(R_query, C, device=device)
-    y_context = torch.randint(0, 10, (R_context, 1), device=device)
+    y_context = (torch.arange(R_context, device=device) % 2 * 2 + 5).view(
+        -1, 1
+    )
 
     model.fit(x_context, y_context, recipe=Recipe())
     expected = model.predict(x_query)
@@ -544,6 +550,7 @@ def test_seqused_train_fit_predict(device: torch.device) -> None:
     out = model.predict(x_query)
     model.clear()
 
+    assert out.column_names == expected.column_names == {"5", "7"}
     torch.testing.assert_close(
         out.numerical,
         expected.numerical,
