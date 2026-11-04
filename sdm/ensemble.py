@@ -39,22 +39,36 @@ class EnsembleData(abc.ABC, Generic[T]):
         self._validate()
 
     def _validate(self) -> None:
+        group_sizes = tuple(
+            self._group_size(group) for group in self._groups
+        )
+        actual_locations = set(self._locations)
+        if len(actual_locations) == sum(group_sizes) and all(
+            0 <= group_id < len(group_sizes)
+            and 0 <= position < group_sizes[group_id]
+            for group_id, position in actual_locations
+        ):
+            return
+
+        # Detailed diagnostics only for invalid input.
         expected_locations = {
             (group_id, position)
-            for group_id, group in enumerate(self._groups)
-            for position in range(self._group_size(group))
+            for group_id, size in enumerate(group_sizes)
+            for position in range(size)
         }
-        actual_locations = set(self._locations)
         missing_locations = expected_locations - actual_locations
         if missing_locations:
             raise ValueError(
-                f"Missing locations for group positions: "
-                f"{sorted(missing_locations)}"
+                "Expected 'locations' to cover all group positions "
+                f"(missing {sorted(missing_locations)})"
             )
 
         invalid_locations = actual_locations - expected_locations
         if invalid_locations:
-            raise ValueError(f"Invalid locations: {sorted(invalid_locations)}")
+            raise ValueError(
+                "Expected 'locations' to reference existing group positions "
+                f"(got {sorted(invalid_locations)})"
+            )
 
     def __len__(self) -> int:
         return len(self._locations)
