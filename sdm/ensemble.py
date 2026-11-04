@@ -16,6 +16,7 @@ from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T")
+TensorT = TypeVar("TensorT", bound=Tensor)
 
 
 class EnsembleData(abc.ABC, Generic[T]):
@@ -67,7 +68,80 @@ class EnsembleData(abc.ABC, Generic[T]):
         pass
 
 
-class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
+class EnsembleTensor(EnsembleData[TensorT]):
+    """Store and group tensors as an ensemble.
+
+    Args:
+        groups: Tensors containing the ensemble members.
+        locations: Group index and position for each ensemble member.
+    """
+
+    @staticmethod
+    def _select_member(
+        group: TensorT,
+        position: int,
+    ) -> TensorT:
+        return cast(TensorT, group[position])
+
+    def _select_members(self, member_ids: Sequence[int]) -> Self:
+        member_ids = tuple(member_ids)
+        if member_ids == tuple(range(len(self))):
+            return self
+
+        locations = tuple(
+            self._locations[member_id] for member_id in member_ids
+        )
+        positions_by_group: dict[int, dict[int, int]] = {}
+        for group_id, position in locations:
+            positions = positions_by_group.setdefault(group_id, {})
+            positions.setdefault(position, len(positions))
+
+        groups: list[TensorT] = []
+        group_ids: dict[int, int] = {}
+        for new_group_id, (group_id, positions) in enumerate(
+            positions_by_group.items()
+        ):
+            group = self._groups[group_id]
+            selected_positions = tuple(positions)
+            group_ids[group_id] = new_group_id
+            start = selected_positions[0]
+            step = (
+                selected_positions[1] - start
+                if len(selected_positions) > 1
+                else 1
+            )
+            stop = start + step * len(selected_positions)
+            if selected_positions == tuple(range(group.size(0))):
+                groups.append(group)
+            elif step > 0 and selected_positions == tuple(
+                range(start, stop, step)
+            ):
+                # Evenly spaced members are selected as a view, not a copy.
+                groups.append(cast(TensorT, group[start:stop:step]))
+            else:
+                groups.append(
+                    cast(
+                        TensorT,
+                        torch.stack(
+                            [
+                                group[position]
+                                for position in selected_positions
+                            ],
+                            dim=0,
+                        ),
+                    )
+                )
+
+        return self.__class__(
+            groups=groups,
+            locations=tuple(
+                (group_ids[group_id], positions_by_group[group_id][position])
+                for group_id, position in locations
+            ),
+        )
+
+
+class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
     """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
 
     Each ensemble member is associated with one
@@ -206,63 +280,6 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
 
         return tuple(groups), tuple(locations)
 
-    def _select_members(self, member_ids: Sequence[int]) -> Self:
-        member_ids = tuple(member_ids)
-        if member_ids == tuple(range(len(self))):
-            return self
-
-        locations = tuple(
-            self._locations[member_id] for member_id in member_ids
-        )
-        positions_by_group: dict[int, dict[int, int]] = {}
-        for group_id, position in locations:
-            positions = positions_by_group.setdefault(group_id, {})
-            positions.setdefault(position, len(positions))
-
-        groups: list[TableTensor] = []
-        group_ids: dict[int, int] = {}
-        for new_group_id, (group_id, positions) in enumerate(
-            positions_by_group.items()
-        ):
-            group = self._groups[group_id]
-            selected_positions = tuple(positions)
-            group_ids[group_id] = new_group_id
-            start = selected_positions[0]
-            step = (
-                selected_positions[1] - start
-                if len(selected_positions) > 1
-                else 1
-            )
-            stop = start + step * len(selected_positions)
-            if selected_positions == tuple(range(group.size(0))):
-                groups.append(group)
-            elif step > 0 and selected_positions == tuple(
-                range(start, stop, step)
-            ):
-                # Evenly spaced members are selected as a view, not a copy.
-                groups.append(group[start:stop:step])
-            else:
-                groups.append(
-                    cast(
-                        TableTensor,
-                        torch.stack(
-                            [
-                                group[position]
-                                for position in selected_positions
-                            ],
-                            dim=0,
-                        ),
-                    )
-                )
-
-        return self.__class__(
-            groups=groups,
-            locations=tuple(
-                (group_ids[group_id], positions_by_group[group_id][position])
-                for group_id, position in locations
-            ),
-        )
-
     def gather_members(
         self,
         tables: Sequence[Self],
@@ -312,13 +329,6 @@ class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
             group_id: Zero-based group index.
         """
         return sum(i == group_id for i, _ in self._locations)
-
-    @staticmethod
-    def _select_member(
-        group: TableTensor,
-        position: int,
-    ) -> TableTensor:
-        return group[position]
 
     def expanded_group(self, group_id: int) -> TableTensor:
         """Return the logical members assigned to one group.
