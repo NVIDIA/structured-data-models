@@ -4,16 +4,18 @@
 r"""Run an SDM tabular model on BeyondArena."""
 
 import argparse
+import gc
 from pathlib import Path
 
+import torch
 from tabarena.benchmark.experiment import BeyondArenaExperimentBundle
 from tabarena.contexts import BeyondArenaContext
 from tabarena.utils.config_utils import ConfigGenerator
 
 from benchmark.tabular.model import (
     MODEL_CONFIGS,
-    SDMExperimentRunner,
-    SDMModelWrapper,
+    add_finetune_args,
+    finetune_config_overrides,
 )
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -47,6 +49,7 @@ parser.add_argument(
     type=int,
     help="Prediction batch size.",
 )
+add_finetune_args(parser)
 args = parser.parse_args()
 
 model_config = MODEL_CONFIGS[args.model]
@@ -56,7 +59,6 @@ result_dir = (
     / model_config.name
     / "outer_model"
 )
-result_dir.mkdir(parents=True, exist_ok=True)
 
 config = {
     "max_context_size": args.max_context_size,
@@ -64,6 +66,23 @@ config = {
 }
 if args.batch_size is not None:
     config["ag.max_batch_size"] = args.batch_size
+finetune_overrides = finetune_config_overrides(args)
+if finetune_overrides and not args.model.endswith("-ft"):
+    raise ValueError(
+        f"--finetune_* flags were passed but --model {args.model!r} isn't "
+        "a '-ft' variant, so fine-tuning is disabled and the flags would "
+        "silently have no effect; pass the matching '-ft' model instead."
+    )
+config.update(finetune_overrides)
+
+if finetune_overrides:
+    # tabarena's cache key is positional, not content-based; key by
+    # hyperparameters so different LRs don't silently collide.
+    variant = "_".join(
+        f"{key}={value}" for key, value in sorted(config.items())
+    )
+    result_dir = result_dir / variant
+result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = ConfigGenerator(
     search_space={},
@@ -74,17 +93,18 @@ experiments = BeyondArenaExperimentBundle(
     models=[(generator, 0)],
     outer_experiments=True,
 ).build_experiments()
-for experiment in experiments:
-    experiment.method_cls = SDMModelWrapper
-    experiment.experiment_cls = SDMExperimentRunner
-
 context = BeyondArenaContext()
-context.build_and_run_jobs(
-    experiments,
-    expname=result_dir,
+jobs = context.build_jobs(
+    experiments=experiments,
     subset=args.subset or ["core"],
-    register=False,
-    build_kwargs=(
-        {"dataset_names": [args.dataset]} if args.dataset is not None else None
-    ),
+    dataset_names=[args.dataset] if args.dataset is not None else None,
 )
+for job in jobs:
+    try:
+        context.run_jobs(jobs=[job], expname=result_dir, register=False)
+    finally:
+        gc.collect()
+        if torch.cuda.is_initialized():
+            torch.cuda.synchronize()
+            torch._C._host_emptyCache()
+            torch.cuda.empty_cache()

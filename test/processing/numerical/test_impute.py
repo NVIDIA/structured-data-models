@@ -54,3 +54,32 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
             device=device,
         ),
     )
+
+
+@withCUDA
+def test_impute_mean_infinite(device: torch.device) -> None:
+    inp = torch.tensor(
+        [
+            [1.0, torch.inf, torch.inf],
+            [3.0, 2.0, -torch.inf],
+            [torch.nan, torch.nan, torch.nan],
+            [-torch.inf, 4.0, torch.nan],
+        ],
+        device=device,
+    )
+
+    processor = ImputeMean(fill_value=-5.0).fit(TableTensor.from_tensor(inp))
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+
+    torch.testing.assert_close(
+        transformed,
+        torch.tensor(
+            [
+                [1.0, torch.inf, torch.inf],
+                [3.0, 2.0, -torch.inf],
+                [2.0, 3.0, -5.0],
+                [-torch.inf, 4.0, -5.0],
+            ],
+            device=device,
+        ),
+    )

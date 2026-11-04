@@ -4,24 +4,63 @@
 """SDM model adapters for TabArena and BeyondArena."""
 
 import abc
+import argparse
+import copy
 import math
-from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from dataclasses import dataclass, replace
+from typing import Any, ClassVar, Literal, cast
 
 import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.constants import BINARY, MULTICLASS, REGRESSION
+from autogluon.core.models.abstract.shared_weights import (
+    SharedWeights,
+    owns_network,
+)
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
-from tabarena.benchmark.exec_models import AGModelWrapper
-from tabarena.benchmark.experiment import OOFExperimentRunner
+from tabarena.models.warmup import warmup_torch
 
 import sdm
 import sdm.processing as sp
+from benchmark.tabular.finetune import (
+    FINETUNE_CONTEXT_FRAC,
+    FINETUNE_ITERS_PER_EPOCH,
+    FINETUNE_LR,
+    FINETUNE_TRAIN_SIZE,
+    FINETUNE_VAL_FRAC,
+    full_finetune,
+    kumo_small_binary_epochs,
+)
 
 Task = Literal["classification", "regression"]
+KumoTabularSize = Literal["small", "medium", "large"]
+
+_FINETUNE_ARGS: dict[str, tuple[type, str]] = {
+    "finetune_epochs": (int, "Fine-tuning epochs (only for '-ft' variants)."),
+    "finetune_iters_per_epoch": (int, "Fine-tuning iterations per epoch."),
+    "finetune_lr": (float, "Fine-tuning learning rate."),
+    "finetune_train_size": (int, "Rows resampled per fine-tuning iteration."),
+    "finetune_context_frac": (float, "Context fraction of each sample."),
+    "finetune_val_frac": (float, "Held-out validation fraction of the pool."),
+}
+
+
+def add_finetune_args(parser: argparse.ArgumentParser) -> None:
+    """Add the fine-tuning flags shared by TabArena/BeyondArena."""
+    for name, (arg_type, help_text) in _FINETUNE_ARGS.items():
+        parser.add_argument(f"--{name}", type=arg_type, help=help_text)
+
+
+def finetune_config_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """Explicitly-set fine-tuning flags, ready to merge into a model config."""
+    return {
+        name: value
+        for name in _FINETUNE_ARGS
+        if (value := getattr(args, name)) is not None
+    }
 
 
 class SDMModel(AbstractTorchModel, abc.ABC):
@@ -56,6 +95,21 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         )
         self._set_default_param_value("max_context_size", None)
         self._set_default_param_value("max_columns", None)
+        self._set_default_param_value("kv_cache", True)
+        self._set_default_param_value("estimator_batch_size", "auto")
+        self._set_default_param_value("finetune", False)
+        self._set_default_param_value("finetune_epochs", None)
+        self._set_default_param_value(
+            "finetune_iters_per_epoch", FINETUNE_ITERS_PER_EPOCH
+        )
+        self._set_default_param_value("finetune_lr", FINETUNE_LR)
+        self._set_default_param_value(
+            "finetune_train_size", FINETUNE_TRAIN_SIZE
+        )
+        self._set_default_param_value(
+            "finetune_context_frac", FINETUNE_CONTEXT_FRAC
+        )
+        self._set_default_param_value("finetune_val_frac", FINETUNE_VAL_FRAC)
 
     def _fit(
         self,
@@ -66,6 +120,16 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         **_: Any,
     ) -> None:
         del num_cpus
+        params = self._get_model_params()
+        if (
+            params["finetune"]
+            and isinstance(self, SDMKumoTabularModel)
+            and not self.shared_weights.copy_per_fit
+        ):
+            raise ValueError(
+                "Use a Kumo -ft variant to fine-tune without changing "
+                "shared pretrained weights."
+            )
         self._device = torch.device(
             self._resolve_fit_device(num_gpus=num_gpus)
         )
@@ -100,9 +164,36 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             device=self._device,
         )
 
-        params = self._get_model_params()
         self._num_estimators = params["num_estimators"]
         max_context_size = params["max_context_size"]
+
+        if params["finetune"]:
+            finetune_epochs = kumo_small_binary_epochs(
+                params["finetune_epochs"],
+                is_kumo_small=self.ag_key == "SDM-KUMO-TABULAR-SMALL-FT",
+                is_binary=self.problem_type == BINARY,
+            )
+            val_metric = full_finetune(
+                self.model,
+                x_context,
+                y_context,
+                task=task,
+                max_epochs=finetune_epochs,
+                iters_per_epoch=params["finetune_iters_per_epoch"],
+                train_size=params["finetune_train_size"],
+                context_frac=params["finetune_context_frac"],
+                val_frac=params["finetune_val_frac"],
+                lr=params["finetune_lr"],
+                num_estimators=self._num_estimators,
+                # Reuse the same cap as fit()/predict()'s context.
+                max_val_context_size=max_context_size,
+                generator=generator,
+            )
+            print(
+                f"[finetune] ag_key={self.ag_key} lr={params['finetune_lr']} "
+                f"best_val_metric={val_metric}"
+            )
+
         num_estimators: int | None = self._num_estimators
         if max_context_size is not None and len(X) > max_context_size:
             num_repeats = math.ceil(num_estimators * max_context_size / len(X))
@@ -121,6 +212,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             y_context = y_context[perm].unflatten(0, shape)
             num_estimators = None
         self._expand_query = num_estimators is None
+        self._context_shape = x_context.shape[-2:]
 
         recipe = self.model.default_recipe()
         if params["max_columns"] is not None:
@@ -128,18 +220,33 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 if isinstance(processor, sp.SelectColumns):
                     processor.max_columns = params["max_columns"]
 
-        with torch.amp.autocast(
-            self._device.type,
-            self.autocast_dtype,
-            enabled=x_context.is_cuda,
-        ):
-            self.model.fit(
-                x=x_context,
-                y=y_context,
-                recipe=recipe,
-                num_estimators=num_estimators,
-                generator=generator,
-            )
+        self._recipe = recipe
+        self._kv_cache = params["kv_cache"]
+        if params["kv_cache"]:
+            with torch.amp.autocast(
+                self._device.type,
+                self.autocast_dtype,
+                enabled=x_context.is_cuda,
+            ):
+                self.model.fit(
+                    x=x_context,
+                    y=y_context,
+                    recipe=recipe,
+                    num_estimators=num_estimators,
+                    estimator_batch_size=self._estimator_batch_size(x_context),
+                    generator=generator,
+                )
+            return
+
+        self._x_context = x_context.cpu()
+        self._y_context = y_context.cpu()
+        # Replay preprocessing and model randomness for every query batch.
+        if generator is not None:
+            self._rng_state = generator.get_state()
+        elif self._device.type == "cuda":
+            self._rng_state = torch.cuda.get_rng_state(self._device)
+        else:
+            self._rng_state = torch.get_rng_state()
 
     def _predict_proba(
         self,
@@ -158,21 +265,64 @@ class SDMModel(AbstractTorchModel, abc.ABC):
                 *x_query.size(),
             )
 
-        with torch.amp.autocast(
-            self._device.type,
-            self.autocast_dtype,
-            enabled=x_query.is_cuda,
+        with (
+            torch.inference_mode(),
+            torch.amp.autocast(
+                self._device.type,
+                self.autocast_dtype,
+                enabled=x_query.is_cuda,
+            ),
         ):
-            out = self.model.predict(x_query)
+            if self._kv_cache:
+                out = self.model.predict(x_query)
+            else:
+                generator = torch.Generator(self._device).set_state(
+                    self._rng_state
+                )
+                out = self.model(
+                    x_context=self._x_context.to(self._device),
+                    y_context=self._y_context.to(self._device),
+                    x_query=x_query,
+                    recipe=self._recipe,
+                    num_estimators=(
+                        None if self._expand_query else self._num_estimators
+                    ),
+                    estimator_batch_size=self._estimator_batch_size(x_query),
+                    generator=generator,
+                )
 
         if self.problem_type == REGRESSION:
             return out.numerical.float().mean(dim=-1).cpu().numpy()
 
         assert self.num_classes is not None
-        columns = out.columns[sdm.Stype.numerical]
-        indices = [columns.index(str(i)) for i in range(self.num_classes)]
-        probabilities = out.numerical[..., indices].float().cpu().numpy()
+        columns = out.numerical_columns
+        probabilities = np.zeros((len(X), self.num_classes), dtype=np.float32)
+        probabilities[:, [int(column) for column in columns]] = (
+            out.numerical.float().cpu().numpy()
+        )
         return self._convert_proba_to_unified_form(probabilities)
+
+    def _estimator_batch_size(self, x: torch.Tensor) -> int | None:
+        params = self._get_model_params()
+        estimator_batch_size = params["estimator_batch_size"]
+        if estimator_batch_size != "auto":
+            return estimator_batch_size
+        # Subsampled contexts can produce different cache shapes per estimator.
+        if not x.is_cuda or self._expand_query:
+            return 1
+
+        num_rows, num_cols = self._context_shape
+        if not params["kv_cache"]:
+            # Uncached inference processes context and query rows together.
+            num_rows += x.size(-2)
+            if num_rows > 3_000 or num_rows * num_cols > 50_000:
+                return 1
+            return self._num_estimators
+
+        num_rows = max(num_rows, x.size(-2))
+        if num_rows > 2_000 or num_rows * num_cols >= 50_000:
+            return 1
+        return self._num_estimators
 
     def get_device(self) -> str:
         return str(next(self.model.parameters()).device)
@@ -181,32 +331,8 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self.model.to(device)
         self._device = torch.device(device)
 
-    def cleanup(self) -> None:
-        self.model.clear()
-        if self._device.type == "cuda":
-            torch.cuda.synchronize(self._device)
-            torch._C._host_emptyCache()
-            torch.cuda.empty_cache()
-
     def _more_tags(self) -> dict[str, bool]:
         return {"can_refit_full": True}
-
-
-class SDMModelWrapper(AGModelWrapper):
-    def cleanup(self) -> None:
-        model = getattr(self, "model", None)
-        cleanup = getattr(model, "cleanup", None)
-        if callable(cleanup):
-            cleanup()
-
-
-class SDMExperimentRunner(OOFExperimentRunner):
-    def run(self) -> dict:
-        try:
-            return self._run()
-        finally:
-            if self.cleanup and getattr(self, "model", None) is not None:
-                self._cleanup()
 
 
 class SDMTabICLv2Model(SDMModel):
@@ -223,18 +349,142 @@ class SDMTabICLv2Model(SDMModel):
         return sdm.models.TabICLv2(task=task, device=device)
 
 
-class SDMKumoTabularModel(SDMModel):
-    ag_key = "SDM-KUMO-TABULAR"
-    ag_name = "SDMKumoTabular"
-    default_num_estimators = 8
-    autocast_dtype = torch.float16
+def _load_kumo_network(
+    *,
+    task: str,
+    size: KumoTabularSize,
+    device: torch.device,
+) -> torch.nn.Module:
+    return sdm.models.KumoTabular(
+        task=task,
+        size=size,
+        device=device,
+    ).models[task]
 
-    @staticmethod
+
+class SDMKumoTabularModel(SDMModel):
+    size: ClassVar[KumoTabularSize]
+    default_num_estimators = 16
+    autocast_dtype = torch.float16
+    # Bagged children are fit one at a time in this process, so they share the
+    # pretrained network of their task through AutoGluon's registry.
+    _default_ag_args_ensemble_extra: ClassVar[dict[str, Any]] = {
+        "fold_fitting_strategy": "sequential_local",
+    }
+    shared_weights: ClassVar[SharedWeights] = SharedWeights(
+        loader="benchmark.tabular.model:_load_kumo_network",
+        key=("task", "size"),
+    )
+
+    @classmethod
+    def warmup(
+        cls,
+        *,
+        problem_type: str | None = None,
+        num_cpus: int | None = None,
+        num_gpus: float | None = None,
+        hyperparameters: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
+
+    @classmethod
     def _create_model(
+        cls,
         task: Task,
         device: torch.device,
     ) -> sdm.models.KumoTabular:
-        return sdm.models.KumoTabular(task=task, device=device)
+        model = sdm.models.KumoTabular(
+            task=task,
+            size=cls.size,
+            pretrained=False,
+            device="meta",
+        )
+        model.models[task] = _load_kumo_network(
+            task=task,
+            size=cls.size,
+            device=device,
+        )
+        return model
+
+    # Placeholder-and-reload pickle trick for the shared network; skipped
+    # for copy_per_fit models since their deep copy is real trained state.
+    def __getstate__(self) -> dict[str, Any]:
+        if self.model is None or owns_network(self):
+            return super().__getstate__()
+        served = cast(sdm.models.KumoTabular, self.model)
+        model = copy.copy(served)
+        model._modules = dict(served._modules)
+        model._modules["models"] = torch.nn.ModuleDict(
+            modules={task: torch.nn.Identity() for task in served.models},
+        )
+        return {**self.__dict__, "model": model}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        super().__setstate__(state)
+        if self.model is None or owns_network(self):
+            return
+        served = cast(sdm.models.KumoTabular, self.model)
+        for task in served.models:
+            served.models[task] = _load_kumo_network(
+                task=task,
+                size=self.size,
+                device=self._device,
+            )
+
+
+class SDMKumoTabularSmallModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-SMALL"
+    ag_name = "SDMKumoTabularSmall"
+    size = "small"
+    default_num_estimators = 8
+
+
+class SDMKumoTabularMediumModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-MEDIUM"
+    ag_name = "SDMKumoTabularMedium"
+    size = "medium"
+    default_num_estimators = 8
+
+
+class SDMKumoTabularLargeModel(SDMKumoTabularModel):
+    ag_key = "SDM-KUMO-TABULAR-LARGE"
+    ag_name = "SDMKumoTabularLarge"
+    size = "large"
+
+
+class _FinetunedMixin:
+    """Mixin for a model's `-ft` variant: fine-tuning on by default."""
+
+    def _set_default_params(self) -> None:
+        super()._set_default_params()
+        self.params["finetune"] = True
+
+
+class SDMKumoTabularLargeFinetunedModel(
+    _FinetunedMixin, SDMKumoTabularLargeModel
+):
+    ag_key = "SDM-KUMO-TABULAR-LARGE-FT"
+    ag_name = "SDMKumoTabularLargeFT"
+    # Own a deep copy per fold instead of mutating the shared network.
+    shared_weights: ClassVar[SharedWeights] = replace(
+        SDMKumoTabularModel.shared_weights, copy_per_fit=True
+    )
+
+
+class SDMKumoTabularSmallFinetunedModel(
+    _FinetunedMixin, SDMKumoTabularSmallModel
+):
+    ag_key = "SDM-KUMO-TABULAR-SMALL-FT"
+    ag_name = "SDMKumoTabularSmallFT"
+    shared_weights: ClassVar[SharedWeights] = replace(
+        SDMKumoTabularModel.shared_weights, copy_per_fit=True
+    )
+
+
+class SDMTabICLv2FinetunedModel(_FinetunedMixin, SDMTabICLv2Model):
+    ag_key = "SDM-TABICLV2-FT"
+    ag_name = "SDMTabICLv2FT"
 
 
 class SDMTabFMModel(SDMModel):
@@ -253,6 +503,11 @@ class SDMTabFMModel(SDMModel):
             accept_license=True,
             device=device,
         )
+
+
+class SDMTabFMFinetunedModel(_FinetunedMixin, SDMTabFMModel):
+    ag_key = "SDM-TABFM-FT"
+    ag_name = "SDMTabFMFT"
 
 
 @dataclass(frozen=True)
@@ -274,12 +529,36 @@ MODEL_CONFIGS = {
         name="TabICLv2",
         model_cls=SDMTabICLv2Model,
     ),
-    "kumo-tabular": ModelConfig(
-        name="KumoTabular",
-        model_cls=SDMKumoTabularModel,
+    "kumo-tabular-small": ModelConfig(
+        name="KumoTabular-Small",
+        model_cls=SDMKumoTabularSmallModel,
+    ),
+    "kumo-tabular-medium": ModelConfig(
+        name="KumoTabular-Medium",
+        model_cls=SDMKumoTabularMediumModel,
+    ),
+    "kumo-tabular-large": ModelConfig(
+        name="KumoTabular-Large",
+        model_cls=SDMKumoTabularLargeModel,
+    ),
+    "kumo-tabular-large-ft": ModelConfig(
+        name="KumoTabularLargeFT",
+        model_cls=SDMKumoTabularLargeFinetunedModel,
+    ),
+    "tabiclv2-ft": ModelConfig(
+        name="TabICLv2FT",
+        model_cls=SDMTabICLv2FinetunedModel,
+    ),
+    "kumo-tabular-small-ft": ModelConfig(
+        name="KumoTabularSmallFT",
+        model_cls=SDMKumoTabularSmallFinetunedModel,
     ),
     "tabfm": ModelConfig(
         name="TabFM",
         model_cls=SDMTabFMModel,
+    ),
+    "tabfm-ft": ModelConfig(
+        name="TabFMFT",
+        model_cls=SDMTabFMFinetunedModel,
     ),
 }

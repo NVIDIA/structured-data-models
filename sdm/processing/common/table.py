@@ -39,13 +39,9 @@ class TableDispatch(EnsembleProcessor):
         self._route: Literal["task", "related"] | None = None
 
     @property
-    def handles_stypes(self) -> frozenset[Stype]:
+    def handles_stypes(self) -> tuple[Stype, ...]:
         r""":meta private:"""  # noqa: D415
-        return frozenset(
-            stype
-            for processor in self.processors.values()
-            for stype in processor.handles_stypes
-        )
+        return self._merge_stypes(self.processors.values())
 
     def _fit_ensemble(
         self,

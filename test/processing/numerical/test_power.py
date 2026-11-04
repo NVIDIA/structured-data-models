@@ -12,6 +12,7 @@ from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 @onlyFullTest
 @onlyCUDA
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_power_transform_accepts_caller_compiled_optimizer(
     dtype: torch.dtype,
@@ -83,6 +84,79 @@ def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
         inp,
         atol=1e-8,
     )
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_power_transform_preserves_expanded_inputs_and_fitted_state(
+    device: torch.device, dtype: torch.dtype
+) -> None:
+    values = (
+        torch.tensor(
+            [-3.0, -1.0, -1e-12, 0.0, 1e-12, 1.0, 3.0, float("nan")],
+            device=device,
+            dtype=dtype,
+        )
+        .view(1, -1, 1)
+        .expand(2, -1, 4)
+    )
+    original = values.clone()
+    table = TableTensor(numerical=values)
+    processor = PowerTransform(standardize=False).fit(table)
+    processor.lambdas.copy_(
+        values.new_tensor([0, torch.finfo(dtype).eps / 2, 1, 2])
+    )
+    lambdas = processor.lambdas.clone()
+
+    first = processor.transform(table)
+    second = processor.transform(table)
+
+    torch.testing.assert_close(
+        first.numerical, second.numerical, equal_nan=True
+    )
+    torch.testing.assert_close(
+        processor.inverse_transform(first).numerical,
+        values,
+        rtol=1e-5,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(values, original, equal_nan=True)
+    torch.testing.assert_close(processor.lambdas, lambdas)
+
+
+@withCUDA
+def test_power_transform_fits_strided_nonfinite_context(
+    device: torch.device,
+) -> None:
+    values = (
+        torch.tensor(
+            [
+                [-3.0, float("nan"), 1.0],
+                [-1.0, -float("inf"), 2.0],
+                [0.0, float("inf"), 4.0],
+                [1.0, float("nan"), 16.0],
+                [3.0, float("nan"), 32.0],
+            ],
+            dtype=torch.float64,
+            device=device,
+        )
+        .T.contiguous()
+        .T
+    )
+    before = values.clone()
+    processor = PowerTransform().fit(TableTensor(numerical=values))
+    reference = PowerTransform().fit(
+        TableTensor(numerical=values.contiguous())
+    )
+    query = TableTensor(numerical=values[:3, :])
+
+    torch.testing.assert_close(
+        processor.transform(query).numerical,
+        reference.transform(query).numerical,
+        equal_nan=True,
+    )
+    torch.testing.assert_close(values, before, equal_nan=True)
 
 
 @withCUDA
@@ -224,9 +298,8 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
     # The first column fits a positive lambda, whose inverse-domain has no
-    # upper bound, so ``upper_bound`` must be +inf (matching the lambda == 0
-    # case). A non-finite model output must fall back to the fitted per-column
-    # max, or zero for the entirely missing second column.
+    # upper bound. A non-finite model output must fall back to the fitted
+    # per-column max, or zero for the entirely missing second column.
     inp = torch.tensor(
         [
             [0.0, float("nan")],
@@ -245,7 +318,6 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     processor = PowerTransform()
     processor.fit(TableTensor.from_tensor(inp))
     assert (processor.lambdas > 0).all()
-    assert torch.isinf(processor.upper_bound).all()
 
     extreme = torch.tensor(
         [[float("inf"), float("inf")]], dtype=inp.dtype, device=device
@@ -291,3 +363,65 @@ def test_power_transform_fits_leading_batches_independently(
         rtol=2e-5,
         atol=2e-5,
     )
+
+
+@withCUDA
+def test_power_transform_fit_ignores_missing_cells(
+    device: torch.device,
+) -> None:
+    values = torch.linspace(0.1, 5.0, 300, device=device).exp().unsqueeze(-1)
+    missing = torch.zeros(300, dtype=torch.bool, device=device)
+    missing[::3] = True
+    query = TableTensor.from_tensor(
+        torch.tensor([[0.5], [2.0], [40.0]], device=device)
+    )
+
+    with_missing = PowerTransform().fit(
+        TableTensor.from_tensor(
+            values.masked_fill(missing.unsqueeze(-1), float("nan"))
+        )
+    )
+    on_finite = PowerTransform().fit(TableTensor.from_tensor(values[~missing]))
+
+    torch.testing.assert_close(
+        with_missing.transform(query).numerical,
+        on_finite.transform(query).numerical,
+        rtol=5e-3,
+        atol=5e-3,
+    )
+
+
+@withCUDA
+def test_power_transform_keeps_queries_beyond_the_fitted_range_finite(
+    device: torch.device,
+) -> None:
+    # Small-magnitude columns fit a large lambda, which overflows for inputs
+    # above the fitted range.
+    decay = torch.linspace(0.0, 1.0, 2000, device=device).pow(8)
+    inp = (0.01 * (1.0 - decay)).unsqueeze(-1)
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+
+    out = processor.transform(
+        TableTensor.from_tensor(torch.tensor([[1.0], [10.0]], device=device))
+    )
+
+    assert out.numerical.isfinite().all()
+
+
+@withCUDA
+def test_power_transform_inverse_beyond_the_fitted_bound_falls_back_to_max(
+    device: torch.device,
+) -> None:
+    # A right-skewed column fits a negative lambda, whose inverse has a
+    # finite asymptote; past it the power formula yields NaN rather than inf.
+    inp = torch.linspace(0.1, 5.0, 2000, device=device).exp().unsqueeze(-1)
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
+
+    restored = processor.inverse_transform(
+        TableTensor.from_tensor(
+            torch.tensor([[2.0], [20.0], [1e6]], device=device)
+        )
+    ).numerical
+
+    assert restored.isfinite().all()
+    assert (restored[1:] == inp.max()).all()

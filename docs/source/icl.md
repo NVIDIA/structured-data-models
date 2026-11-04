@@ -1,10 +1,10 @@
 # In-Context Learning
 
-In-Context Learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights.
+In-context learning (ICL) treats predictions on structured data (*e.g.*, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows and predicts the query targets without updating its weights.
 The `structured-data-models` package groups and unifies such foundation models behind a single interface:
 
 1. Convert dataframe-like data into a {py:class}`~sdm.tensor.TableTensor` (see [here](tensor) for the accompanying tutorial).
-2. Optionally define pre- and post-processing routines through a {py:class}`~sdm.processing.recipe.Recipe` (see [here](processing) for the accompanying tutorial).
+2. Optionally define preprocessing and postprocessing routines through a {py:class}`~sdm.processing.recipe.Recipe` (see [here](processing) for the accompanying tutorial).
 3. Instantiate and run an in-context model from [`sdm.models`](api/models).
 4. Receive predictions as a {py:class}`~sdm.tensor.TableTensor`.
 
@@ -20,7 +20,7 @@ The `structured-data-models` package groups and unifies such foundation models b
 
 ## The ICL Interface
 
-An In-Context Learning task is described by **context features**, **context targets**, and **query features**, while model-specific details are handled by the model implementation and its pre- and post-processing {py:class}`~sdm.processing.recipe.Recipe`.
+An in-context learning task is described by **context features**, **context targets**, and **query features**, while model-specific details are handled by the model implementation and its preprocessing and postprocessing {py:class}`~sdm.processing.recipe.Recipe`.
 As a result, single-table and multi-table models can share the same prediction workflow while consuming different forms of context.
 
 Specifically, an in-context learning task has three core inputs, as defined in the {py:class}`~sdm.models.ICLModel` base class:
@@ -41,7 +41,7 @@ df = load_breast_cancer(as_frame=True).frame
 
 table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=sdm.infer_stypes(df),
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device="cuda",
 )
 
@@ -53,7 +53,8 @@ out = model(
 )
 ```
 
-This one-shot {py:meth}`~sdm.models.ICLModel.forward` call is the most direct form of the interface.
+This one-shot {py:meth}`~sdm.models.ICLModel.forward` call is the most direct form of the interface. Calling {py:meth}`~sdm.models.ICLModel.forward` while the model is in train mode (`model.train()`) enables gradient tracking so the returned predictions can be used in an ordinary training loop (`loss.backward()`) to fine-tune the model's parameters.
+
 When the same context is reused for many query batches, call {py:meth}`~sdm.models.ICLModel.fit` once and then call {py:meth}`~sdm.models.ICLModel.predict` for each query batch.
 This records reusable model state, including key/value projections, and avoids recomputing the context side of the model for every prediction:
 
@@ -70,6 +71,8 @@ model.clear()
 The cached interface has the same prediction contract as the one-shot call.
 Use one-shot {py:meth}`~sdm.models.ICLModel.forward` calls for one-time calls when tasks change frequently, and use the {py:meth}`~sdm.models.ICLModel.fit`+{py:meth}`~sdm.models.ICLModel.predict` flow for large batch predictions over a single fixed task.
 
+Unlike {py:meth}`~sdm.models.ICLModel.forward`, {py:meth}`~sdm.models.ICLModel.predict` does not support gradient-based fine-tuning and raises if the model is in train mode.
+
 ## Model Concepts
 
 Structured data foundation models are not bound to a specific task type.
@@ -79,27 +82,27 @@ For example, a {py:attr}`~sdm.Stype.categorical` target is treated as classifica
 
 Similarly, there are no task-specific constructor arguments when creating an {py:class}`~sdm.models.ICLModel`.
 Instead, task behavior is determined at the data boundary.
-A single {py:class}`~sdm.processing.recipe.Recipe` can express task-specific pre- and post-processing through {py:class}`~sdm.processing.common.StypeDispatch` and {py:class}`~sdm.processing.common.TaskDispatch`.
+A single {py:class}`~sdm.processing.recipe.Recipe` can express task-specific preprocessing and postprocessing through {py:class}`~sdm.processing.common.StypeDispatch` and {py:class}`~sdm.processing.common.TaskDispatch`.
 While each model provides a default recipe, users can fully control or modify how inputs and outputs are processed (see [here](processing) for more information).
 
-Lastly, the {py:attr}`~sdm.models.ICLModel.supported_feature_stypes` attribute denotes which feature semantic types a model accepts after pre-processing.
+Lastly, the {py:attr}`~sdm.models.ICLModel.supported_feature_stypes` attribute denotes which feature semantic types a model accepts after preprocessing.
 Semantic types outside this set need to be converted, dropped, or otherwise handled by the recipe before they reach the model.
 For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical features internally, so it is the recipe's job to convert any other semantic type into a numerical representation before it reaches the model, *e.g.*, via {py:class}`~sdm.processing.common.ToNumerical` on categorical columns.
 
-Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and post-processing routine of the {py:class}`~sdm.processing.recipe.Recipe`:
+Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and postprocessing routine of the {py:class}`~sdm.processing.recipe.Recipe`:
 
 - Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.
 - Regression predictions are generally model-dependent.
   For example, {py:class}`~sdm.models.TabICLv2` outputs numerical quantiles named `"q001"` through `"q999"`, from which the (approximate) mean prediction can be derived via `out.numerical.mean(dim=-1)` and the median prediction is available via `out["q500"].numerical`.
 
-Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
+Since predictions are returned as a {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
 
 In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to them (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
 
 ## Ensembling
 
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
-When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
+When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, preprocessing produces different transformed views of the same task, and model outputs on these views are stacked for postprocessing.
 
 Beyond stochastic processors, ensembling can also provide distinct in-context examples per estimator.
 By default, the leading dimension of higher-rank inputs is interpreted as the estimator dimension, which allows callers to customize the data seen by each estimator (*e.g.*, to scale to larger datasets):
@@ -131,12 +134,12 @@ with torch.amp.autocast("cuda", dtype=torch.float16):
     out = model(...)
 ```
 
-Pre-processing and post-processing routines remain outside the model’s autocast policy.
+Preprocessing and postprocessing routines remain outside the model’s autocast policy.
 They will run with the dtypes of the model inputs.
 
 ## Embeddings
 
-Intermediate embeddings of a {py:class}`~sdm.models.ICLModel` can be captured by attaching a standard PyTorch hook at any child module, *e.g.*, via {py:meth}`torch.nn.Module.register_forward_pre_hook`.
+Intermediate embeddings of an {py:class}`~sdm.models.ICLModel` can be captured by attaching a standard PyTorch hook at any child module, *e.g.*, via {py:meth}`torch.nn.Module.register_forward_pre_hook`.
 For example, the following snippet records the query embeddings passed into the {py:class}`~sdm.models.TabICLv2` classification head:
 
 ```python
@@ -149,6 +152,8 @@ handle = head.register_forward_pre_hook(_embedding)
 ```
 
 Such embeddings can be used for downstream analysis, such as clustering, retrieval, or similarity search.
+
+(relational-context)=
 
 ## Relational Context
 
@@ -266,4 +271,7 @@ For example, {py:class}`~sdm.models.KumoRelational` consumes the `x_context` and
 
 To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
-The full relational sampling and prediction flow is shown in [`examples/kumo/relational/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumo/relational/rel_bench.py).
+
+```{note}
+The full relational sampling and prediction flow, including temporal sampling, is shown in [`examples/relational/relbench`](https://github.com/NVIDIA/structured-data-models/tree/main/examples/relational/relbench).
+```

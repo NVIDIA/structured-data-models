@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Iterable
 from typing import Self
 
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -46,6 +47,17 @@ class EnsembleProcessor(Processor):
             return processor
         return EnsembleProcessorAdapter(processor)
 
+    @staticmethod
+    def _merge_stypes(processors: Iterable[Processor]) -> tuple[Stype, ...]:
+        """Combine column types without duplicates, in input order."""
+        return tuple(
+            dict.fromkeys(
+                stype
+                for processor in processors
+                for stype in processor.handles_stypes
+            )
+        )
+
     def _fit(
         self,
         table: TableTensor,
@@ -61,7 +73,7 @@ class EnsembleProcessor(Processor):
         output = self._transform_ensemble(
             EnsembleTable.from_table(table, num_members=1)
         )
-        return output.table(0)
+        return output[0]
 
     def _fit_transform(
         self,
@@ -75,7 +87,7 @@ class EnsembleProcessor(Processor):
             EnsembleTable.from_table(table, num_members=1),
             generator=generator,
         )
-        return output.table(0)
+        return output[0]
 
     def _fit_ensemble(
         self,
@@ -115,13 +127,13 @@ class EnsembleProcessor(Processor):
             generator: Pseudorandom number generator used for sampling.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
-            for group in ensemble_table
+            self._handles_table(group)
+            for group in ensemble_table._iter_groups()
         ):
             return self
         if self.requires_fit:
             self._fit_ensemble(ensemble_table, generator=generator)
-            self._set_fitted(ensemble_table.table(0).device)
+            self._set_fitted(ensemble_table[0].device)
         return self
 
     def transform_ensemble(
@@ -137,8 +149,8 @@ class EnsembleProcessor(Processor):
             The transformed ensemble table.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
-            for group in ensemble_table
+            self._handles_table(group)
+            for group in ensemble_table._iter_groups()
         ):
             return ensemble_table
         self._check_is_fitted()
@@ -160,8 +172,8 @@ class EnsembleProcessor(Processor):
             The transformed ensemble table.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
-            for group in ensemble_table
+            self._handles_table(group)
+            for group in ensemble_table._iter_groups()
         ):
             return ensemble_table
         output = self._fit_transform_ensemble(
@@ -169,7 +181,7 @@ class EnsembleProcessor(Processor):
             generator=generator,
         )
         if self.requires_fit:
-            self._set_fitted(ensemble_table.table(0).device)
+            self._set_fitted(ensemble_table[0].device)
         return output
 
 
@@ -180,7 +192,7 @@ class EnsembleInvertibleMixin(InvertibleMixin):
         output = self._inverse_transform_ensemble(
             EnsembleTable.from_table(table, num_members=1)
         )
-        return output.table(0)
+        return output[0]
 
     @abc.abstractmethod
     def _inverse_transform_ensemble(

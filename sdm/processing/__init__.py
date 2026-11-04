@@ -8,6 +8,8 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleInvertibleMixin,
 )
+from sdm.processing.target import TargetAwareEnsembleProcessor
+from sdm.processing.series import SeriesEnsembleProcessor
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -24,31 +26,47 @@ from sdm.processing.common import (
 )
 from sdm.processing.text import TFIDF, SentenceTransformer
 from sdm.processing.numerical import (
+    Cast,
     Clip,
     ClipQuantiles,
     ClipSigma,
     ImputeMean,
     PowerTransform,
     QuantileTransform,
+    RankGaussian,
     Standardize,
+    RobustScale,
+    MinMaxScale,
     FlipSign,
+    Asinh,
     DropConstantColumns,
     PCA,
     RandomProjection,
+    Detrend,
+    Interpolate,
 )
 from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
     ImputeMode,
+    AddCategoryCounts,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import ReduceEstimators, Softmax, SortQuantiles
+from sdm.processing.output import (
+    AverageEstimators,
+    Softmax,
+    SortQuantiles,
+    ClipNonnegative,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
     "Processor",
     "InvertibleMixin",
+    "EnsembleProcessor",
     "EnsembleInvertibleMixin",
+    "TargetAwareEnsembleProcessor",
+    "SeriesEnsembleProcessor",
     "EnsembleProcessorAdapter",
     "Identity",
     "Callable",
@@ -57,30 +75,38 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "TableDispatch",
-    "EnsembleProcessor",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
     "TFIDF",
     "SentenceTransformer",
+    "Cast",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
+    "RankGaussian",
     "Standardize",
+    "RobustScale",
+    "MinMaxScale",
     "FlipSign",
+    "Asinh",
     "DropConstantColumns",
     "PCA",
     "RandomProjection",
+    "Detrend",
+    "Interpolate",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
+    "AddCategoryCounts",
     "AddCalendarFields",
-    "ReduceEstimators",
+    "AverageEstimators",
     "Softmax",
     "SortQuantiles",
+    "ClipNonnegative",
     "Recipe",
 ]

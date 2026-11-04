@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import torch
 
-from sdm import StringTensor, Stype, TableTensor
+from sdm import StringTensor, TableTensor
 from sdm.processing import SentenceTransformer
 from sdm.processing.text.sentence_transformer import _CuDFTokenizer, _Encoder
 from sdm.testing import onlyCUDA, withCUDA
@@ -178,6 +178,68 @@ def test_gpu_routes_word_length_mismatches(
         )
 
 
+def test_max_seq_length_truncates(
+    sentence_transformer_model: Any,
+) -> None:
+    model = sentence_transformer_model
+    cap = min(8, model.max_seq_length)
+    text = "word " * (model.max_seq_length + 10)
+    processor = SentenceTransformer(MODEL_NAME, max_seq_length=cap)
+    output = processor(
+        TableTensor(
+            columns={"text": ("col",)},
+            text=StringTensor.from_list([[text]]),
+        )
+    ).numerical
+
+    original = model.max_seq_length
+    model.max_seq_length = cap
+    try:
+        with torch.inference_mode():
+            reference = model.encode(
+                [text],
+                convert_to_tensor=True,
+                show_progress_bar=False,
+                device="cpu",
+            )
+    finally:
+        model.max_seq_length = original
+    assert torch.allclose(output, reference, atol=1e-5)
+
+
+@onlyCUDA
+def test_gpu_max_seq_length_truncates() -> None:
+    st = pytest.importorskip("sentence_transformers")
+    pytest.importorskip("cudf")
+
+    device = torch.device("cuda:0")
+    model = st.SentenceTransformer(MODEL_NAME)
+    cap = min(8, model.max_seq_length)
+    text = "word " * (model.max_seq_length + 10)
+    processor = SentenceTransformer(
+        MODEL_NAME,
+        max_seq_length=cap,
+    ).to(device)
+    output = processor(
+        TableTensor(
+            columns={"text": ("col",)},
+            text=StringTensor.from_list([[text]], device=device),
+        )
+    ).numerical
+
+    model.max_seq_length = cap
+    model.eval()
+    with torch.inference_mode():
+        reference = model.encode(
+            [text],
+            convert_to_tensor=True,
+            show_progress_bar=False,
+            device=str(device),
+        )
+
+    assert torch.allclose(output, reference, atol=1e-5)
+
+
 @withCUDA
 def test_forward(device: torch.device) -> None:
     pytest.importorskip("sentence_transformers")
@@ -194,7 +256,7 @@ def test_forward(device: torch.device) -> None:
 
     output = SentenceTransformer(MODEL_NAME).to(device)(table)
 
-    assert output.columns[Stype.numerical] == tuple(
+    assert output.numerical_columns == tuple(
         f"{column}__emb{i}"
         for column in ("text_0", "text_1")
         for i in range(128)

@@ -6,7 +6,10 @@ import torch
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import Processor
-from sdm.processing.categorical._categorical import _check_categorical_codes
+from sdm.processing.categorical._categorical import (
+    _check_categorical_codes,
+    _check_categories,
+)
 
 
 class ImputeMode(Processor):
@@ -18,14 +21,14 @@ class ImputeMode(Processor):
     Ties select the lowest category code.
 
     Transform inputs must use the fitted per-column category vocabularies.
-    The processor raises if they do not match. Column names are not
-    validated. Use :class:`~sdm.processing.AlignCategories` before this
-    processor when training and transform inputs were tensorized
-    independently.
+    Use :class:`~sdm.processing.AlignCategories` before this processor when
+    training and transform inputs were tensorized independently.
     """
 
-    handles_stypes = frozenset({Stype.categorical})
+    handles_stypes = (Stype.categorical,)
     requires_fit = True
+
+    _fill_values: torch.Tensor
 
     def __init__(self) -> None:
         super().__init__()
@@ -46,7 +49,7 @@ class ImputeMode(Processor):
         data = table.categorical
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []
-        columns = table.columns[Stype.categorical]
+        columns = table.categorical_columns
         observed_mask = data.isfinite()
         for index, category in enumerate(table.categorical.categories):
             codes = data[..., index]  # [*batch, n_samples]
@@ -70,10 +73,11 @@ class ImputeMode(Processor):
             )
             fill_values.append(counts.argmax(dim=-1, keepdim=True))
 
-        self._fill_values = (
-            torch.stack(fill_values, dim=-1)
+        self._set_buffer(
+            name="_fill_values",
+            value=torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
-            else torch.empty(0, dtype=torch.long, device=data.device)
+            else torch.empty(0, dtype=torch.long, device=data.device),
         )
         self._categories = BufferList(table.categorical.categories)
 
@@ -87,7 +91,7 @@ class ImputeMode(Processor):
         return self._replace_missing(table)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        self._check_categories(table)
+        _check_categories(table, self._categories)
         _check_categorical_codes(table)
         return self._replace_missing(table)
 
@@ -104,23 +108,3 @@ class ImputeMode(Processor):
             categories=table.categorical.categories,
         )
         return table.replace_blocks(categorical=categorical)
-
-    def _check_categories(self, table: TableTensor) -> None:
-        columns = table.columns[Stype.categorical]
-        if len(table.categorical.categories) != len(self._categories):
-            raise ValueError(
-                f"Expected {len(self._categories)} fitted categorical "
-                f"columns (got {len(columns)})."
-            )
-        for index, (actual, expected) in enumerate(
-            zip(table.categorical.categories, self._categories)
-        ):
-            expected = expected.to(device=actual.device)
-            if not actual.equal(expected):
-                raise ValueError(
-                    "Expected the category vocabulary for categorical column "
-                    f"{columns[index]!r} to match the fitted values and "
-                    "order. "
-                    "Use 'AlignCategories' before this processor for "
-                    "independently tensorized inputs."
-                )

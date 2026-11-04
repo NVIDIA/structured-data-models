@@ -215,10 +215,10 @@ def test_align_categories_filters_per_ensemble_member(
 
     output = AlignCategories(min_frequency=2).fit_transform_ensemble(context)
 
-    assert output.table(0).categorical.categories[0].tolist() == ["red"]
-    assert output.table(0).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
-    assert output.table(1).categorical.categories[0].tolist() == ["blue"]
-    assert output.table(1).categorical.code.squeeze(-1).tolist() == [0, 0, -1]
+    assert output[0].categorical.categories[0].tolist() == ["red"]
+    assert output[0].categorical.code.squeeze(-1).tolist() == [0, 0, -1]
+    assert output[1].categorical.categories[0].tolist() == ["blue"]
+    assert output[1].categorical.code.squeeze(-1).tolist() == [0, 0, -1]
 
 
 @withCUDA
@@ -498,9 +498,45 @@ def test_align_categories_ensemble_matches_member_fits(
     context_tables = (first_context, second_context)
     for member_id, table_id in enumerate(member_table_ids):
         reference = references[table_id]
-        assert context_output.table(member_id).equal(
+        assert context_output[member_id].equal(
             reference.transform(context_tables[table_id])
         )
         expected_query = reference.transform(query)
-        assert query_output.table(member_id).equal(expected_query)
-        assert fitted_query_output.table(member_id).equal(expected_query)
+        assert query_output[member_id].equal(expected_query)
+        assert fitted_query_output[member_id].equal(expected_query)
+
+
+def test_string_category_lookups_compile(compilation: None) -> None:
+    fitted = (
+        StringTensor.from_list(["a", "b"]),
+        StringTensor.from_list(["a", "x"]),
+    )
+    codes = torch.empty((), dtype=torch.int32)
+
+    def lookups(categories: StringTensor) -> tuple[torch.Tensor, ...]:
+        return AlignCategories._string_category_lookups(
+            input_categories=(categories, categories),
+            fitted_categories=fitted,
+            codes=codes,
+        )
+
+    compiled = torch.compile(lookups, backend="inductor", fullgraph=True)
+    first, second = compiled(StringTensor.from_list(["b", "z", "a"]))
+    torch.testing.assert_close(
+        actual=first,
+        expected=torch.tensor([1, -1, 0], dtype=codes.dtype),
+    )
+    torch.testing.assert_close(
+        actual=second,
+        expected=torch.tensor([-1, -1, 0], dtype=codes.dtype),
+    )
+
+    first, second = compiled(StringTensor.from_list(["x", "z", "q"]))
+    torch.testing.assert_close(
+        actual=first,
+        expected=torch.tensor([-1, -1, -1], dtype=codes.dtype),
+    )
+    torch.testing.assert_close(
+        actual=second,
+        expected=torch.tensor([1, -1, -1], dtype=codes.dtype),
+    )

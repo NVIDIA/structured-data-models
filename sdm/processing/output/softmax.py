@@ -18,7 +18,7 @@ class Softmax(Processor):
             higher values produce a softer distribution.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(

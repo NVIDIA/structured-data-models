@@ -7,7 +7,7 @@ This benchmark evaluates `structured-data-models` on the corrected 300-dataset [
 Run the commands below from the repository root:
 
 ```bash
-pip install structured-data-models \
+pip install . \
   "TALENT @ git+https://github.com/LAMDA-Tabular/TALENT.git@08301d6"
 ```
 
@@ -24,7 +24,9 @@ Download and extract the datasets from the [official TALENT dataset page](https:
 - **`KumoTabular`:**
 
   ```bash
-  python -m benchmark.tabular.talent.main --model kumo-tabular --dataset-path /path/to/talent/data
+  python -m benchmark.tabular.talent.main --model kumo-tabular-large --dataset-path /path/to/talent/data
+  python -m benchmark.tabular.talent.main --model kumo-tabular-medium --dataset-path /path/to/talent/data
+  python -m benchmark.tabular.talent.main --model kumo-tabular-small --dataset-path /path/to/talent/data
   ```
 
 - **`TabFM`:**
@@ -41,10 +43,27 @@ Pass a dataset name to run only that TALENT dataset:
 
 ```bash
 python -m benchmark.tabular.talent.main \
-  --model kumo-tabular \
+  --model kumo-tabular-large \
   --dataset-path /path/to/talent/data \
   --dataset Bank_Customer_Churn_Dataset
 ```
+
+## Fine-tuning
+
+Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked. `--model kumo-tabular-small-ft` is `kumo-tabular-small` capped at 10 classes, for fine-tuning stability on multiclass datasets:
+
+```bash
+python -m benchmark.tabular.talent.main \
+  --model kumo-tabular-small-ft \
+  --dataset-path /path/to/talent/data \
+  --finetune \
+  --finetune-epochs 75 \
+  --finetune-lr 1e-6
+```
+
+Fine-tuned results use `<model>-finetuned` as their output folder and model label, keeping them separate from baseline results and the capped `kumo-tabular-small-ft` variant.
+
+## Evaluate
 
 Evaluate all available model results with:
 

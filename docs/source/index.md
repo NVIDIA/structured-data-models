@@ -30,7 +30,11 @@ overview
 
 tensor
 icl
+forecasting
 processing
+nanotabicl
+finetuning
+nim
 ```
 
 ```{toctree}
@@ -43,5 +47,6 @@ api/relational
 api/processing
 api/nn
 api/models
+api/explain
 api/evaluation
 ```

@@ -3,11 +3,12 @@
 
 """Testing utilities."""
 
-from sdm.testing.decorators import onlyCUDA, onlyFullTest, withCUDA
+from sdm.testing.decorators import onlyCUDA, withCUDA, onlyMPS, onlyFullTest
 
 
 __all__ = [
     "onlyCUDA",
-    "onlyFullTest",
     "withCUDA",
+    "onlyMPS",
+    "onlyFullTest",
 ]

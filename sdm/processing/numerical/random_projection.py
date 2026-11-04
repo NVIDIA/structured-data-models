@@ -20,7 +20,7 @@ class RandomProjection(EnsembleProcessor):
             ``1 / sqrt(channels)``.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(
@@ -41,7 +41,7 @@ class RandomProjection(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         weights = []
-        for i, group in enumerate(ensemble_table):
+        for i, group in enumerate(ensemble_table._iter_groups()):
             num_members = ensemble_table.num_members_in_group(i)
             weight = group.numerical.new_empty(
                 (

@@ -23,7 +23,7 @@ class SelectColumns(EnsembleProcessor):
             0, 1, and 2 receive columns (0, 1), (2, 3), and (4, 0).
     """
 
-    handles_stypes = frozenset(Stype)
+    handles_stypes = tuple(Stype)
     requires_fit = False
 
     def __init__(
@@ -41,31 +41,35 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if all(group.size(-1) <= self.max_columns for group in ensemble_table):
+        if all(
+            group.size(-1) <= self.max_columns
+            for group in ensemble_table._iter_groups()
+        ):
             return ensemble_table
 
         if self.method == "first":
             groups = []
-            for group in ensemble_table:
+            for group in ensemble_table._iter_groups():
                 columns: Mapping[StypeLike, Sequence[str]] = {
                     stype: column_names[: self.max_columns]
-                    for stype, column_names in group.columns.items()
+                    for stype, column_names in group.column_groups
                 }
                 blocks = {
                     stype: block[..., : self.max_columns]
-                    for stype, block in group.items()
+                    for stype, block in TableTensor.items(group)
                 }
                 groups.append(group.__class__(columns=columns, **blocks))
             return ensemble_table.replace_groups(groups)
 
         assert self.method == "round_robin"
         tables: list[TableTensor] = []
-        for member_id in range(ensemble_table.num_members):
-            table = ensemble_table.table(member_id)
+        for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
+            columns_by_type = dict(table.column_groups)
             columns: dict[StypeLike, tuple[str, ...]] = {}
             blocks = {}
-            for stype, block in table.items():
-                column_names = table.columns[stype]
+            for stype, block in TableTensor.items(table):
+                column_names = columns_by_type[stype]
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.
                 if num_columns == 0:

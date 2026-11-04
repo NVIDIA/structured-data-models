@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import functools
 import math
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
+import numpy as np
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -19,13 +21,23 @@ from typing_extensions import override
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import _record_compiled_stream, _resolve_device
 
 if TYPE_CHECKING:
     import cudf
     import pandas as pd
 
 aten = torch.ops.aten
+
+_NUMPY_TORCH_DTYPES = {
+    np.dtype(np.float16): torch.float16,
+    np.dtype(np.float32): torch.float32,
+    np.dtype(np.float64): torch.float64,
+}
+_TORCH_NUMPY_DTYPES = {
+    torch_dtype: numpy_dtype
+    for numpy_dtype, torch_dtype in _NUMPY_TORCH_DTYPES.items()
+}
 
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:
@@ -37,6 +49,66 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
             return fn(*args, **kwargs)
 
     return wrapper
+
+
+# torch.compile on PyTorch 2.7 can fail after a graph break with both
+# contexts in one function. Keep the gradient context in a helper.
+def _call_with_grad_enabled(
+    fn: Callable, grad_enabled: bool, /, *args: Any, **kwargs: Any
+) -> Any:
+    with torch.set_grad_enabled(grad_enabled):
+        return fn(*args, **kwargs)
+
+
+def preserve_autograd_state(fn: Callable) -> Callable:
+    r"""Re-apply the caller's autograd/inference-mode state for non-view ops.
+
+    ``__torch_dispatch__`` redispatch does not automatically retain the
+    caller's inference-mode and grad-enabled state for non-view ops, so a
+    real (non-view) copy performed here would otherwise silently lose
+    ``requires_grad``/``grad_fn`` even though gradients are enabled in the
+    caller's scope.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        inference_mode_enabled = torch.is_inference_mode_enabled()
+        grad_enabled = torch.is_grad_enabled()
+        with torch.inference_mode(inference_mode_enabled):
+            return _call_with_grad_enabled(fn, grad_enabled, *args, **kwargs)
+
+    return wrapper
+
+
+def _move_categories(
+    categories: Sequence[Tensor],
+    device: torch.device | str | None,
+) -> tuple[Tensor, ...]:
+    device = _resolve_device(device)
+    if device is None or device.type == "cpu":
+        return tuple(categories)
+
+    # Copy strings separately: views of a shared copy recompile per batch.
+    groups: dict[torch.dtype, list[int]] = defaultdict(list)
+    moved: list[Tensor | None] = [None] * len(categories)
+    for i, category in enumerate(categories):
+        if type(category) is Tensor:
+            groups[category.dtype].append(i)
+        else:
+            moved[i] = category.to(device)
+
+    for indices in groups.values():
+        tensors = [categories[i] for i in indices]
+        if len(tensors) == 1:
+            parts = (tensors[0].to(device),)
+        else:
+            sizes = [tensor.numel() for tensor in tensors]
+            parts = torch.cat(tensors).to(device).split(sizes)
+        for i, part in zip(indices, parts):
+            moved[i] = part
+
+    assert all(category is not None for category in moved)
+    return cast(tuple[Tensor, ...], tuple(moved))
 
 
 @dataclass(frozen=True)
@@ -257,29 +329,55 @@ class TableTensor(Tensor):
                 )
 
         column_names = list(chain.from_iterable(columns.values()))
-        column_to_loc: dict[str, tuple[Stype, int]] = {}
-        for stype, names in columns.items():
-            for i, name in enumerate(names):
-                column_to_loc[name] = (Stype(stype), i)
-        if len(column_names) != len(column_to_loc):
+        if len(column_names) != len(set(column_names)):
             raise ValueError("Expected column names to be unique")
 
+        # Keep enum objects out of captured graph arguments.
+        return TableTensor._make_table_tensor(
+            columns={str(stype): names for stype, names in columns.items()},
+            numerical=numerical,
+            categorical=categorical,
+            datetime=datetime,
+            text=text,
+            id=id,
+            cls=None if cls is TableTensor else cls,
+        )
+
+    # Avoid Dynamo reading _columns before construction has finished.
+    @staticmethod
+    @torch.compiler.allow_in_graph
+    def _make_table_tensor(
+        columns: dict[str, tuple[str, ...]],
+        numerical: Tensor,
+        categorical: CategoricalTensor,
+        datetime: Tensor,
+        text: StringTensor,
+        id: ColumnarTensor,
+        cls: type[TableTensor] | None = None,
+    ) -> TableTensor:
+        cls = TableTensor if cls is None else cls
+        stype_columns = {
+            Stype(stype): names for stype, names in columns.items()
+        }
+        column_to_loc = {
+            name: (stype, i)
+            for stype, names in stype_columns.items()
+            for i, name in enumerate(names)
+        }
         out = Tensor._make_wrapper_subclass(
-            cls,
-            size=(*size, len(column_names)),
+            cls=cls,
+            size=(*numerical.size()[:-1], len(column_to_loc)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
         )
-
         out._numerical = numerical
         out._categorical = categorical
         out._datetime = datetime
         out._text = text
         out._id = id
-        out._columns = columns
+        out._columns = stype_columns
         out._column_to_loc = column_to_loc
-
         return out
 
     @classmethod
@@ -395,6 +493,170 @@ class TableTensor(Tensor):
         """
         import pandas as pd
 
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for name, stype in stypes.items():
+            columns[Stype(stype)].append(name)
+
+        if columns and set(columns).issubset(
+            {Stype.numerical, Stype.categorical}
+        ):
+            target_device = (
+                torch.get_default_device() if device is None else device
+            )
+            blocks: dict[Stype, Tensor] = {}
+
+            if numerical_columns := columns.get(Stype.numerical):
+                dtype = torch.get_default_dtype()
+                numpy_dtype = _TORCH_NUMPY_DTYPES.get(
+                    dtype, np.dtype(np.float32)
+                )
+                numerical_df = (
+                    df
+                    if len(numerical_columns) == len(df.columns)
+                    and numerical_columns == df.columns.tolist()
+                    else df[numerical_columns]
+                )
+                if len(df) == 0:
+                    if any(
+                        pd.api.types.is_complex_dtype(dtype)
+                        for dtype in numerical_df.dtypes
+                    ):
+                        raise TypeError(
+                            "Expected numerical columns to contain real values"
+                        )
+                    blocks[Stype.numerical] = torch.empty(
+                        (0, len(numerical_columns)),
+                        device=target_device,
+                        dtype=dtype,
+                    )
+                else:
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter(
+                                "error", np.exceptions.ComplexWarning
+                            )
+                            values = numerical_df.to_numpy(
+                                dtype=numpy_dtype,
+                                na_value=np.nan,
+                            )
+                    except np.exceptions.ComplexWarning as error:
+                        raise TypeError(
+                            "Expected numerical columns to contain real values"
+                        ) from error
+                    values = values.copy(order="C")
+                    blocks[Stype.numerical] = torch.as_tensor(
+                        values,
+                        device=target_device,
+                        dtype=dtype,
+                    )
+
+            if categorical_columns := columns.get(Stype.categorical):
+                categorical_series = [df[name] for name in categorical_columns]
+                all_categorical = all(
+                    isinstance(ser.dtype, pd.CategoricalDtype)
+                    for ser in categorical_series
+                )
+                use_int64_code = not all_categorical and any(
+                    isinstance(ser.dtype, pd.ArrowDtype)
+                    and pa.types.is_dictionary(ser.dtype.pyarrow_dtype)
+                    and pa.types.is_int64(ser.dtype.pyarrow_dtype.index_type)
+                    for ser in categorical_series
+                )
+                numpy_code_dtype = np.int64 if use_int64_code else np.int32
+                torch_code_dtype = (
+                    torch.int64 if use_int64_code else torch.int32
+                )
+                if all_categorical:
+                    code = np.stack(
+                        [ser.array.codes for ser in categorical_series], axis=1
+                    ).astype(
+                        numpy_code_dtype,
+                        copy=False,
+                    )
+                else:
+                    code = np.empty(
+                        (len(df), len(categorical_columns)),
+                        dtype=numpy_code_dtype,
+                    )
+                categories: list[Tensor] = []
+                for i, ser in enumerate(categorical_series):
+                    if all_categorical:
+                        categorical = ser.array
+                        values = categorical.categories
+                    elif isinstance(ser.dtype, pd.CategoricalDtype):
+                        categorical = ser.array
+                        code[:, i] = categorical.codes
+                        values = categorical.categories
+                    elif ser.dtype.kind == "f" or (
+                        isinstance(ser.dtype, pd.ArrowDtype)
+                        and pa.types.is_dictionary(ser.dtype.pyarrow_dtype)
+                    ):
+                        categorical = CategoricalTensor.from_arrow(
+                            pa.array(ser, from_pandas=True)
+                        )
+                        code[:, i] = categorical.code[:, 0].numpy()
+                        categories.append(categorical.categories[0])
+                        continue
+                    else:
+                        column_code, values = pd.factorize(
+                            ser,
+                            sort=False,
+                            use_na_sentinel=True,
+                        )
+                        code[:, i] = column_code
+
+                    category_dtype = values.dtype
+                    if category_dtype.kind in "biuf":
+                        category = torch.from_numpy(np.asarray(values).copy())
+                    else:
+                        array = pa.array(values, from_pandas=True)
+                        is_string = pa.types.is_string(array.type)
+                        is_large_string = pa.types.is_large_string(array.type)
+                        if is_string or is_large_string:
+                            category = StringTensor.from_arrow(
+                                array,
+                                device="cpu",
+                            )
+                        elif pa.types.is_null(array.type):
+                            category = torch.empty(
+                                0,
+                                dtype=torch.int64,
+                                device="cpu",
+                            )
+                        elif ser.dtype.kind == "O" and (
+                            pa.types.is_boolean(array.type)
+                            or pa.types.is_integer(array.type)
+                            or pa.types.is_floating(array.type)
+                        ):
+                            categorical = CategoricalTensor.from_arrow(
+                                pa.array(ser, from_pandas=True)
+                            )
+                            code[:, i] = categorical.code[:, 0].numpy()
+                            category = categorical.categories[0]
+                        else:
+                            category = arrow_as_tensor(array, device="cpu")
+                    categories.append(category)
+
+                code_tensor = (
+                    torch.from_numpy(code).to(target_device)
+                    if len(df) > 0
+                    else torch.empty(
+                        (0, len(categorical_columns)),
+                        dtype=torch_code_dtype,
+                        device=target_device,
+                    )
+                )
+                blocks[Stype.categorical] = CategoricalTensor(
+                    code=code_tensor,
+                    categories=_move_categories(categories, target_device),
+                )
+
+            return cls(
+                size=(len(df),),
+                columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+                **blocks,
+            )
+
         df = df[stypes.keys()]
         # Resolve period ordinals before Arrow casts them as timestamps, which
         # would interpret the ordinals as microseconds since the Unix epoch.
@@ -464,18 +726,18 @@ class TableTensor(Tensor):
 
         if isinstance(tensor, StringTensor):
             return cls(
-                columns={Stype.text: columns},
+                columns={"text": columns},
                 text=tensor,
             )
 
         if not tensor.is_floating_point():
             return cls(
-                columns={Stype.categorical: columns},
+                columns={"categorical": columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
             )
 
         return cls(
-            columns={Stype.numerical: columns},
+            columns={"numerical": columns},
             numerical=tensor,
         )
 
@@ -597,6 +859,40 @@ class TableTensor(Tensor):
     # Properties ##############################################################
 
     @property
+    def numerical_columns(self) -> tuple[str, ...]:
+        r"""Return numerical column names as an immutable tuple."""
+        return self._columns[Stype.numerical]
+
+    @property
+    def categorical_columns(self) -> tuple[str, ...]:
+        r"""Return categorical column names as an immutable tuple."""
+        return self._columns[Stype.categorical]
+
+    @property
+    def datetime_columns(self) -> tuple[str, ...]:
+        r"""Return datetime column names as an immutable tuple."""
+        return self._columns[Stype.datetime]
+
+    @property
+    def text_columns(self) -> tuple[str, ...]:
+        r"""Return text column names as an immutable tuple."""
+        return self._columns[Stype.text]
+
+    @property
+    def id_columns(self) -> tuple[str, ...]:
+        r"""Return identifier column names as an immutable tuple."""
+        return self._columns[Stype.id]
+
+    @property
+    def column_groups(self) -> tuple[tuple[Stype, tuple[str, ...]], ...]:
+        r"""Return column names grouped by semantic type as an immutable tuple.
+
+        Pairs follow ``columns`` iteration order and include types with no
+        columns.
+        """
+        return tuple(self._columns.items())
+
+    @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
         return self._columns.copy()
@@ -623,7 +919,7 @@ class TableTensor(Tensor):
     def active_stypes(self) -> frozenset[Stype]:
         r"""Semantic types with at least one column."""
         return frozenset(
-            stype for stype, tensor in self.items() if tensor.size(-1) > 0
+            stype for stype, columns in self.column_groups if columns
         )
 
     @property
@@ -703,7 +999,7 @@ class TableTensor(Tensor):
             id: Replacement identifier block with shape ``[..., C_id]``.
         """
         return self.__class__(
-            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            columns=cast(Mapping[StypeLike, Sequence[str]], self._columns),
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
                 self.categorical if categorical is None else categorical
@@ -727,7 +1023,9 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
+            size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in stypes},
+            device=self.device,
             **{stype: getattr(self, stype) for stype in stypes},
         )
 
@@ -739,10 +1037,10 @@ class TableTensor(Tensor):
 
         .. testcode:: drop_stypes
 
-            assert table.columns[Stype.categorical] == ("country", "segment")
+            assert table.categorical_columns == ("country", "segment")
             table = table.drop_stypes("categorical")
-            assert table.columns[Stype.categorical] == ()
-            assert table.columns[Stype.numerical] == ("age", "income")
+            assert table.categorical_columns == ()
+            assert table.numerical_columns == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
@@ -787,7 +1085,7 @@ class TableTensor(Tensor):
 
         blocks: dict[Stype, Tensor] = {}
         for stype, tensor in self.items():
-            indices = index_dict[stype]
+            indices = index_dict.get(stype, ())
             if len(indices) == 0:
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
@@ -846,6 +1144,34 @@ class TableTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = ["numerical", "categorical", "datetime", "text", "id"]
+        # Let torch.compile track backing fields and their public properties.
+        attrs = [f"_{name}" for name in attrs] + attrs
+        columns = tuple(
+            (str(stype), names) for stype, names in self._columns.items()
+        )
+        ctx = (self.__class__, columns)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> TableTensor:
+        cls, columns = ctx
+        return cls(
+            size=outer_size[:-1],
+            columns=dict(columns),
+            numerical=inner_tensors["numerical"],
+            categorical=inner_tensors["categorical"],
+            datetime=inner_tensors["datetime"],
+            text=inner_tensors["text"],
+            id=inner_tensors["id"],
+        )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
             tuple(self.size()[:-1]),
@@ -866,8 +1192,11 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+        if func in cls.HANDLED_FUNCTIONS:
+            return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_compiled_stream(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -945,11 +1274,12 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} "
+                f"({len(self._columns[stype]):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
-            for stype, tensor in self.items()
-            if tensor.size(-1) > 0
+            for stype, _ in self.items()
+            if self._columns[stype]
         ]
 
         out = f"{' ' * indent}{self.__class__.__name__}(\n"
@@ -1012,6 +1342,7 @@ def _record_stream(inp: TableTensor, stream: torch.Stream) -> None:
 
 
 @TableTensor.implements(aten.to.dtype_layout)
+@preserve_autograd_state
 def _to_dtype_layout(
     inp: TableTensor,
     *,
@@ -1310,6 +1641,18 @@ def _flatten(
     )
 
 
+@TableTensor.implements(aten.unflatten.int)
+def _unflatten(
+    inp: TableTensor,
+    dim: int,
+    sizes: Sequence[int],
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.unflatten.int.decompose(inp, dim, sizes),
+    )
+
+
 @TableTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: TableTensor) -> TableTensor:
@@ -1483,6 +1826,12 @@ def _slice(
             and step == 1
         ):
             return _alias(inp)
+        if (
+            end is not None
+            and (end == 0 or end <= -inp.size(-1))
+            and step == 1
+        ):
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1509,6 +1858,8 @@ def _narrow(
     if _is_column_dim(inp, dim):
         if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
             return _alias(inp)
+        if length == 0:
+            return inp.select_columns([])
         raise RuntimeError(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
         )
@@ -1663,6 +2014,7 @@ def _index(
 
 
 @TableTensor.implements(aten.cat.default)
+@preserve_autograd_state
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     if len(tensors) == 0:
         raise ValueError("torch.cat(): expected a non-empty list of Tensors")
@@ -1674,43 +2026,51 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     tensors = cast(Sequence[TableTensor], tensors)
 
     ref = tensors[0]
-    if not _is_column_dim(ref, dim):
+    is_column_dim = _is_column_dim(ref, dim)
+    if not is_column_dim:
         tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+    else:
+        # Skipping empty blocks below would otherwise hide a size mismatch.
+        for tensor in tensors[1:]:
+            if tensor.size()[:-1] != ref.size()[:-1]:
+                raise RuntimeError(
+                    f"Sizes of tensors must match except in the column "
+                    f"dimension (got {tuple(ref.size())} and "
+                    f"{tuple(tensor.size())})"
+                )
 
     blocks: dict[Stype, Tensor] = {}
-    for stype, _ in ref.items():
-        block_list = [tensor.blocks[stype] for tensor in tensors]
-        block_list = [block for block in block_list if block.size(-1) > 0]
-        if len(block_list) == 1:
-            blocks[stype] = block_list[0]
-        elif len(block_list) > 1:
-            blocks[stype] = torch.cat(block_list, dim=dim)
+    for stype, _ in TableTensor.items(ref):
+        block_list = [getattr(tensor, stype.value) for tensor in tensors]
+        if is_column_dim:
+            # Skip empty blocks so their dtypes cannot promote the others,
+            # but keep one so that an all-empty block retains its dtype.
+            block_list = [
+                block for block in block_list if block.size(-1) > 0
+            ] or block_list[:1]
+        blocks[stype] = (
+            block_list[0]
+            if len(block_list) == 1
+            else torch.cat(block_list, dim=dim)
+        )
 
-    size: Sequence[int] | None = None
-    if not _is_column_dim(ref, dim):
-        columns = ref._columns
-        if len(blocks) == 0:
-            size = list(tensors[0].size())
-            for tensor in tensors[1:]:
-                size[dim] += tensor.size(dim)
-    else:
+    columns = ref._columns
+    if is_column_dim:
         columns = {
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
-            for stype, _ in ref.items()
+            for stype, _ in TableTensor.items(ref)
         }
-        size = ref.size()
 
     return ref.__class__(
-        size=size[:-1] if size is not None else None,
-        columns=cast(dict[StypeLike, tuple[str, ...]], columns),
-        device=ref.device if len(blocks) == 0 else None,
+        columns=cast("dict[StypeLike, tuple[str, ...]]", columns),
         **blocks,
     )
 
 
 @TableTensor.implements(aten.stack.default)
+@preserve_autograd_state
 def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     if len(tensors) == 0:
         raise RuntimeError("stack expects a non-empty TensorList")

@@ -159,7 +159,7 @@ class ICLBlock(torch.nn.Module):
         # Tree nodes have different row counts, so tables and recursive model
         # calls cannot be represented by one dense tensor operation.
         if cache is not None and cache.is_replaying:
-            trees = cast(list[_Node], cache["icl_block.trees"])
+            trees = cast("list[_Node]", cache["icl_block.trees"])
             if len(trees) != num_tables:
                 raise RuntimeError(
                     f"Expected {len(trees)} cached tables (got {num_tables})"
@@ -278,7 +278,7 @@ class ICLBlock(torch.nn.Module):
 
         child_class_ids: list[Tensor] = []
         children_log_probs: list[Tensor] = []
-        children = cast(list[_Node], node["children"])
+        children = cast("list[_Node]", node["children"])
         for group_idx in range(num_groups):
             mask = group_masks[group_idx]
             child_ids, child_log_probs, child = self._process_node(
@@ -311,7 +311,7 @@ class ICLBlock(torch.nn.Module):
         cache_prefix: str,
     ) -> tuple[Tensor, Tensor]:  # [C_node], [R_test, C_node]
         class_ids = cast(Tensor, node["class_ids"])
-        children = cast(list[_Node], node["children"])
+        children = cast("list[_Node]", node["children"])
 
         if not children:
             if class_ids.numel() == 1:

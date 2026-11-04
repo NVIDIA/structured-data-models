@@ -18,13 +18,13 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                     sp.ImputeMean(),
                     sp.DropConstantColumns(),
                     sp.Standardize(eps=1e-6),
-                    sp.Clip(min_value=-100.0, max_value=100.0),
+                    sp.Clip(-100.0, 100.0),
                     sp.Choice(
                         sp.Identity(),
                         sp.PowerTransform(),
                         method="round_robin",
                     ),
-                    sp.ClipSigma(threshold=4.0),
+                    sp.ClipSigma(threshold=4.0, method="log"),
                     sp.ShuffleColumns(method="random"),
                     sp.SelectColumns(500, method="first"),
                 ],
@@ -38,7 +38,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
             numerical=sp.Standardize(),
         ),
         output=[
-            sp.ReduceEstimators(method="mean"),
+            sp.AverageEstimators(),
             sp.TaskDispatch(
                 classification=sp.Softmax(temperature=0.9),
             ),

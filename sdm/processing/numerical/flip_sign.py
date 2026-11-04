@@ -2,19 +2,21 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
-from sdm import Stype, TableTensor
-from sdm.processing import InvertibleMixin, Processor
+from sdm import EnsembleTable, Stype
+from sdm.nn._buffer import BufferList
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
-class FlipSign(Processor, InvertibleMixin):
+class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     """Randomly negate numerical columns.
 
     Args:
-        probability: Probability of negating a numerical column.
+        probability: Probability of negating each numerical column.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def __init__(
@@ -23,21 +25,57 @@ class FlipSign(Processor, InvertibleMixin):
     ) -> None:
         super().__init__()
         self.probability = probability
-        self.register_buffer("sign", torch.empty(0))
+        self._signs: BufferList[Tensor] = BufferList()
 
-    def _fit(
+    def _fit_ensemble(
         self,
-        table: TableTensor,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        shape = (*table.numerical.size()[:-2], 1, table.numerical.size(-1))
-        self.sign = table.numerical.new_empty(shape)
-        self.sign.bernoulli_(self.probability, generator=generator)
-        self.sign.mul_(-2).add_(1)
+        signs = []
+        for member_id in range(len(ensemble_table)):
+            numerical = ensemble_table[member_id].numerical
+            sign = numerical.new_empty(
+                (*numerical.size()[:-2], 1, numerical.size(-1))
+            )
+            sign.bernoulli_(self.probability, generator=generator)
+            sign.mul_(-2).add_(1)
+            signs.append(sign)
+        self._signs = BufferList(signs)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical * self.sign)
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return self._transform(table)
+        member_ids_by_group = [[] for _ in range(ensemble_table.num_groups)]
+        for member_id, (group_id, _) in enumerate(ensemble_table._locations):
+            member_ids_by_group[group_id].append(member_id)
+
+        groups = []
+        locations = [(-1, -1)] * len(ensemble_table)
+        for group_id, member_ids in enumerate(member_ids_by_group):
+            group = ensemble_table.expanded_group(group_id)
+            sign = torch.stack([self._signs[i] for i in member_ids], dim=0)
+            # Predictions can hold multiple outputs per column (quantiles):
+            x = group.numerical.unflatten(-1, (sign.size(-1), -1))
+            x = (x * sign.unsqueeze(-1)).flatten(-2)
+            group = group.replace_blocks(numerical=x)
+            groups.append(group)
+            for position, member_id in enumerate(member_ids):
+                locations[member_id] = (group_id, position)
+
+        return EnsembleTable(groups, locations)
+
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return self._transform_ensemble(ensemble_table)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}"
+            f"(probability={self.probability})"
+        )

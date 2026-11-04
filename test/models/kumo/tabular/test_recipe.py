@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
+import sdm.processing as sp
+from sdm import CategoricalTensor, EnsembleTable, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
 from sdm.testing import withCUDA
 
@@ -38,14 +40,108 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
         "cat_0": [False, False, False, False, False],
     }
 
-    for member_id in range(output.num_members):
-        member = output.table(member_id)
+    for member_id in range(len(output)):
+        member = output[member_id]
         expected_missing = torch.tensor(
-            [
-                missing_by_column[column]
-                for column in member.columns[Stype.numerical]
-            ],
+            [missing_by_column[column] for column in member.numerical_columns],
             device=device,
         ).T
         assert torch.equal(member.numerical.isnan(), expected_missing)
         assert not member.numerical.isinf().any()
+
+
+def _correlation(x: torch.Tensor, y: torch.Tensor) -> float:
+    return torch.corrcoef(torch.stack((x, y)))[0, 1].item()
+
+
+def test_default_recipe_flips_numbers_but_not_codes() -> None:
+    features = TableTensor(
+        numerical=torch.randn(300, 32),
+        categorical=CategoricalTensor(
+            code=torch.randint(3, (300, 1)),
+            categories=(torch.arange(3),),
+        ),
+    )
+    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+        EnsembleTable.from_table(features, num_members=8)
+    )
+
+    code_correlations = []
+    numerical_correlations = []
+    for member_id in range(len(output)):
+        member = output[member_id]
+        for index, column in enumerate(member.numerical_columns):
+            values = member.numerical[:, index]
+            if column == "cat_0":
+                reference = features.categorical.code[:, 0].float()
+                code_correlations.append(_correlation(values, reference))
+            elif not column.endswith("__count"):
+                reference = features[column].numerical[:, 0]
+                numerical_correlations.append(_correlation(values, reference))
+
+    assert len(code_correlations) == len(output)
+    assert min(code_correlations) > 0
+    assert min(numerical_correlations) < 0 < max(numerical_correlations)
+
+
+def test_default_recipe_keeps_values_distinct_beside_outliers() -> None:
+    numerical = torch.arange(100.0).unsqueeze(-1)
+    numerical[0] = 1e12
+
+    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+        EnsembleTable.from_table(
+            TableTensor.from_tensor(numerical),
+            num_members=8,
+        )
+    )
+
+    members = [output[member_id] for member_id in range(len(output))]
+    assert all(member.numerical.dtype == torch.float32 for member in members)
+    num_unique = [member.numerical[1:].unique().numel() for member in members]
+    assert max(num_unique) == 99
+
+
+@pytest.mark.parametrize("cardinality", [50, 51])
+def test_default_recipe_adds_category_counts(cardinality: int) -> None:
+    codes = torch.cat(
+        [torch.arange(cardinality), torch.zeros(300 - cardinality)]
+    )
+    features = TableTensor(
+        numerical=torch.randn(300, 2),
+        categorical=CategoricalTensor(
+            code=codes.long().unsqueeze(-1),
+            categories=(torch.arange(cardinality),),
+        ),
+    )
+
+    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+        EnsembleTable.from_table(features, num_members=2)
+    )
+
+    expected_columns = {"num_0", "num_1", "cat_0"}
+    if cardinality > 50:
+        expected_columns.add("cat_0__count")
+    for member_id in range(len(output)):
+        assert set(output[member_id].numerical_columns) == expected_columns
+
+
+def test_default_recipe_reduces_outputs_per_task() -> None:
+    recipe = KumoTabular.default_recipe()
+    dispatch = next(
+        module
+        for module in recipe.output.modules()
+        if isinstance(module, sp.TaskDispatch)
+    )
+
+    dispatch._task = "regression"
+    output = recipe.output.transform(
+        TableTensor.from_tensor(torch.randn(8, 5, 9))
+    )
+    assert output.size() == (5, 9)
+
+    dispatch._task = "classification"
+    output = recipe.output.transform(
+        TableTensor.from_tensor(torch.randn(8, 5, 3))
+    )
+    assert output.size() == (5, 3)
+    torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
 from typing import Literal, cast
 
 import torch
@@ -13,10 +14,8 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     """Route each table or ensemble member through one selected option.
 
-    Options are selected when the processor is fitted. Pass ``generator`` to
-    ``fit()`` to make random selection reproducible; it is also passed to the
-    selected options. Only selected options are fitted, and refitting selects
-    again.
+    Options are selected when the processor is fitted. Only selected options
+    are fitted, and refitting selects again.
 
     Args:
         args: Candidate processors or stateless callables.
@@ -37,9 +36,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         for arg in args:
             options.append(EnsembleProcessor.as_processor(arg))
         self.options: ModuleList[EnsembleProcessor] = ModuleList(options)
-        self.handles_stypes = frozenset(
-            stype for option in self.options for stype in option.handles_stypes
-        )
+        self.handles_stypes = self._merge_stypes(self.options)
         self.method = method
         self._option_ids: tuple[int, ...] = ()
 
@@ -60,19 +57,19 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         if self.method == "round_robin":
             return tuple(
                 member_id % len(self.options)
-                for member_id in range(ensemble_table.num_members)
+                for member_id in range(len(ensemble_table))
             )
 
         assert self.method == "random"
         device = (
-            next(iter(ensemble_table)).device
+            next(ensemble_table._iter_groups()).device
             if generator is None
             else generator.device
         )
         return tuple(
             torch.randint(
                 len(self.options),
-                (ensemble_table.num_members,),
+                (len(ensemble_table),),
                 generator=generator,
                 device=device,
             ).tolist()
@@ -81,14 +78,13 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     def _tables_by_option(
         self,
         ensemble_table: EnsembleTable,
-    ) -> dict[int, EnsembleTable]:
+    ) -> Iterator[tuple[int, EnsembleTable]]:
         member_ids_by_option: dict[int, list[int]] = {}
         for member_id, option_id in enumerate(self._option_ids):
             member_ids_by_option.setdefault(option_id, []).append(member_id)
-        return {
-            option_id: ensemble_table.select_members(member_ids)
-            for option_id, member_ids in sorted(member_ids_by_option.items())
-        }
+        # Select lazily, since selecting members may copy them.
+        for option_id, member_ids in sorted(member_ids_by_option.items()):
+            yield option_id, ensemble_table[member_ids]
 
     def _gather_outputs(
         self,
@@ -109,11 +105,11 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         )
 
     def _check_num_members(self, ensemble_table: EnsembleTable) -> None:
-        if len(self._option_ids) != ensemble_table.num_members:
+        if len(self._option_ids) != len(ensemble_table):
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
                 f"{len(self._option_ids)} ensemble members, but got "
-                f"{ensemble_table.num_members}."
+                f"{len(ensemble_table)}."
             )
 
     def _fit_ensemble(
@@ -126,7 +122,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             ensemble_table,
             generator=generator,
         )
-        for option_id, table in self._tables_by_option(ensemble_table).items():
+        for option_id, table in self._tables_by_option(ensemble_table):
             self.options[option_id].fit_ensemble(table, generator=generator)
 
     def _fit_transform_ensemble(
@@ -144,9 +140,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 table,
                 generator=generator,
             )
-            for option_id, table in self._tables_by_option(
-                ensemble_table
-            ).items()
+            for option_id, table in self._tables_by_option(ensemble_table)
         }
         return self._gather_outputs(ensemble_table, outputs)
 
@@ -157,9 +151,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         self._check_num_members(ensemble_table)
         outputs = {
             option_id: self.options[option_id].transform_ensemble(table)
-            for option_id, table in self._tables_by_option(
-                ensemble_table
-            ).items()
+            for option_id, table in self._tables_by_option(ensemble_table)
         }
         return self._gather_outputs(ensemble_table, outputs)
 
@@ -169,7 +161,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         self._check_num_members(ensemble_table)
         outputs = {}
-        for option_id, table in self._tables_by_option(ensemble_table).items():
+        for option_id, table in self._tables_by_option(ensemble_table):
             processor = self.options[option_id]
             if not isinstance(processor, EnsembleInvertibleMixin):
                 raise TypeError(

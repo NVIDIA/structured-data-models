@@ -3,80 +3,90 @@
 
 from __future__ import annotations
 
-import copy
+import abc
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Self, cast
+from typing import Generic, Self, TypeVar, cast, overload
 
 import torch
 from torch import Tensor
 
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
+from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
+T = TypeVar("T")
 
-class EnsembleTable(DeviceMixin):
-    """Store and group input tables for an ensemble.
 
-    Each ensemble member is associated with one table. Shared tables are stored
-    only once. Compatible tables may be stacked into groups so processors can
-    process them together. Initialized separate groups are never recombined.
-
-    Use :meth:`table` to access a member's table. Iterate over the
-    :class:`EnsembleTable` to process its groups, and :meth:`replace_groups`
-    to build an ensemble table from the processed groups.
-
-    .. testcode::
-
-        import torch
-        from sdm import EnsembleTable, TableTensor
-
-        estimator_table1 = TableTensor.from_tensor(
-            tensor=torch.tensor([[1.0], [2.0]]),
-            columns=("value",),
-        )
-        estimator_table2 = TableTensor.from_tensor(
-            tensor=torch.tensor([[-1.0], [1.0]]),
-            columns=("value",),
-        )
-        estimator_table3 = TableTensor.from_tensor(
-            tensor=torch.tensor([[10.0], [20.0]]),
-            columns=("selected_value",),
-        )
-
-        ensemble = EnsembleTable.from_tables(
-            tables=(estimator_table1, estimator_table2, estimator_table3),
-            member_table_ids=(0, 1, 2, 0),
-        )
-
-        # Access tables in member order.
-        assert ensemble.num_members == 4
-        assert ensemble.table(0).equal(estimator_table1)
-        assert ensemble.table(3).equal(estimator_table1)
-
-        # Each distinct input table remains in its own group.
-        groups = tuple(ensemble)
-        assert len(groups) == 3
-        assert all(group.size() == (1, 2, 1) for group in groups)
+class EnsembleData(abc.ABC, Generic[T]):
+    """Represent an ordered collection of ensemble member values.
 
     Args:
-        groups: Sequence of
-            :class:`~sdm.tensor.TableTensor`, optionally stacked along their
-            leading dimension.
-        locations: ``(group, batch)`` location of each ensemble member.
+        groups: Values containing the ensemble members.
+        locations: Group index and position for each ensemble member.
     """
 
-    _groups: tuple[TableTensor, ...]
-    # Group index and position within that group, per ensemble member.
+    _groups: tuple[T, ...]
     _locations: tuple[tuple[int, int], ...]
+
+    def __init__(
+        self,
+        groups: Sequence[T],
+        locations: Sequence[tuple[int, int]],
+    ) -> None:
+        self._groups = tuple(groups)
+        self._locations = tuple(locations)
+
+    def __len__(self) -> int:
+        return len(self._locations)
+
+    @overload
+    def __getitem__(self, index: int) -> T: ...
+
+    @overload
+    def __getitem__(self, index: slice | Sequence[int]) -> Self: ...
+
+    def __getitem__(self, index: int | slice | Sequence[int]) -> T | Self:
+        if isinstance(index, int):
+            group_id, position = self._locations[index]
+            return self._select_member(self._groups[group_id], position)
+        if isinstance(index, slice):
+            index = range(*index.indices(len(self)))
+        return self._select_members(index)
+
+    def _iter_groups(self) -> Iterator[T]:
+        return iter(self._groups)
+
+    @staticmethod
+    @abc.abstractmethod
+    def _select_member(group: T, position: int) -> T:
+        pass
+
+    @abc.abstractmethod
+    def _select_members(self, member_ids: Sequence[int]) -> Self:
+        pass
+
+
+class EnsembleTable(DeviceMixin, EnsembleData[TableTensor]):
+    """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
+
+    Each ensemble member is associated with one
+    :class:`~sdm.tensor.TableTensor`.
+    Shared tables are stored only once. Compatible tables are stacked along a
+    leading dimension and form a group.
+
+    Args:
+        groups: Sequence of :class:`~sdm.tensor.TableTensor`, optionally
+            stacked along their leading dimension.
+        locations: ``(group, batch)`` location of each ensemble member.
+    """
 
     def __init__(
         self,
         groups: Sequence[TableTensor],
         locations: Sequence[tuple[int, int]],
     ) -> None:
-        self._groups = tuple(groups)
-        self._locations = tuple(locations)
+        super().__init__(groups=groups, locations=locations)
         self._validate(self._groups, self._locations)
 
     @staticmethod
@@ -166,14 +176,31 @@ class EnsembleTable(DeviceMixin):
         tables: Sequence[TableTensor],
     ) -> tuple[tuple[TableTensor, ...], tuple[tuple[int, int], ...]]:
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
+        vocabularies: list[tuple[Tensor, ...]] = []
         for index, table in enumerate(tables):
+            if torch.compiler.is_compiling():
+                # Compilation: id() can fail or give one tensor different IDs.
+                categories = tuple(_iter_categories(table.categorical))
+                for vocabulary_id, other in enumerate(vocabularies):
+                    if len(categories) == len(other) and all(
+                        category is other_category
+                        for category, other_category in zip(categories, other)
+                    ):
+                        vocabulary_key = (vocabulary_id,)
+                        break
+                else:
+                    # No tuple matched; the next list index is its new ID.
+                    vocabulary_key = (len(vocabularies),)
+                    vocabularies.append(categories)
+            else:
+                # Eager execution: use id() directly to avoid the search.
+                vocabulary_key = tuple(
+                    id(category) for category in table.categorical.categories
+                )
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
-                tuple(
-                    (stype, columns)
-                    for stype, columns in table.columns.items()
-                ),
+                table.column_groups,
                 tuple(
                     (
                         stype,
@@ -182,12 +209,10 @@ class EnsembleTable(DeviceMixin):
                         block.layout,
                         block.dtype,
                     )
-                    for stype, block in table.items()
+                    for stype, block in TableTensor.items(table)
                 ),
                 table.device,
-                tuple(
-                    id(category) for category in table.categorical.categories
-                ),
+                vocabulary_key,
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
 
@@ -211,17 +236,9 @@ class EnsembleTable(DeviceMixin):
 
         return tuple(groups), tuple(locations)
 
-    def select_members(self, member_ids: Sequence[int]) -> Self:
-        """Return the selected ensemble members in the requested order.
-
-        Args:
-            member_ids: Logical member positions to select.
-
-        Returns:
-            An ensemble table containing the selected members.
-        """
+    def _select_members(self, member_ids: Sequence[int]) -> Self:
         member_ids = tuple(member_ids)
-        if member_ids == tuple(range(self.num_members)):
+        if member_ids == tuple(range(len(self))):
             return self
 
         locations = tuple(
@@ -240,15 +257,20 @@ class EnsembleTable(DeviceMixin):
             group = self._groups[group_id]
             selected_positions = tuple(positions)
             group_ids[group_id] = new_group_id
+            start = selected_positions[0]
+            step = (
+                selected_positions[1] - start
+                if len(selected_positions) > 1
+                else 1
+            )
+            stop = start + step * len(selected_positions)
             if selected_positions == tuple(range(group.size(0))):
                 groups.append(group)
-            elif len(selected_positions) == 1:
-                groups.append(
-                    cast(
-                        TableTensor,
-                        group.narrow(0, selected_positions[0], 1),
-                    )
-                )
+            elif step > 0 and selected_positions == tuple(
+                range(start, stop, step)
+            ):
+                # Evenly spaced members are selected as a view, not a copy.
+                groups.append(group[start:stop:step])
             else:
                 groups.append(
                     cast(
@@ -263,13 +285,13 @@ class EnsembleTable(DeviceMixin):
                     )
                 )
 
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        ensemble._locations = tuple(
-            (group_ids[group_id], positions_by_group[group_id][position])
-            for group_id, position in locations
+        return self.__class__(
+            groups=groups,
+            locations=tuple(
+                (group_ids[group_id], positions_by_group[group_id][position])
+                for group_id, position in locations
+            ),
         )
-        return ensemble
 
     def gather_members(
         self,
@@ -278,7 +300,7 @@ class EnsembleTable(DeviceMixin):
     ) -> Self:
         """Gather members from multiple ensemble tables.
 
-        ``tables[i].table(member_ids[i])`` supplies output member ``i``.
+        ``tables[i][member_ids[i]]`` supplies output member ``i``.
 
         Args:
             tables: Source ensemble table for each output member.
@@ -300,18 +322,13 @@ class EnsembleTable(DeviceMixin):
             if output_id is None:
                 output_id = len(outputs)
                 output_id_by_source[key] = output_id
-                outputs.append(table.table(member_id))
+                outputs.append(table[member_id])
             member_table_ids.append(output_id)
 
         return self.replace_tables(
             tables=outputs,
             member_table_ids=member_table_ids,
         )
-
-    @property
-    def num_members(self) -> int:
-        """Return the number of ensemble members."""
-        return len(self._locations)
 
     @property
     def num_groups(self) -> int:
@@ -326,14 +343,12 @@ class EnsembleTable(DeviceMixin):
         """
         return sum(i == group_id for i, _ in self._locations)
 
-    def table(self, member_id: int) -> TableTensor:
-        """Return the table associated with one ensemble member.
-
-        Args:
-            member_id: Zero-based member index.
-        """
-        group_index, position = self._locations[member_id]
-        return self._groups[group_index][position]
+    @staticmethod
+    def _select_member(
+        group: TableTensor,
+        position: int,
+    ) -> TableTensor:
+        return group[position]
 
     def expanded_group(self, group_id: int) -> TableTensor:
         """Return the logical members assigned to one group.
@@ -354,10 +369,6 @@ class EnsembleTable(DeviceMixin):
             )
         index = torch.tensor(positions, device=group.device)
         return cast(TableTensor, group.index_select(0, index))
-
-    def __iter__(self) -> Iterator[TableTensor]:
-        """Iterate over table groups."""
-        return iter(self._groups)
 
     def _tensors(self) -> Iterator[Tensor]:
         yield from self._groups
@@ -385,10 +396,10 @@ class EnsembleTable(DeviceMixin):
 
         if len(stypes) == 0:
             return self.replace_groups(
-                [group.select_columns(()) for group in self]
+                [group.select_columns(()) for group in self._groups]
             )
         return self.replace_groups(
-            [group.select_stypes(stypes) for group in self]
+            [group.select_stypes(stypes) for group in self._groups]
         )
 
     @classmethod
@@ -405,7 +416,7 @@ class EnsembleTable(DeviceMixin):
             raise ValueError("Expected at least one ensemble table")
 
         first = tables[0]
-        if any(table.num_members != first.num_members for table in tables[1:]):
+        if any(len(table) != len(first) for table in tables[1:]):
             raise ValueError(
                 "Cannot concatenate ensemble tables with different member "
                 "counts"
@@ -414,7 +425,7 @@ class EnsembleTable(DeviceMixin):
         nonempty_tables = tuple(
             table
             for table in tables
-            if any(group.size(-1) > 0 for group in table)
+            if any(group.size(-1) > 0 for group in table._groups)
         )
         if len(nonempty_tables) > 0:
             tables = nonempty_tables
@@ -426,7 +437,10 @@ class EnsembleTable(DeviceMixin):
             return first.replace_groups(
                 [
                     cast(TableTensor, torch.cat(groups, dim=-1))
-                    for groups in zip(*tables, strict=True)
+                    for groups in zip(
+                        *(table._groups for table in tables),
+                        strict=True,
+                    )
                 ]
             )
 
@@ -435,7 +449,7 @@ class EnsembleTable(DeviceMixin):
         outputs: list[TableTensor] = []
         output_id_by_locations: dict[tuple[tuple[int, int], ...], int] = {}
         member_table_ids = []
-        for member_id in range(first.num_members):
+        for member_id in range(len(first)):
             locations = tuple(table._locations[member_id] for table in tables)
             output_id = output_id_by_locations.get(locations)
             if output_id is None:
@@ -445,7 +459,7 @@ class EnsembleTable(DeviceMixin):
                     cast(
                         TableTensor,
                         torch.cat(
-                            tuple(table.table(member_id) for table in tables),
+                            tuple(table[member_id] for table in tables),
                             dim=-1,
                         ),
                     )
@@ -471,7 +485,7 @@ class EnsembleTable(DeviceMixin):
         Returns:
             An ensemble table preserving existing group boundaries.
         """
-        if len(member_table_ids) != self.num_members:
+        if len(member_table_ids) != len(self):
             raise ValueError("Expected one replacement table per member")
 
         member_ids_by_group: list[list[int]] = [
@@ -481,7 +495,7 @@ class EnsembleTable(DeviceMixin):
             member_ids_by_group[group_id].append(member_id)
 
         groups: list[TableTensor] = []
-        locations = [(-1, -1)] * self.num_members
+        locations = [(-1, -1)] * len(self)
         for member_ids in member_ids_by_group:
             table_ids = tuple(
                 dict.fromkeys(
@@ -521,12 +535,10 @@ class EnsembleTable(DeviceMixin):
                 f"Expected one replacement per group "
                 f"({self.num_groups}), got {len(groups)}."
             )
-        ensemble = copy.copy(self)
-        ensemble._groups = tuple(groups)
-        return ensemble
+        return self.__class__(groups=groups, locations=self._locations)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
             f"{' ' * indent}{self.__class__.__name__}("
-            f"num_members={self.num_members}, num_groups={self.num_groups})"
+            f"num_members={len(self)}, num_groups={self.num_groups})"
         )

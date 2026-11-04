@@ -6,7 +6,7 @@ from typing import cast
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 
 
 def to_class_indices(
@@ -77,11 +77,11 @@ def to_class_indices(
             f"{tuple(target.size())[:-1]})"
         )
 
-    columns = pred.columns[Stype.numerical]
+    columns = pred.numerical_columns
     pred: Tensor = pred.numerical
 
     category = target.categories[0]
-    code = target.code.squeeze(-1)
+    code = target.code.squeeze(-1).to(torch.int64)
 
     if isinstance(category, StringTensor):
         classes = StringTensor.from_list(

@@ -38,9 +38,6 @@ class TFIDF(EnsembleProcessor):
     weights per text column. Transform replaces text with concatenated
     numerical features (one per retained n-gram), applies those idf weights,
     L2-normalizes each row, and ignores n-grams unseen at fit time.
-    When fitted on an :class:`~sdm.EnsembleTable`, distinct member
-    tables learn independent vocabularies and can produce different numerical
-    schemas; members assigned the same table share fitted state.
 
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
@@ -49,8 +46,10 @@ class TFIDF(EnsembleProcessor):
         lowercase: If ``True``, lowercase text before tokenizing.
     """
 
-    handles_stypes = frozenset({Stype.text})
+    handles_stypes = (Stype.text,)
     requires_fit = True
+
+    _idf_template: Tensor
 
     def __init__(
         self,
@@ -313,7 +312,7 @@ class TFIDF(EnsembleProcessor):
             idfs.append(idf)
 
         if idfs:
-            self._idf_template = idfs[0].new_empty(0)
+            self._set_buffer("_idf_template", idfs[0].new_empty(0))
         return _TFIDFState(vocabularies, idfs)
 
     def _fit_ensemble(
@@ -329,15 +328,13 @@ class TFIDF(EnsembleProcessor):
         # TODO: Replace direct `_locations` access with a public
         # `EnsembleTable` iterator over stored tables and their logical member
         # IDs, then use the same abstraction when transforming.
-        for member_id in range(ensemble_table.num_members):
+        for member_id in range(len(ensemble_table)):
             location = ensemble_table._locations[member_id]
             state_id = state_ids.get(location)
             if state_id is None:
                 state_id = len(states)
                 state_ids[location] = state_id
-                states.append(
-                    self._learn_state(ensemble_table.table(member_id))
-                )
+                states.append(self._learn_state(ensemble_table[member_id]))
             member_state_ids.append(state_id)
 
         self._states = states
@@ -347,7 +344,7 @@ class TFIDF(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._member_state_ids) != ensemble_table.num_members:
+        if len(self._member_state_ids) != len(ensemble_table):
             raise RuntimeError(
                 "TFIDF must be fitted with the same number of "
                 "ensemble members before transform."
@@ -368,7 +365,7 @@ class TFIDF(EnsembleProcessor):
                 transformed[key] = table_id
                 output_tables.append(
                     self._encode(
-                        ensemble_table.table(member_id),
+                        ensemble_table[member_id],
                         state,
                     )
                 )
@@ -390,7 +387,7 @@ class TFIDF(EnsembleProcessor):
             if state.vocabularies
             else torch.get_default_dtype()
         )
-        text_names = table.columns[Stype.text]
+        text_names = table.text_columns
         leading_shape = table.text.shape[:-1]
         n_rows = math.prod(leading_shape)
 
