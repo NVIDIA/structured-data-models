@@ -26,6 +26,33 @@ def test_revin(device: torch.device, affine_channels: int | None) -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("grad_enabled", [False, True])
+@pytest.mark.parametrize("correction", [0, 1])
+def test_stats_gradients(
+    device: torch.device,
+    grad_enabled: bool,
+    correction: int,
+) -> None:
+    x = torch.tensor(
+        [[[1.0, 2.0, 4.0, 8.0]]],
+        dtype=torch.double,
+        device=device,
+        requires_grad=True,
+    )
+    with torch.set_grad_enabled(grad_enabled):
+        mean, std = RevIN.stats(x, correction=correction)
+
+    assert mean.requires_grad == grad_enabled
+    assert std.requires_grad == grad_enabled
+    if grad_enabled:
+        actual = torch.autograd.grad((mean + std).sum(), x)[0]
+        expected = torch.autograd.grad(
+            (x.mean(dim=-1) + x.std(dim=-1, correction=correction)).sum(), x
+        )[0]
+        torch.testing.assert_close(actual, expected)
+
+
+@withCUDA
 def test_running_stats_update(device: torch.device) -> None:
     x = torch.tensor([[[1.0, 100.0, 2.0, 3.0]]], device=device)
     mask = torch.tensor([[[False, True, False, False]]], device=device)
