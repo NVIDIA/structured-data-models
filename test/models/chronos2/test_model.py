@@ -1,11 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from functools import partial
+from typing import Any
+
 import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.models import Chronos2
+from sdm.models.chronos2 import model as chronos2
 
 
 @pytest.mark.parametrize("cross_learning", [False, True])
@@ -49,3 +53,38 @@ def test_forward(cross_learning: bool) -> None:
         cross_learning=cross_learning,
     )
     torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)
+
+
+@pytest.mark.parametrize("key", ["seqused_train", "seqused_cols"])
+def test_seqused_rejected_before_preprocessing(
+    monkeypatch: pytest.MonkeyPatch,
+    key: str,
+) -> None:
+    monkeypatch.setattr(
+        target=chronos2,
+        name="_Chronos2",
+        value=partial(
+            chronos2._Chronos2,
+            channels=8,
+            hidden_channels=16,
+            num_layers=1,
+            num_heads=2,
+            patch_size=4,
+            context_length=16,
+        ),
+    )
+    model = Chronos2(pretrained=False)
+    x = torch.ones(5, 2)
+    y = torch.ones(5, 1)
+    query = torch.ones(3, 2)
+    model.fit(x, y)
+    expected = model.predict(query)
+    kwargs: dict[str, Any] = {key: torch.tensor(2, dtype=torch.int32)}
+
+    # Reject padding before slicing inputs and preserve the fitted cache.
+    for context in (x, torch.tensor(1.0)):
+        with pytest.raises(ValueError, match="padding keywords"):
+            model(context, y, query, **kwargs)
+        with pytest.raises(ValueError, match="padding keywords"):
+            model.fit(context, y, **kwargs)
+        assert model.predict(query).allclose(expected)

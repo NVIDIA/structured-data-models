@@ -3,6 +3,7 @@
 
 from contextlib import nullcontext
 from functools import partial
+from typing import Any
 
 import pytest
 import torch
@@ -67,3 +68,19 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
+
+
+@pytest.mark.parametrize("key", ["seqused_train", "seqused_cols"])
+def test_seqused_rejected_before_preprocessing(key: str) -> None:
+    model = KumoForecast(pretrained=False, device="meta")
+    x = torch.ones(5, 2)
+    y = torch.ones(5, 1)
+    query = torch.ones(3, 0)
+    kwargs: dict[str, Any] = {key: torch.tensor(2, dtype=torch.int32)}
+
+    # Padding rejection must precede conversion to a table.
+    for context in (x, torch.tensor(1.0)):
+        with pytest.raises(ValueError, match="padding keywords"):
+            model(context, y, query, **kwargs)
+    with pytest.raises(NotImplementedError, match="does not support `fit"):
+        model.fit(x, y, **kwargs)

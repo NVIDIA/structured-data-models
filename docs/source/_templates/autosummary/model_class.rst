@@ -6,7 +6,7 @@
    :members:
    :show-inheritance:
 {%- if objname != "ICLModel" %}
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, supports_seqused
 {%- endif %}
 
 {% if objname != "ICLModel" %}
@@ -34,6 +34,8 @@ Capabilities
      - {{ "✅" if cls.supports_context_only_columns else "❌" }}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
+   * - **Padded Input Support**
+     - {{ "✅" if cls.supports_seqused else "❌" }}
 
 Default Recipe
 --------------
