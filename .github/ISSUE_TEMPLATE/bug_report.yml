@@ -1,40 +1,59 @@
-name: Bug report
-description: Report a reproducible problem with structured-data-models.
+name: 🐛 Bug Report
+description: Create a report to help us reproduce and fix the bug
 labels: [bug]
 body:
-  - type: textarea
-    id: behavior
+  - type: markdown
     attributes:
-      label: Expected and actual behavior
-      description: Describe what you expected to happen and what happened instead.
-    validations:
-      required: true
-  - type: textarea
-    id: reproducer
+      value: >
+        #### Before submitting, please review the [contributing guidelines](https://github.com/Nvidia/structured-data-models/blob/main/CONTRIBUTING.md) and [AI policy](https://github.com/Nvidia/structured-data-models/blob/main/AGENTS.md#ai-policy). Issues that do not follow these practices may be closed.
+  - type: markdown
     attributes:
-      label: Complete minimal reproducer
+      value: >
+        #### Before submitting a bug, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/Nvidia/structured-data-models/issues?q=is%3Aissue+sort%3Acreated-desc+). If possible, check whether the issue also reproduces on the latest `main`, as it may already be fixed.
+  - type: textarea
+    attributes:
+      label: 🐛 Describe the bug
       description: |
-        Paste a complete, minimal Python script, including imports, input data or data-generation code, and the call that reproduces the problem. Include any required checkpoint name or revision and the command used to run the script.
-        Use synthetic or publicly available data so others can run it independently.
-      render: python
+        Please provide a clear and concise description of what the bug is.
+
+        If relevant, add a minimal example so that we can reproduce the error by running the code. It is very important for the snippet to be as succinct (minimal) as possible, so please take time to trim down any irrelevant code to help us debug efficiently.
+        Your example should be fully self-contained: use synthetic or publicly available data, and include any required checkpoint name or revision.
+        For example:
+
+        ```python
+        # All necessary imports at the beginning
+        import torch
+        import sdm
+
+        # A succinct reproducing example trimmed down to the essential parts:
+        ...
+        ```
+
+        Please also paste or describe the results you observe instead of the expected results. If you observe an error, please paste the error message including the **full** traceback of the exception. It may be relevant to wrap error messages in ```` ```triple quotes blocks``` ````.
+      placeholder: |
+        A clear and concise description of what the bug is.
+
+        ```python
+        # Sample code to reproduce the problem
+        ```
+
+        ```
+        The error message you got, with the full traceback.
+        ```
     validations:
       required: true
   - type: textarea
-    id: output
     attributes:
-      label: Full error messages or observed output
+      label: Versions
       description: |
-        Paste the complete traceback and relevant output as text. If there is no exception, include output that demonstrates the incorrect behavior.
-      render: text
+        Please include your structured-data-models version or Git commit and how you installed it (for example, pip, an editable source checkout, or a container image and tag).
+        Then run the following in the affected environment and paste the output below:
+        ```sh
+        python -m torch.utils.collect_env
+        ```
     validations:
       required: true
-  - type: textarea
-    id: environment
+  - type: markdown
     attributes:
-      label: Environment details
-      description: |
-        Include your structured-data-models version or Git commit and how you installed it (for example, pip, an editable source checkout, or a container image and tag).
-        Run `python -m torch.utils.collect_env` in the affected environment and paste its output below. This reports Python, PyTorch, OS, and CUDA details. If the command fails, include those details manually.
-      render: text
-    validations:
-      required: true
+      value: >
+        Thanks for contributing 🎉!
