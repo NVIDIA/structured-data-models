@@ -80,11 +80,16 @@ def test_icl_block_hierarchical_log_probs(
 
 @withCUDA
 @pytest.mark.parametrize("requires_grad", [False, True])
+@pytest.mark.parametrize("compiled", [False, True])
 def test_icl_block_hierarchical_compile(
-    device: torch.device, requires_grad: bool
+    device: torch.device, requires_grad: bool, compiled: bool
 ) -> None:
     block = _block(device=device)
-    compiled = torch.compile(block, backend="eager", fullgraph=True)
+    predict = (
+        torch.compile(block, backend="eager", fullgraph=True)
+        if compiled
+        else block._forward_hierarchical_masked
+    )
     # Two tables have different absent classes and class frequencies. Swapping
     # labels changes which context rows belong to each node.
     labels = torch.tensor(
@@ -96,7 +101,7 @@ def test_icl_block_hierarchical_compile(
             x = torch.randn(
                 2, 11, 8, device=device, requires_grad=requires_grad
             )
-            actual = compiled(x, y, num_classes=6)
+            actual = predict(x, y, num_classes=6, cache=None)
             expected = []
             for rows, targets in zip(x, y):
                 classes, local_y = targets.unique(
