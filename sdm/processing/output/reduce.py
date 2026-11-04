@@ -22,7 +22,7 @@ class AverageEstimators(EnsembleProcessor):
             aggregation less sensitive to outlying estimator predictions.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(
@@ -59,7 +59,7 @@ class AverageEstimators(EnsembleProcessor):
 
         return EnsembleTable.from_table(
             table=TableTensor(
-                columns={Stype.numerical: table.columns[Stype.numerical]},
+                columns={Stype.numerical: table.numerical_columns},
                 numerical=out,
             ),
             num_members=1,

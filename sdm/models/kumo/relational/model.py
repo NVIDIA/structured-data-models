@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ruff: noqa: D205
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -140,6 +141,11 @@ class KumoRelational(ICLModel):
             model are initialized.
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+
+    Additional Forward Parameters:
+        num_hops (int | None): The number of relational
+            message-passing hops. If ``None``, will be automatically inferred
+            from the context. (default: ``None``)
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(

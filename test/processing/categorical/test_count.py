@@ -37,8 +37,8 @@ def test_add_category_counts_appends_log1p_of_fitted_counts(
 
     output = AddCategoryCounts().fit_transform(context)
 
-    assert output.columns[Stype.categorical] == ("city", "kind")
-    assert output.columns[Stype.numerical] == ("city__count", "kind__count")
+    assert output.categorical_columns == ("city", "kind")
+    assert output.numerical_columns == ("city__count", "kind__count")
     assert output.categorical.equal(context.categorical)
     torch.testing.assert_close(
         output.numerical,
@@ -148,7 +148,7 @@ def test_add_category_counts_selects_by_fitted_vocabulary_size(
 
     output = processor.transform(query)
 
-    assert output.columns[Stype.numerical] == columns
+    assert output.numerical_columns == columns
     assert output.categorical.equal(query.categorical)
     expected = torch.full((2, len(columns)), 2.0, device=device).log1p()
     torch.testing.assert_close(output.numerical, expected)

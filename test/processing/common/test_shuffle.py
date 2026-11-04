@@ -6,7 +6,7 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import ShuffleColumns
 from sdm.testing import withCUDA
 
@@ -96,15 +96,14 @@ def test_latin_ensemble_couples_member_permutations(
     )
     output = ShuffleColumns(method="latin").fit_transform_ensemble(ensemble)
     permutations = tuple(
-        output[member_id].columns[Stype.numerical]
-        for member_id in range(len(output))
+        output[member_id].numerical_columns for member_id in range(len(output))
     )
     # Each member must contain every source column once
     # and reorder its values accordingly.
     for member_id, permutation in enumerate(permutations):
         source = ensemble[member_id]
         result = output[member_id]
-        source_columns = source.columns[Stype.numerical]
+        source_columns = source.numerical_columns
         indices = torch.tensor(
             [source_columns.index(column) for column in permutation],
             dtype=torch.long,
@@ -119,7 +118,7 @@ def test_latin_ensemble_couples_member_permutations(
     # Per position, each of 4 columns must occur once
     # and each of 2 columns twice.
     for member_ids in (range(4), range(4, 8)):
-        source_columns = ensemble[member_ids.start].columns[Stype.numerical]
+        source_columns = ensemble[member_ids.start].numerical_columns
         expected_columns = sorted(
             source_columns * (len(member_ids) // len(source_columns))
         )

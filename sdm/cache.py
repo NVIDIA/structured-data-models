@@ -10,10 +10,12 @@ from collections.abc import (
     MutableMapping,
 )
 from enum import StrEnum
-from typing import NamedTuple, Self
+from typing import NamedTuple, Self, cast
 
+import torch
 from torch import Tensor
 
+from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
 
 
@@ -125,6 +127,41 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
     def __repr__(self) -> str:
         return repr(self._items)
+
+    def __getstate__(self) -> dict[str, object]:
+        state = self.__dict__.copy()
+        # Stable serialization metadata: positions in the tensor traversal.
+        state["_pinned_tensor_indices"] = tuple(
+            index
+            for index, tensor in enumerate(self._tensors())
+            if tensor.is_pinned()
+        )
+        return state
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        pinned = set(
+            cast(tuple[int, ...], state.pop("_pinned_tensor_indices", ()))
+        )
+        self.__dict__.update(state)
+        if not pinned or not torch.cuda.is_available():
+            return
+
+        replacements: dict[int, Tensor] = {}
+        for index, tensor in enumerate(self._tensors()):
+            if (
+                index in pinned
+                and tensor.is_cpu
+                and not tensor.is_pinned()
+                and id(tensor) not in replacements
+            ):
+                if not replacements:
+                    set_pinned_max_round_threshold(mb=1)
+                replacements[id(tensor)] = tensor.pin_memory()
+
+        if replacements:
+            self._items = self._apply_tensor(
+                lambda tensor: replacements.get(id(tensor), tensor)
+            )._items
 
     def _tensors(self) -> Iterator[Tensor]:
         def _iter_tensors(value: object) -> Iterator[Tensor]:

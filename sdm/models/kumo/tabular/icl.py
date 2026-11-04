@@ -63,8 +63,13 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
-    ) -> Tensor:  # [..., R_test, out_channels]
+        train_size: Tensor | None = None,
+    ) -> Tensor:  # [..., R or R_test, out_channels]
         R_train = y.size(-1)
+        context_mask = None
+        if train_size is not None:
+            context_mask = torch.arange(x.size(-2), device=x.device)
+            context_mask = context_mask < train_size[..., None]
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -73,6 +78,10 @@ class ICLBlock(torch.nn.Module):
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
 
+            if context_mask is not None:
+                y_emb = y_emb.masked_fill(
+                    ~context_mask[..., :R_train, None], 0
+                )
             x[..., :R_train, :] += y_emb.to(x.dtype)
             del y_emb
 
@@ -82,15 +91,18 @@ class ICLBlock(torch.nn.Module):
 
             if self.kv_heads is None or cache is not None:
                 result = layer(
-                    query=x[..., R_train:, :] if last_layer else x,
+                    query=x[..., R_train:, :]
+                    if last_layer and train_size is None
+                    else x,
                     key_value=(
                         cast(KVCacheEntry, cache[cache_key])
                         if cache is not None and cache.is_replaying
                         else x[..., :R_train, :]
                     ),
+                    seqused_key_value=train_size,
                     return_key_value=cache is not None and cache.is_recording,
                     out=None
-                    if torch.is_grad_enabled()
+                    if torch.is_grad_enabled() or train_size is not None
                     else x[..., R_train:, :]
                     if last_layer
                     else x,
@@ -98,9 +110,12 @@ class ICLBlock(torch.nn.Module):
 
                 if cache is not None and cache.is_recording:
                     x, (key, value) = result
-                    if self.kv_heads is not None:
-                        key = key[..., : self.kv_heads, :].contiguous()
-                        value = value[..., : self.kv_heads, :].contiguous()
+                    kv_heads = self.kv_heads
+                    if kv_heads is not None and kv_heads < key.size(-2):
+                        key, value = _copy_key_value(
+                            key=key[..., :kv_heads, :],
+                            value=value[..., :kv_heads, :],
+                        )
                     cache[cache_key] = KVCacheEntry(key, value)
                     del key, value
                 else:
@@ -109,11 +124,16 @@ class ICLBlock(torch.nn.Module):
                 continue
 
             x_context, (key, value) = layer(
-                query=x[..., :0, :] if last_layer else x[..., :R_train, :],
+                query=x
+                if train_size is not None
+                else x[..., :0, :]
+                if last_layer
+                else x[..., :R_train, :],
                 key_value=x[..., :R_train, :],
+                seqused_key_value=train_size,
                 return_key_value=True,
                 out=None
-                if torch.is_grad_enabled()
+                if torch.is_grad_enabled() or train_size is not None
                 else x[..., :0, :]
                 if last_layer
                 else x[..., :R_train, :],
@@ -124,13 +144,31 @@ class ICLBlock(torch.nn.Module):
             )
             del key, value
             x_query = layer(
-                query=x[..., R_train:, :],
+                query=x if train_size is not None else x[..., R_train:, :],
                 key_value=key_value,
-                out=None if torch.is_grad_enabled() else x[..., R_train:, :],
+                seqused_key_value=train_size,
+                out=None
+                if torch.is_grad_enabled() or train_size is not None
+                else x[..., R_train:, :],
             )
-            if last_layer:
+            if context_mask is not None:
+                x = torch.where(context_mask[..., None], x_context, x_query)
+            elif last_layer:
                 x = x_query
             elif torch.is_grad_enabled():
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
+
+
+def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
+    return (
+        key.clone(memory_format=torch.contiguous_format),
+        value.clone(memory_format=torch.contiguous_format),
+    )
+
+
+# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
+if hasattr(torch.compiler, "nested_compile_region"):
+    # Compile cache copies separately to free each layer's full K/V tensors.
+    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)

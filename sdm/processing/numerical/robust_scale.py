@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm._memory import split_size
+from sdm._memory import _split_tensor, split_size
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -21,8 +22,11 @@ class RobustScale(Processor, InvertibleMixin):
             used as the scale.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
+
+    median: Tensor
+    scale: Tensor
 
     def __init__(
         self,
@@ -65,13 +69,13 @@ class RobustScale(Processor, InvertibleMixin):
         lower, median, upper = torch.cat(
             [
                 chunk.nanquantile(q, dim=-2, keepdim=True)
-                for chunk in quantile_input.split(size, dim=-1)
+                for chunk in _split_tensor(quantile_input, size, dim=-1)
             ],
             dim=-1,
         )
-        self.median = median.to(dtype=numerical.dtype)
+        self._set_buffer("median", median.to(dtype=numerical.dtype))
         scale = torch.where(lower == upper, 1.0, upper - lower)
-        self.scale = scale.to(dtype=numerical.dtype)
+        self._set_buffer("scale", scale.to(dtype=numerical.dtype))
 
     def _transform(self, table: TableTensor) -> TableTensor:
         numerical = (table.numerical - self.median).div_(self.scale)

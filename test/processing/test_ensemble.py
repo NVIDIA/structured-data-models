@@ -20,7 +20,7 @@ from sdm.processing import (
 # Generator forwarding is only observable through a stochastic transformation
 # and is therefore left to those processors as well.
 class IdentityEnsembleProcessor(EnsembleProcessor):
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = True
 
     def _fit_ensemble(
@@ -65,7 +65,7 @@ class InvertibleIdentityEnsembleProcessor(
 
 
 class _StatelessProcessor(Processor, InvertibleMixin):
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:

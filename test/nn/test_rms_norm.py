@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import warnings
 from typing import Literal
 
 import pytest
@@ -56,9 +57,16 @@ def test_rms_norm(
     x[0, 1] *= 1e-6
 
     with (
+        warnings.catch_warnings(),
         torch.inference_mode(),
         torch.autocast(device.type, dtype=torch.bfloat16, enabled=autocast),
     ):
+        if device.type == "cpu":
+            warnings.filterwarnings(
+                "ignore",
+                message=".*Cannot dispatch to fused implementation.*",
+                category=UserWarning,
+            )
         actual = norm(x)
         expected = reference(x)
     if (

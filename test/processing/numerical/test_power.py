@@ -12,6 +12,7 @@ from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 @onlyFullTest
 @onlyCUDA
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_power_transform_accepts_caller_compiled_optimizer(
     dtype: torch.dtype,

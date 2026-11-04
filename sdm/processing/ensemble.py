@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Iterable
 from typing import Self
 
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -45,6 +46,17 @@ class EnsembleProcessor(Processor):
         if isinstance(processor, EnsembleProcessor):
             return processor
         return EnsembleProcessorAdapter(processor)
+
+    @staticmethod
+    def _merge_stypes(processors: Iterable[Processor]) -> tuple[Stype, ...]:
+        """Combine column types without duplicates, in input order."""
+        return tuple(
+            dict.fromkeys(
+                stype
+                for processor in processors
+                for stype in processor.handles_stypes
+            )
+        )
 
     def _fit(
         self,
@@ -115,7 +127,7 @@ class EnsembleProcessor(Processor):
             generator: Pseudorandom number generator used for sampling.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
+            self._handles_table(group)
             for group in ensemble_table._iter_groups()
         ):
             return self
@@ -137,7 +149,7 @@ class EnsembleProcessor(Processor):
             The transformed ensemble table.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
+            self._handles_table(group)
             for group in ensemble_table._iter_groups()
         ):
             return ensemble_table
@@ -160,7 +172,7 @@ class EnsembleProcessor(Processor):
             The transformed ensemble table.
         """
         if not any(
-            group.active_stypes & self.handles_stypes
+            self._handles_table(group)
             for group in ensemble_table._iter_groups()
         ):
             return ensemble_table

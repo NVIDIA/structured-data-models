@@ -82,8 +82,7 @@ class KumoTabularTransformerBlock(TransformerBlock):
     ) -> int:
         r""":meta private:"""  # noqa: D415
         length = max(query_length, key_value_length or 0)
-        factor = 15 if element_size <= 2 else 8
-        return factor * length * element_size * self.attn.q_dim
+        return 8 * length * element_size * self.attn.q_dim
 
 
 if __name__ == "__main__":

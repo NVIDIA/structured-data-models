@@ -3,10 +3,12 @@
 
 import os
 
+import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import TableTensor
 from sdm.nn._buffer import BufferList
+from sdm.tensor.categorical import _iter_categories
 
 
 def _check_categorical_codes(table: TableTensor) -> None:
@@ -19,14 +21,19 @@ def _check_categorical_codes(table: TableTensor) -> None:
     """
     if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
         return
-    columns = table.columns[Stype.categorical]
-    for index, category in enumerate(table.categorical.categories):
-        codes = table.categorical[..., index]
-        if (codes >= category.numel()).any():
-            raise ValueError(
-                f"Categorical column {columns[index]!r} contains a code "
-                "outside its category vocabulary."
-            )
+    columns = table.categorical_columns
+    categorical = table.categorical
+    for index, category in enumerate(_iter_categories(categorical)):
+        codes = categorical.code[..., index]
+        message = (
+            f"Categorical column {columns[index]!r} contains a code "
+            "outside its category vocabulary."
+        )
+        if torch.compiler.is_compiling():
+            valid = (codes < category.numel()).all().to("cpu")
+            torch._assert_async(valid, message)
+        elif (codes >= category.numel()).any():
+            raise ValueError(message)
 
 
 def _check_categories(
@@ -41,15 +48,20 @@ def _check_categories(
     """
     if os.getenv("SDM_ENABLE_CATEGORY_CHECKS", "1") == "0":
         return
-    columns = table.columns[Stype.categorical]
-    if len(table.categorical.categories) != len(categories):
+    columns = table.categorical_columns
+    categorical = table.categorical
+    if categorical.code.size(-1) != len(categories):
         raise ValueError(
             f"Expected {len(categories)} fitted categorical "
             f"columns (got {len(columns)})."
         )
     for index, (actual, expected) in enumerate(
-        zip(table.categorical.categories, categories)
+        zip(_iter_categories(categorical), categories)
     ):
+        # 'AlignCategories' outputs the fitted vocabulary objects themselves,
+        # so skip the comparison, which compiled code cannot evaluate.
+        if actual is expected:
+            continue
         expected = expected.to(device=actual.device)
         if not actual.equal(expected):
             raise ValueError(

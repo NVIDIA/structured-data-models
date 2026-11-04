@@ -20,12 +20,12 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 sp.PowerTransform(),
                 [
                     sp.RobustScale(),
-                    sp.ClipSoft(3.0),
+                    sp.Clip(-3.0, 3.0, method="saturate"),
                 ],
                 sp.RankGaussian(max_knots=8192),
                 method="round_robin",
             ),
-            sp.ClipSigma(threshold=4.0),
+            sp.ClipSigma(threshold=4.0, method="log"),
         )
 
     return sp.Recipe(

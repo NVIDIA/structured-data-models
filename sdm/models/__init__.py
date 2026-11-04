@@ -1,22 +1,40 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Structured Data Models."""
+"""Structured data models."""
 
-from sdm.models.base import ICLModel
-from sdm.models.ecoc import ECOC
+__lazy_modules__ = {
+    "sdm.models.tabiclv2",
+    "sdm.models.tabfm",
+    "sdm.models.kumo",
+    "sdm.models.chronos2",
+    "sdm.models.timesfm3",
+}
+
+from sdm.models.base import Callback, Model, ICLModel, ECOC
 from sdm.models.tabiclv2 import TabICLv2
 from sdm.models.tabfm import TabFM
-from sdm.models.kumo import KumoTabular, KumoRelational
+from sdm.models.kumo import (
+    KumoTabular,
+    KumoRelational,
+    KumoForecast,
+    KumoAnomaly,
+)
+from sdm.models.chronos2 import Chronos2
 from sdm.models.timesfm3 import TimesFM3
 
 
 __all__ = [
+    "Callback",
+    "Model",
     "ICLModel",
     "ECOC",
     "TabICLv2",
     "TabFM",
     "KumoTabular",
     "KumoRelational",
+    "KumoForecast",
+    "KumoAnomaly",
+    "Chronos2",
     "TimesFM3",
 ]

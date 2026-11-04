@@ -14,7 +14,7 @@ class SortQuantiles(Processor):
             If ``None``, all numerical columns form one quantile group.
     """
 
-    handles_stypes = frozenset({Stype.numerical})
+    handles_stypes = (Stype.numerical,)
     requires_fit = False
 
     def __init__(self, num_quantiles: int | None = None) -> None:

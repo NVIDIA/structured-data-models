@@ -323,6 +323,7 @@ def test_segment_multi_reduce_edge_type_torch() -> None:
 
 
 @onlyCUDA
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("with_edge_type", [False, True])
 def test_segment_multi_reduce_compile(with_edge_type: bool) -> None:
     src = torch.randn(7, 8, device="cuda", dtype=torch.bfloat16)

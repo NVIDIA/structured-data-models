@@ -81,15 +81,15 @@ class ICLBlock(torch.nn.Module):
         patch_mask: Tensor | None = None,  # [..., C, N]
     ) -> Tensor:  # [..., C, N, out_channels]
 
-        if patch_mask is None:
-            time_attn_mask = var_attn_mask = None
-        else:
+        time_attn_mask = var_attn_mask = None
+        if patch_mask is not None:
             time_attn_mask = torch.ones(
                 (x.size(-2), x.size(-2)),
                 device=x.device,
                 dtype=torch.bool,
             ).tril() & ~patch_mask.unsqueeze(-2)
-            var_attn_mask = ~patch_mask.transpose(-2, -1).unsqueeze(-2)
+            time_attn_mask = time_attn_mask.unsqueeze(-3)
+            var_attn_mask = ~patch_mask.transpose(-2, -1)[..., None, None, :]
 
         for time_block, var_block in zip(self.time_blocks, self.var_blocks):
             x = time_block(
