@@ -539,11 +539,14 @@ def main() -> None:
             message="variable-length statistics failed on at least one rank",
         ):
             engaged = torch.tensor(
-                [timings["varlen_active"], timings["varlen_graphs_built"]],
+                data=[
+                    timings["varlen_active"],
+                    timings["varlen_graphs_built"],
+                ],
                 device=device,
             )
             failures = torch.tensor(
-                timings["varlen_build_failures"], device=device
+                data=timings["varlen_build_failures"], device=device
             )
         if world > 1:
             dist.all_reduce(engaged, op=dist.ReduceOp.MIN)
@@ -556,7 +559,7 @@ def main() -> None:
         ):
             active, built = engaged.tolist()
             varlen_ok = bool(active) and varlen_engaged(
-                int(built), int(failures.item()), exercised=True
+                built=int(built), failed=int(failures.item()), exercised=True
             )
         if not varlen_ok:
             abort(
