@@ -78,7 +78,7 @@ class ICLBlock(torch.nn.Module):
         batch_size_limit: int | Literal["auto"] | None = "auto",
     ) -> Tensor:  # [..., N, D]
         bias = self.get_position_bias(length=x.size(-2), device=x.device)
-        if patch_mask is not None:  # Masked patches are hidden as keys:
+        if patch_mask is not None:
             bias = bias.masked_fill(patch_mask[..., None, None, :], -math.inf)
         for layer in self.layers:
             x = layer(
