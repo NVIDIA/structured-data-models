@@ -227,36 +227,15 @@ def test_gather_stats_transport_failure(
     )
 
 
-@pytest.mark.parametrize(
-    argnames=("value", "varlen_graphs"),
-    argvalues=[
-        (NAN, None),
-        (INF, None),
-        (-INF, None),
-        (1.0, None),
-        (1.0, 1),
-        (1.0, 0),
-    ],
-)
-def test_main_writes_strict_json(
+@pytest.fixture
+def main_setup(
     multinode: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    value: float,
-    varlen_graphs: int | None,
-) -> None:
+) -> tuple[Path, torch.Tensor, dict[str, float]]:
     x, y = torch.ones(5, 2), torch.tensor([0, 1, 0])
-    logits = torch.tensor([[value, 0.0], [0.0, 1.0]])
+    logits = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
     timings = {"load_s": 1.0, "compile_s": 2.0}
-    if varlen_graphs is not None:
-        timings.update(
-            varlen_active=1.0,
-            varlen_graphs_built=float(varlen_graphs),
-            varlen_build_failures=0.0,
-        )
-        frontend = ModuleType("cudnn")
-        frontend.__dict__["__version__"] = "test"
-        monkeypatch.setitem(sys.modules, "cudnn", frontend)
     monkeypatch.setattr(
         target=multinode,
         name="init_distributed",
@@ -308,14 +287,48 @@ def test_main_writes_strict_json(
     monkeypatch.setenv("TORCHINDUCTOR_CACHE_DIR", str(tmp_path))
     path = tmp_path / "report.json"
     argv = ["benchmark", "--out", str(path)]
-    if varlen_graphs is not None:
-        argv.append("--use-varlen")
     monkeypatch.setattr(target=sys, name="argv", value=argv)
-    if value == 1.0 and varlen_graphs != 0:
-        multinode.main()
-    else:
+    return path, logits, timings
+
+
+@pytest.mark.parametrize(
+    argnames=("value", "varlen_graphs", "expect_exit"),
+    argvalues=[
+        (NAN, None, True),
+        (INF, None, True),
+        (-INF, None, True),
+        (1.0, None, False),
+        (1.0, 1, False),
+        (1.0, 0, True),
+    ],
+)
+def test_main_writes_strict_json(
+    multinode: ModuleType,
+    main_setup: tuple[Path, torch.Tensor, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch,
+    value: float,
+    varlen_graphs: int | None,
+    expect_exit: bool,
+) -> None:
+    path, logits, timings = main_setup
+    logits[0, 0] = value
+    if varlen_graphs is not None:
+        timings.update(
+            varlen_active=1.0,
+            varlen_graphs_built=float(varlen_graphs),
+            varlen_build_failures=0.0,
+        )
+        frontend = ModuleType("cudnn")
+        frontend.__dict__["__version__"] = "test"
+        monkeypatch.setitem(sys.modules, "cudnn", frontend)
+        monkeypatch.setattr(
+            target=sys, name="argv", value=[*sys.argv, "--use-varlen"]
+        )
+    if expect_exit:
         with pytest.raises(SystemExit, match="1"):
             multinode.main()
+    else:
+        multinode.main()
     if varlen_graphs == 0:
         assert not path.exists()
         return
@@ -327,3 +340,32 @@ def test_main_writes_strict_json(
     if value != 1.0:
         assert None in report["rank_agreement_stats"][0]
         assert "phases" not in report
+
+
+@pytest.mark.parametrize(
+    argnames=("operation", "next_stage"),
+    argvalues=[
+        ("prepare_model", "rank_agreement_gate"),
+        ("serve_tables", "phase_summary"),
+    ],
+)
+def test_main_aborts_after_local_failure(
+    multinode: ModuleType,
+    main_setup: tuple[Path, torch.Tensor, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    next_stage: str,
+) -> None:
+    path, _, _ = main_setup
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError(f"Injected {operation} failure")
+
+    def unexpected(*args: object, **kwargs: object) -> None:
+        pytest.fail(f"Execution reached {next_stage} after {operation} failed")
+
+    monkeypatch.setattr(target=multinode, name=operation, value=fail)
+    monkeypatch.setattr(target=multinode, name=next_stage, value=unexpected)
+    with pytest.raises(SystemExit, match="1"):
+        multinode.main()
+    assert not path.exists()
