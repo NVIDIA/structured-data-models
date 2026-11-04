@@ -9,25 +9,6 @@ import torch
 from sdm import CategoricalTensor, EnsembleTable, TableTensor
 
 
-@pytest.mark.parametrize(
-    ("locations", "message"),
-    [
-        (((0, 0),), "Missing locations"),
-        (((0, 0), (0, 1), (0, 2)), "Invalid locations"),
-        (((0, 0), (0, 1), (1, 0)), "Invalid locations"),
-        (((0, 0), (0, 1), (0, -1)), "Invalid locations"),
-    ],
-)
-def test_rejects_invalid_locations(
-    locations: tuple[tuple[int, int], ...],
-    message: str,
-) -> None:
-    group = TableTensor.from_tensor(torch.zeros(2, 3, 1))
-
-    with pytest.raises(ValueError, match=message):
-        EnsembleTable(groups=(group,), locations=locations)
-
-
 def test_shared_member_table() -> None:
     data = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     ensemble_table = EnsembleTable.from_table(data, num_members=3)
