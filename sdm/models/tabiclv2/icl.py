@@ -127,6 +127,10 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
+        seqused_train = (
+            seqused_train.clamp(min=1) if seqused_train is not None else None
+        )
+
         plan_attention = (
             x.device.type == "cuda"
             and not self.training

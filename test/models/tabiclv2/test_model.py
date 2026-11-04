@@ -724,61 +724,132 @@ def test_seqused_train_compile(device: torch.device) -> None:
     torch.testing.assert_close(out.numerical, expected.numerical)
 
 
-def test_seqused_train_validates() -> None:
-    model = TabICLv2(pretrained=False)
-    x_context = torch.randn(6, 5)
-    x_query = torch.randn(2, 5)
-    y_context = torch.randint(0, 10, (6, 1))
+@withCUDA
+def test_seqused_train_validates(device: torch.device) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+    x_context = torch.randn(6, 5, device=device)
+    x_query = torch.randn(2, 5, device=device)
+    y_context = torch.randint(0, 10, (6, 1), device=device)
 
     with pytest.raises(ValueError, match=r"torch\.int32"):
         model(
-            x_context,
-            y_context,
-            x_query,
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
             recipe=Recipe(),
-            seqused_train=torch.tensor(6),
+            seqused_train=torch.tensor(6, device=device),
         )
     with pytest.raises(ValueError, match=r"torch\.int32"):
         model.fit(
-            x_context,
-            y_context,
+            x=x_context,
+            y=y_context,
             recipe=Recipe(),
-            seqused_train=torch.tensor(6),
+            seqused_train=torch.tensor(6, device=device),
         )
 
-    # Zero or negative counts would mask out every in-context row. They are
-    # clamped like `seqused_cols` rather than rejected, since reading the
-    # values off the device on every call would cost a synchronization in
-    # the serving path this padding exists to speed up. The contract is
-    # therefore degenerate-but-finite output, not an error.
-    for count in (0, -1):
-        out = model(
-            x_context,
-            y_context,
-            x_query,
+    # The same bounded count must be used by row embedding, ICL attention
+    # and query scaling, including when the context is replayed from cache.
+    for count, bounded in ((0, 1), (-1, 1), (60, 6)):
+        expected = model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
             recipe=Recipe(),
-            seqused_train=torch.tensor(count, dtype=torch.int32),
+            seqused_train=torch.tensor(
+                bounded, dtype=torch.int32, device=device
+            ),
         )
-        assert torch.isfinite(out.numerical).all()
+        seqused_train = torch.tensor(count, dtype=torch.int32, device=device)
+        actual = model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            recipe=Recipe(),
+            seqused_train=seqused_train,
+        )
+        torch.testing.assert_close(actual.numerical, expected.numerical)
+        model.fit(
+            x=x_context,
+            y=y_context,
+            recipe=Recipe(),
+            seqused_train=seqused_train,
+        )
+        torch.testing.assert_close(
+            model.predict(x_query).numerical, expected.numerical
+        )
+        assert seqused_train.item() == count
 
-    # A clamped count behaves as though exactly one in-context row is valid.
-    torch.manual_seed(0)
-    clamped = model(
-        x_context,
-        y_context,
-        x_query,
+
+@withCUDA
+@pytest.mark.parametrize("field", ["seqused_train", "seqused_cols"])
+def test_seqused_fit_owns_counts(device: torch.device, field: str) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+    x_context = torch.randn(6, 5, device=device)
+    y_context = torch.tensor([[0], [1], [0], [1], [0], [1]], device=device)
+    x_query = torch.randn(2, 5, device=device)
+    count = torch.tensor(2, dtype=torch.int32, device=device)
+
+    model.fit(
+        x=x_context,
+        y=y_context,
         recipe=Recipe(),
-        seqused_train=torch.tensor(0, dtype=torch.int32),
+        seqused_train=count if field == "seqused_train" else None,
+        seqused_cols=count if field == "seqused_cols" else None,
     )
-    torch.manual_seed(0)
-    one_row = model(
-        x_context,
-        y_context,
-        x_query,
+    expected = model.predict(x_query)
+    count.fill_(4)
+    actual = model.predict(x_query)
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("fit_device", ["cpu", "cuda"])
+def test_seqused_cpu_counts(fit_device: str) -> None:
+    model = TabICLv2(pretrained=False, device=fit_device)
+    _randomize_residual_exits(model)
+    x_context = torch.randn(2, 4, 2, device=fit_device)
+    y_context = torch.tensor([[[0], [1], [0], [1]]], device=fit_device).expand(
+        2, -1, -1
+    )
+    x_query = torch.randn(2, 2, 2, device="cuda")
+    counts = torch.tensor([2, 3], dtype=torch.int32)
+    cols = torch.tensor(1, dtype=torch.int32)
+
+    # Counts may originate on the CPU, including when fitted caches are
+    # later replayed on a different device.
+    model.fit(
+        x=x_context,
+        y=y_context,
         recipe=Recipe(),
-        seqused_train=torch.tensor(1, dtype=torch.int32),
+        seqused_train=counts,
+        seqused_cols=cols,
     )
-    torch.testing.assert_close(clamped.numerical, one_row.numerical)
+    model.cuda()
+    expected = model(
+        x_context=x_context.cuda(),
+        y_context=y_context.cuda(),
+        x_query=x_query,
+        recipe=Recipe(),
+        seqused_train=counts.cuda(),
+        seqused_cols=cols.cuda(),
+    )
+    actual = model(
+        x_context=x_context.cuda(),
+        y_context=y_context.cuda(),
+        x_query=x_query,
+        recipe=Recipe(),
+        seqused_train=counts,
+        seqused_cols=cols,
+    )
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    torch.testing.assert_close(
+        model.predict(x_query).numerical,
+        expected.numerical,
+        atol=1e-3,
+        rtol=1e-3,
+    )
 
 
 def test_seqused_cols_validates() -> None:

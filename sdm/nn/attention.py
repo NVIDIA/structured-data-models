@@ -315,7 +315,9 @@ class SDPA(torch.nn.Module):
 
         if self.query_scaling is not None:
             if seqused_key_value is not None:
-                key_len = seqused_key_value.unsqueeze(-1)
+                # Match the mask's saturation against fresh or cached keys.
+                key_len = seqused_key_value.clamp(max=key.size(-3))
+                key_len = key_len.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1)
             else:

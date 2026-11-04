@@ -609,7 +609,6 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
 
     stream_call = bucketed_call if bucketed else call
 
-    cold_compile_s = 0.0
     if compile_kwargs is not None:
         compile_kwargs = dict(compile_kwargs)
         if compile_kwargs.pop("regional", False):
@@ -869,7 +868,7 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
     elif config == "c0-fp32":
         result["accuracy"] = {"pass": True, "is_sentinel": True}
     elif os.path.exists(ref_path):
-        ref = torch.load(ref_path, map_location="cpu")
+        ref = torch.load(ref_path, map_location="cpu", weights_only=True)
         result["accuracy"] = accuracy_block(task, out.float().cpu(), ref)
     else:
         result["accuracy"] = {"pass": None, "missing_reference": True}
@@ -1052,14 +1051,14 @@ def main() -> None:
 def format_record(record: dict[str, Any]) -> str:
     """Format one benchmark record as a fixed-width table row."""
     if record.get("skipped_walltime"):
-        return "{:<22} {:<8} {:<4} {:<10} SKIPPED (walltime)".format(
+        return "{:<26} {:<8} {:<4} {:<10} SKIPPED (walltime)".format(
             record["config"],
             record["workload"],
             record["task"],
             record["route"],
         )
     if "error" in record:
-        return "{:<22} {:<8} {:<4} {:<10} ERROR".format(
+        return "{:<26} {:<8} {:<4} {:<10} ERROR".format(
             record["config"],
             record["workload"],
             record["task"],
@@ -1075,7 +1074,7 @@ def format_record(record: dict[str, Any]) -> str:
     if stream2_s is None:
         stream2_s = float("nan")
     return (
-        "{:<24} {:<8} {:<4} {:<10} p50={:>8.2f}ms stream={:>8.2f}ms "
+        "{:<26} {:<8} {:<4} {:<10} p50={:>8.2f}ms stream={:>8.2f}ms "
         "stream2={:>8.2f}ms cold={:>6.1f}s mem={:>7.0f}MB pass={}".format(
             record["config"],
             record["workload"],

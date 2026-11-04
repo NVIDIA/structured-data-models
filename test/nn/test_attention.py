@@ -15,7 +15,7 @@ from sdm.nn import (
     SoftplusScale,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -227,6 +227,45 @@ def test_sdpa_scale(device: torch.device) -> None:
     )
 
     torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("key_len", [0, 1, 5])
+@pytest.mark.parametrize("requires_grad", [False, True])
+def test_sdpa_query_scaling_saturates_counts(
+    device: torch.device,
+    key_len: int,
+    requires_grad: bool,
+) -> None:
+    module = SDPA(
+        num_query_heads=2,
+        query_scaling=QASSMax(channels=4, num_heads=2, device=device),
+    )
+    query = torch.randn(2, 3, 2, 4, device=device)
+    key = torch.randn(2, key_len, 2, 4, device=device)
+    value = torch.randn_like(key)
+    counts = torch.tensor(
+        [key_len + 4, max(key_len - 1, 0)], dtype=torch.int32, device=device
+    )
+    mask = torch.arange(key_len, device=device) < counts[:, None, None]
+    with torch.set_grad_enabled(requires_grad):
+        inputs = tuple(
+            x.requires_grad_(requires_grad) for x in (query, key, value)
+        )
+        actual = module(
+            query=query, key=key, value=value, seqused_key_value=counts
+        )
+        expected = module(query=query, key=key, value=value, attn_mask=mask)
+        torch.testing.assert_close(actual, expected)
+        assert actual.requires_grad == expected.requires_grad
+        if expected.requires_grad:
+            inputs = (*inputs, *module.parameters())
+            actual_grads = torch.autograd.grad(actual.sum(), inputs)
+            expected_grads = torch.autograd.grad(expected.sum(), inputs)
+            for actual_grad, expected_grad in zip(
+                actual_grads, expected_grads, strict=True
+            ):
+                torch.testing.assert_close(actual_grad, expected_grad)
 
 
 def test_sdpa_errors() -> None:
@@ -907,12 +946,12 @@ def test_attention_key_value_cache_dtype_mismatch() -> None:
         module(query=query, key_value=cached)
 
 
-@withCUDA
-def test_attention_key_value_cache_autocast(device: torch.device) -> None:
+@onlyCUDA
+def test_attention_key_value_cache_autocast() -> None:
     torch.manual_seed(0)
-    if device.type != "cuda":
-        pytest.skip("autocast('cuda') requires a GPU")
+    device = torch.device("cuda")
     module = Attention(channels=8, num_query_heads=2, device=device)
+    torch.nn.init.eye_(module.out_lin.weight)
     query = torch.randn(2, 3, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
 
@@ -922,5 +961,6 @@ def test_attention_key_value_cache_autocast(device: torch.device) -> None:
         out, cached = module(
             query=query, key_value=key_value, return_key_value=True
         )
+        assert out.abs().max() > 0
         replayed = module(query=query, key_value=cached)
     torch.testing.assert_close(replayed, out)

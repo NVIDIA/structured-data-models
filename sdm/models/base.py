@@ -141,9 +141,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         # Only forward the padding keywords when set so that subclasses
         # implementing a narrower private hook keep working.
         if seqused_train is not None:
-            kwargs["seqused_train"] = seqused_train
+            kwargs["seqused_train"] = seqused_train.to(x_context.device)
         if seqused_cols is not None:
-            kwargs["seqused_cols"] = seqused_cols
+            kwargs["seqused_cols"] = seqused_cols.to(x_context.device)
 
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
@@ -286,9 +286,9 @@ class ICLModel(torch.nn.Module, abc.ABC):
         # become part of the cached keyword arguments, so :meth:`predict`
         # replays them alongside the cached key/value projections.
         if seqused_train is not None:
-            kwargs["seqused_train"] = seqused_train
+            kwargs["seqused_train"] = seqused_train.to(x.device, copy=True)
         if seqused_cols is not None:
-            kwargs["seqused_cols"] = seqused_cols
+            kwargs["seqused_cols"] = seqused_cols.to(x.device, copy=True)
 
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
@@ -394,6 +394,11 @@ class ICLModel(torch.nn.Module, abc.ABC):
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
+        kwargs = dict(cast(dict[str, Any], self._cache["kwargs"]))
+        for key in ("seqused_train", "seqused_cols"):
+            if key in kwargs:
+                kwargs[key] = kwargs[key].to(x.device)
+
         if related_tables is not None:
             if cast(Cache, self._cache[0])["related_tables_schema"] is None:
                 raise ValueError(
@@ -475,7 +480,7 @@ class ICLModel(torch.nn.Module, abc.ABC):
                     related_query_tables=related_query_tables,
                     cache=cache,
                     generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
+                    **kwargs,
                 )
 
                 if x.is_cuda:
