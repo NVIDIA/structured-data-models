@@ -300,7 +300,8 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
                 vocabulary_key,
             )
             if torch.compiler.is_compiling():
-                # Hash a group index instead of specializing symbolic sizes.
+                # Hash group IDs to avoid fixing row and column counts during
+                # compilation; compare full keys to preserve grouping.
                 for key_id, key in enumerate(compatibility_keys):
                     if key == compatibility_key:
                         compatibility_key = (key_id,)
