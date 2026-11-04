@@ -288,7 +288,7 @@ def test_icl_block_rejects_one_class_hierarchy() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("batch_shape", [(), (2,)])
+@pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
 @pytest.mark.parametrize("requires_grad", [False, True])
 @pytest.mark.parametrize("compiled", [False, True])
 def test_icl_block_hierarchical_cache(

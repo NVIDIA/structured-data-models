@@ -207,22 +207,23 @@ class ICLBlock(torch.nn.Module):
                 .clone()
             )
             labels = indices.gather(
-                -1, y.unsqueeze(-2).expand(*y.size()[:-1], num_nodes, -1)
+                dim=-1,
+                index=y.unsqueeze(-2).expand(*y.size()[:-1], num_nodes, -1),
             )
             logits = self._forward(
                 x=rows,
                 y=labels,
                 cache=cache,
                 cache_prefix=f"icl_block.level{depth}",
-                attn_mask=mask.unsqueeze(-2),
+                attn_mask=mask.unsqueeze(-2).unsqueeze(-2),
             )
             logits = (
                 logits[..., : self.num_classes] / self.temperature
             ).masked_fill(output_ids >= sizes[..., None, None], -torch.inf)
             node_log_probs = logits.log_softmax(dim=-1)
             class_log_probs = node_log_probs.gather(
-                -1,
-                indices.unsqueeze(-2).expand(
+                dim=-1,
+                index=indices.unsqueeze(-2).expand(
                     *indices.size()[:-1], test_size, -1
                 ),
             )
@@ -269,8 +270,10 @@ class ICLBlock(torch.nn.Module):
             )
             output_sizes = torch.where(internal, groups, sizes).squeeze(-1)
             mask = classes.gather(
-                -1,
-                y.unsqueeze(-2).expand(*y.size()[:-1], classes.size(-2), -1),
+                dim=-1,
+                index=y.unsqueeze(-2).expand(
+                    *y.size()[:-1], classes.size(-2), -1
+                ),
             )
             # Empty nodes need a finite softmax before masking their outputs.
             levels.append((classes, indices, output_sizes.clamp(min=1), mask))
