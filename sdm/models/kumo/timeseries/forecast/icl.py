@@ -73,10 +73,13 @@ class ICLBlock(torch.nn.Module):
     def forward(
         self,
         x: Tensor,  # [..., N, D]
+        patch_mask: Tensor | None = None,  # [..., N]
         *,
         batch_size_limit: int | Literal["auto"] | None = "auto",
     ) -> Tensor:  # [..., N, D]
         bias = self.get_position_bias(length=x.size(-2), device=x.device)
+        if patch_mask is not None:  # Masked patches are hidden as keys:
+            bias = bias.masked_fill(patch_mask[..., None, None, :], -math.inf)
         for layer in self.layers:
             x = layer(
                 query=x,
