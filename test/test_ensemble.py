@@ -16,7 +16,9 @@ class _TupleEnsemble(EnsembleData[tuple[int, ...]]):
         return len(group)
 
     @staticmethod
-    def _select_member(group: tuple[int, ...], position: int) -> tuple[int, ...]:
+    def _select_member(
+        group: tuple[int, ...], position: int
+    ) -> tuple[int, ...]:
         return group[position : position + 1]
 
     def _select_members(self, member_ids: Sequence[int]) -> Self:
@@ -32,8 +34,17 @@ def test_ensemble_data_allows_shared_members() -> None:
         locations=((0, 1), (0, 0), (1, 0), (0, 1)),
     )
 
-    assert list(ensemble) == [(20,), (10,), (30,), (20,)]
-    assert list(ensemble[1:3]) == [(10,), (30,)]
+    assert [ensemble[index] for index in range(len(ensemble))] == [
+        (20,),
+        (10,),
+        (30,),
+        (20,),
+    ]
+    selected = ensemble[1:3]
+    assert [selected[index] for index in range(len(selected))] == [
+        (10,),
+        (30,),
+    ]
 
 
 @pytest.mark.parametrize(
