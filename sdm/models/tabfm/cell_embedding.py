@@ -24,6 +24,7 @@ import torch
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm._chunk import chunked_map
 from sdm._memory import chunk_memory_limit
 
 
@@ -171,6 +172,19 @@ class CellEmbedding(torch.nn.Module):
             )
 
         rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
+        if (
+            torch.compiler.is_compiling()
+            and not torch.is_grad_enabled()
+            and not kwargs
+        ):
+
+            def embed_chunk(chunk: Tensor) -> Tensor:
+                result = out.new_empty((*chunk.shape[:-1], self.channels))
+                return self._forward(chunk, freq, weight, bias, out=result)
+
+            out.copy_(chunked_map(embed_chunk, x, rows_per_chunk, dim=-3))
+            return out
+
         for chunk_index in range((R + rows_per_chunk - 1) // rows_per_chunk):
             start = chunk_index * rows_per_chunk
             self._forward(
