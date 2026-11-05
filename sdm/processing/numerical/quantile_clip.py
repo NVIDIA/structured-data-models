@@ -9,11 +9,10 @@ from sdm.processing import Processor
 
 
 class ClipQuantiles(Processor):
-    """Clamp feature columns to fitted quantile bounds.
+    """Clamp each numerical column to its fitted quantile bounds.
 
     Values outside the fitted bounds are discarded, so this processor is not
-    invertible. Quantile transform bounds are fitted independently for each
-    feature column.
+    invertible. Bounds are fitted independently for each column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.

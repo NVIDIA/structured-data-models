@@ -50,6 +50,7 @@ from sdm.processing.categorical import (
     ShuffleCategories,
     ImputeMode,
     AddCategoryCounts,
+    OneHotEncode,
 )
 from sdm.processing.datetime import AddCalendarFields
 from sdm.processing.output import (
@@ -103,6 +104,7 @@ __all__ = [
     "ShuffleCategories",
     "ImputeMode",
     "AddCategoryCounts",
+    "OneHotEncode",
     "AddCalendarFields",
     "AverageEstimators",
     "Softmax",
