@@ -11,7 +11,7 @@ from sdm.processing import EnsembleInvertibleMixin, SeriesEnsembleProcessor
 
 
 class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
-    """Interpolate missing feature values along the row dimension.
+    """Interpolate missing numerical values along the row dimension.
 
     Args:
         fill_value: Value used for columns with no observations.

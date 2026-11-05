@@ -12,9 +12,9 @@ from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
 class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
-    """Permute numerical feature columns and their names.
+    """Permute numerical columns and their names.
 
-    Convert non-numerical feature stypes before this step, for example with
+    Convert non-numerical stypes before this step, for example with
     :class:`~sdm.processing.ToNumerical`.
 
     Args:
