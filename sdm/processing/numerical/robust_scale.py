@@ -11,7 +11,7 @@ from sdm.processing.numerical._stats import _isfinite
 
 
 class RobustScale(Processor, InvertibleMixin):
-    """Center and scale each feature column with median and quantile range.
+    """Center and scale each numerical column with median and quantile range.
 
     Columns whose lower and upper quantile coincide use a unit scale to keep
     the transform finite and invertible. NaN and infinite values are ignored

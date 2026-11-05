@@ -17,7 +17,7 @@ class ToNumerical(Processor):
     and the category vocabulary. ``ToNumerical`` reuses those existing ids,
     casts them to the numerical dtype, and clears the categorical block so
     numerical-only models can consume both original numerical and categorical
-    features. Missing categorical values remain ``-1``.
+    columns. Missing categorical values remain ``-1``.
 
     Unhandled semantic types are preserved unchanged.
 

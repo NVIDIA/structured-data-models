@@ -16,7 +16,7 @@ class DropConstantColumns(EnsembleProcessor):
     values. When the number of samples is less than or equal to ``threshold``,
     all columns are preserved. NaN is counted once as a distinct value.
 
-    Only numerical columns are supported. Convert other feature stypes before
+    Only numerical columns are supported. Convert other stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
     Fitting expects data with shape ``[N, C]``, where ``N`` is the number of
     rows and ``C`` is the number of numerical columns. The learned selection
