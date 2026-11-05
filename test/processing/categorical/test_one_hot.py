@@ -70,7 +70,7 @@ def test_one_hot_alignment_uses_context_vocabulary() -> None:
     assert actual.numerical_columns == fitted.numerical_columns
 
 
-@pytest.mark.parametrize("rows, categories", [(0, 0), (3, 0), (0, 2)])
+@pytest.mark.parametrize(("rows", "categories"), [(0, 0), (3, 0), (0, 2)])
 def test_one_hot_empty_inputs(rows: int, categories: int) -> None:
     table = TableTensor(
         categorical=CategoricalTensor(
