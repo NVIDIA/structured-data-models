@@ -58,8 +58,8 @@ class OneHotEncode(Processor):
             },
             numerical=numerical,
             **{
-                stype.value: block
-                for stype, block in TableTensor.items(table)
+                stype.value: getattr(table, stype.value)
+                for stype in table.columns
                 if stype not in (Stype.numerical, Stype.categorical)
             },
         )
