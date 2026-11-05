@@ -11,7 +11,7 @@ from sdm.tensor.categorical import _iter_categories
 
 
 class OneHotEncode(Processor):
-    """One-hot encode categorical columns as dense numerical columns.
+    """One-hot encode categorical columns.
 
     Each category produces a column named ``<column>_<code>`` in
     vocabulary order. Missing and unknown values encode as zeros.
