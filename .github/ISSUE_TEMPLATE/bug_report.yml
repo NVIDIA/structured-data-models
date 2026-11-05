@@ -18,7 +18,7 @@ body:
         - label: I have checked whether the bug also reproduces on the latest `main`.
   - type: textarea
     attributes:
-      label: 🐛 Describe the bug
+      label: Describe the bug
       description: A clear and concise description of what the bug is, and what you expected to happen instead.
     validations:
       required: true
@@ -56,4 +56,4 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for contributing 🎉!
+        Thanks for contributing!
