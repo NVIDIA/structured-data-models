@@ -19,7 +19,10 @@ from sdm import (
     TaskLike,
 )
 from sdm._inference import inference_mode
-from sdm._memory import set_pinned_max_round_threshold
+from sdm._memory import (
+    set_pinned_max_round_threshold,
+    set_pinned_register_threads,
+)
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
@@ -318,6 +321,7 @@ class ICLModel(Model):
         ]
         if x.is_cuda and len(contexts) > 1:
             set_pinned_max_round_threshold(mb=1)
+            set_pinned_register_threads()
 
         class_values = _class_values(contexts, estimator_batch_size)
         batches = _batch_slices(

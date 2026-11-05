@@ -36,7 +36,7 @@ def set_pinned_max_round_threshold(
 
 
 def set_pinned_register_threads(
-    num_threads: int,
+    num_threads: int | None = None,
     force: bool = False,
 ) -> None:
     r"""Set the process-wide number of threads that pin new allocations.
@@ -46,11 +46,14 @@ def set_pinned_register_threads(
 
     Args:
         num_threads: The number of threads, a power of two of at most
-            ``128``.
+            ``128``. ``None`` uses :func:`torch.get_num_threads`, rounded
+            down to a power of two and capped at ``16``.
         force: Whether to replace an existing setting.
     """
     if torch.__version__ < "2.14":
         return
+    if num_threads is None:
+        num_threads = 1 << (min(torch.get_num_threads(), 16).bit_length() - 1)
     keys = ("pinned_use_cuda_host_register", "pinned_num_register_threads")
     settings = torch._C._accelerator_getAllocatorSettings()
     if not force and any(key in settings for key in keys):

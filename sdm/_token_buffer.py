@@ -74,11 +74,7 @@ class TokenBuffer:
             )
         self._pitch = R * D * dtype.itemsize
         set_pinned_max_round_threshold(mb=1)
-        num_threads = min(torch.get_num_threads(), 16)
-        # PyTorch requires the register thread count to be a power of two.
-        set_pinned_register_threads(
-            num_threads=1 << (num_threads.bit_length() - 1)
-        )
+        set_pinned_register_threads()
         self._host = torch.empty(
             self.size.numel(), dtype=dtype, pin_memory=True
         )
