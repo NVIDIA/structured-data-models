@@ -275,6 +275,7 @@ def _attention_with_lse(
         query.dtype in (torch.float16, torch.bfloat16)
         and query.size(-1) % 8 == 0
         and query.size(-1) <= 256
+        and torch.cuda.get_device_capability(query.device)[0] >= 8
     ):
         out, lse, *_ = torch.ops.aten._scaled_dot_product_flash_attention(
             query, key, value, scale=scale
@@ -956,8 +957,8 @@ class TransformerBlock(torch.nn.Module):
         lse: Tensor | None = None
         for index in _batch_chunks(batch_shape, batch_size_limit):
             chunk_out, chunk_lse = compute(
-                _chunk(query, batch_shape, 2, index),
-                _chunk(key_value, batch_shape, 2, index),
+                q=_chunk(query, batch_shape, 2, index),
+                kv=_chunk(key_value, batch_shape, 2, index),
             )
             if out is None or lse is None:
                 out = chunk_out.new_empty(batch_shape + chunk_out.size()[-3:])

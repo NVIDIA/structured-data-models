@@ -45,37 +45,39 @@ def set_pinned_max_round_threshold(
     torch._C._accelerator_setAllocatorSettings(",".join(options))
 
 
-def set_pinned_register_threads(
-    num_threads: int | None = None,
-    force: bool = False,
-) -> None:
-    r"""Set the process-wide number of threads that pin new allocations.
+def set_pinned_register_threads(num_threads: int | None = None) -> None:
+    r"""Set the number of threads that pin new host allocations.
 
-    Registering the pages of a pinned allocation from several threads pins
-    large allocations several times faster than a single thread.
+    By default, PyTorch pins host memory from a single thread. Pinning from
+    several threads can reduce the allocation time of large pinned buffers,
+    such as the activations of ``offload="cpu"``. The setting applies to the
+    whole process. Equivalent alternatives are:
+
+    - the ``PYTORCH_ALLOC_CONF`` environment variable, which must be set
+      before the process starts, *e.g.*,
+      ``PYTORCH_ALLOC_CONF=pinned_use_cuda_host_register:True,pinned_num_register_threads:8``.
+    - the private PyTorch call
+      ``torch._C._accelerator_setAllocatorSettings("pinned_use_cuda_host_register:True,pinned_num_register_threads:8")``.
+
+    See the ``pinned_num_register_threads`` option in the
+    `PyTorch CUDA memory management notes
+    <https://docs.pytorch.org/docs/stable/notes/cuda.html#memory-management>`__.
+    Requires PyTorch 2.14 or newer and does nothing otherwise.
 
     Args:
-        num_threads: The number of threads, a power of two of at most
-            ``128``. ``None`` uses :func:`torch.get_num_threads`, rounded
-            down to a power of two and capped at ``16``.
-        force: Whether to replace an existing setting.
+        num_threads: The number of threads, which PyTorch requires to be a
+            power of two of at most ``128``. ``None`` uses ``8``, the value
+            PyTorch recommends, or :func:`torch.get_num_threads` rounded down
+            to a power of two if smaller.
     """
     if torch.__version__ < "2.14":
         return
     if num_threads is None:
-        num_threads = 1 << (min(torch.get_num_threads(), 16).bit_length() - 1)
-    keys = ("pinned_use_cuda_host_register", "pinned_num_register_threads")
-    settings = torch._C._accelerator_getAllocatorSettings()
-    if not force and any(key in settings for key in keys):
-        return
-    options = [
-        option
-        for option in settings.split(",")
-        if option and option.split(":")[0].strip() not in keys
-    ]
-    options.append(f"{keys[0]}:True")
-    options.append(f"{keys[1]}:{num_threads}")
-    torch._C._accelerator_setAllocatorSettings(",".join(options))
+        num_threads = 1 << (min(torch.get_num_threads(), 8).bit_length() - 1)
+    torch._C._accelerator_setAllocatorSettings(
+        "pinned_use_cuda_host_register:True,"
+        f"pinned_num_register_threads:{num_threads}"
+    )
 
 
 def chunk_memory_limit(device: torch.device) -> int:

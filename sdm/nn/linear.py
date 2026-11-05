@@ -35,7 +35,7 @@ class Linear(torch.nn.Linear):
             out.stride(i) != out.size(i + 1) * out.stride(i + 1)
             for i in range(out.dim() - 3)
         ):
-            for input_i, out_i in zip(input, out):
+            for input_i, out_i in zip(input, out, strict=True):
                 self.forward(input_i, out=out_i)
             return out
         else:

@@ -97,9 +97,11 @@ def _tabiclv2(device: torch.device) -> Callable[..., Tensor]:
 @onlyCUDA
 @pytest.mark.parametrize("build", [_kumo_tabular, _tabfm, _tabiclv2])
 @pytest.mark.parametrize("chunk_memory_fraction", ["0.05", "1e-9"])
+@pytest.mark.parametrize("dtype", [None, torch.float16, torch.bfloat16])
 def test_row_embedding_offload(
     build: Callable[[torch.device], Callable[..., Tensor]],
     chunk_memory_fraction: str,
+    dtype: torch.dtype | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", chunk_memory_fraction)
@@ -109,7 +111,10 @@ def test_row_embedding_offload(
     y = torch.randint(0, 3, (1, 30), device=device)
 
     outs: dict[Any, Tensor] = {}
-    with torch.no_grad():
+    with (
+        torch.no_grad(),
+        torch.autocast(device.type, dtype=dtype, enabled=dtype is not None),
+    ):
         for offload in (None, "cpu"):
             cache = Cache()
             outs[offload, "fit"] = embedding(
@@ -120,9 +125,11 @@ def test_row_embedding_offload(
             )
             outs[offload] = embedding(x, y, offload=offload)
 
+    # Chunked inducing-point summaries round differently in half precision.
+    tol = {} if dtype is None else {"atol": 5e-2, "rtol": 5e-2}
     for key in ("fit", "predict"):
-        torch.testing.assert_close(outs["cpu", key], outs[None, key])
-    torch.testing.assert_close(outs["cpu"], outs[None])
+        torch.testing.assert_close(outs["cpu", key], outs[None, key], **tol)
+    torch.testing.assert_close(outs["cpu"], outs[None], **tol)
 
 
 @onlyCUDA

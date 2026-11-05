@@ -19,10 +19,7 @@ from sdm import (
     TaskLike,
 )
 from sdm._inference import inference_mode
-from sdm._memory import (
-    set_pinned_max_round_threshold,
-    set_pinned_register_threads,
-)
+from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
 from sdm.processing.execution import (
@@ -145,6 +142,10 @@ class ICLModel(Model):
                 Offloading requires :attr:`supports_offload`, inputs on a
                 CUDA device, disabled gradients, ``estimator_batch_size=1``,
                 and no more target classes than the model predicts natively.
+                :func:`~sdm.models.set_pinned_register_threads` speeds up
+                pinning large activations. Offloading also requires the
+                ``cuda-bindings`` package, which PyTorch's CUDA wheels
+                install on Linux with Python 3.14 or older.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
@@ -287,6 +288,10 @@ class ICLModel(Model):
                 Offloading requires :attr:`supports_offload`, inputs on a
                 CUDA device, ``estimator_batch_size=1``, and no more target
                 classes than the model predicts natively.
+                :func:`~sdm.models.set_pinned_register_threads` speeds up
+                pinning large activations. Offloading also requires the
+                ``cuda-bindings`` package, which PyTorch's CUDA wheels
+                install on Linux with Python 3.14 or older.
             kwargs: Additional keyword arguments passed to the model.
         """
         self._validate_offload(offload, x.device)
@@ -321,7 +326,6 @@ class ICLModel(Model):
         ]
         if x.is_cuda and len(contexts) > 1:
             set_pinned_max_round_threshold(mb=1)
-            set_pinned_register_threads()
 
         class_values = _class_values(contexts, estimator_batch_size)
         batches = _batch_slices(
@@ -566,8 +570,8 @@ class ICLModel(Model):
                 preprocessing. Passed on recording, replaying and uncached
                 calls alike.
             offload: Where to store the largest intermediate activations, as
-                in :meth:`forward`. Only passed to models with
-                :attr:`supports_offload`. Always ``None`` when replaying a
+                in :meth:`forward` and :meth:`fit`. Always ``None`` for
+                models without :attr:`supports_offload` and when replaying a
                 cache, *i.e.*, in :meth:`predict`.
             kwargs: Additional keyword arguments passed by the caller.
 

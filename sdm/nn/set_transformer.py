@@ -195,7 +195,7 @@ class InducedTransformerBlock(torch.nn.Module):
         if summary is None:
             return out, lse
         summary_out, summary_lse = summary
-        total = torch.logaddexp(summary_lse, lse)  # [..., M, H]
+        total = summary_lse.logaddexp(lse)  # [..., M, H]
         out = out.float() * (lse - total).exp()[..., None]
         out += summary_out.float() * (summary_lse - total).exp()[..., None]
         return out, total
