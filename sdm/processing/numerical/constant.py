@@ -233,3 +233,11 @@ class DropConstantColumns(EnsembleProcessor):
             tables=tables,
             member_ids=member_ids,
         )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.threshold == 1:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"threshold={self.threshold!r})"
+        )

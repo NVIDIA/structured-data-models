@@ -334,3 +334,11 @@ class PowerTransform(Processor, InvertibleMixin):
                 inverse,
             )
         )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.standardize:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"standardize={self.standardize!r})"
+        )
