@@ -41,11 +41,11 @@ def test_one_hot_values_and_columns(
     ).expand(*batch_shape, 3, 5)
     torch.testing.assert_close(out.numerical, expected)
     assert out.numerical_columns == (
-        "color__one_hot_0",
-        "color__one_hot_1",
-        "size__one_hot_0",
-        "size__one_hot_1",
-        "size__one_hot_2",
+        "color_0",
+        "color_1",
+        "size_0",
+        "size_1",
+        "size_2",
     )
     assert out.categorical_columns == ()
 

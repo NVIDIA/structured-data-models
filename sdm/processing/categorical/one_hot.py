@@ -13,7 +13,7 @@ from sdm.tensor.categorical import _iter_categories
 class OneHotEncode(Processor):
     """One-hot encode categorical columns as dense numerical columns.
 
-    Each category produces a column named ``<column>__one_hot_<code>`` in
+    Each category produces a column named ``<column>_<code>`` in
     vocabulary order. Missing and unknown values encode as zeros.
 
     Use :class:`~sdm.processing.AlignCategories` first to align context and
@@ -30,7 +30,7 @@ class OneHotEncode(Processor):
             for categories in _iter_categories(table.categorical)
         ]
         columns = tuple(
-            f"{column}__one_hot_{index}"
+            f"{column}_{index}"
             for column, size in zip(table.categorical_columns, sizes)
             for index in range(size)
         )
@@ -46,7 +46,6 @@ class OneHotEncode(Processor):
                 list(accumulate(sizes, initial=num_numerical))[:-1],
                 dtype=torch.long,
             )
-            # Write one per known category; missing codes contribute zero.
             known = codes >= 0
             indices = torch.where(known, codes + offsets, num_numerical)
             out.scatter_add_(-1, indices, known.to(numerical.dtype))
@@ -58,7 +57,9 @@ class OneHotEncode(Processor):
                 Stype.categorical: (),
             },
             numerical=numerical,
-            datetime=table.datetime,
-            text=table.text,
-            id=table.id,
+            **{
+                stype.value: block
+                for stype, block in TableTensor.items(table)
+                if stype not in (Stype.numerical, Stype.categorical)
+            },
         )
