@@ -131,10 +131,10 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.RobustScale()),
     ProcessorCase(sp.MinMaxScale()),
     ProcessorCase(sp.FlipSign()),
+    ProcessorCase(sp.Asinh()),
     ProcessorCase(sp.DropConstantColumns()),
     ProcessorCase(sp.PCA(2)),
     ProcessorCase(sp.RandomProjection(2)),
-    ProcessorCase(sp.WarpTails(probability=1.0)),
     ProcessorCase(sp.AlignCategories(), _make_align_categories_table),
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
@@ -206,6 +206,7 @@ def test_all_public_processors_have_contract_cases() -> None:
         sp.SentenceTransformer,
         sp.Detrend,
         sp.Interpolate,
+        sp.ClipNonnegative,
     }
     assert public_processors == covered_processors | specialized_processors
 

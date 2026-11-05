@@ -115,6 +115,7 @@ class RowEmbedding(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_columns: Tensor | None = None,
+        train_size: Tensor | None = None,
         offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R, K * D]
 
@@ -135,8 +136,12 @@ class RowEmbedding(torch.nn.Module):
             else:
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1))
+            if train_size is not None:
+                context = torch.arange(R_train, device=y.device)
+                context = context < train_size[..., None]
+                y_emb = y_emb.masked_fill(~context[..., None], 0)
 
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or train_size is not None:
             if offload is not None:
                 raise RuntimeError(
                     "'offload' is only supported when gradients are disabled"
@@ -145,7 +150,8 @@ class RowEmbedding(torch.nn.Module):
                 x=x,
                 y_emb=y_emb,
                 categorical_mask=categorical_mask,
-                train_size=R_train,
+                num_train_rows=R_train,
+                train_size=train_size,
                 cache=cache,
                 num_columns=num_columns,
                 row_key_lengths=row_key_lengths,
@@ -258,20 +264,21 @@ class RowEmbedding(torch.nn.Module):
         y_emb: Tensor | None,  # [..., R_train, D]
         categorical_mask: Tensor,  # [..., C]
         *,
-        train_size: int,
+        num_train_rows: int,
+        train_size: Tensor | None,  # [...]
         cache: Cache | None,
         num_columns: Tensor | None,
         row_key_lengths: Tensor | None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, _ = x.size()
-        R_train = train_size
+        R_train = num_train_rows
         K = self.readout_token.size(-2)
         D = self.channels
 
         x = self.cell_embedding(
             x=x,
             categorical_mask=categorical_mask,
-            train_size=R_train,
+            train_size=R_train if train_size is None else train_size,
             num_columns=num_columns,
             cache=cache,
         )  # [..., R, C, D]
@@ -296,6 +303,9 @@ class RowEmbedding(torch.nn.Module):
                 key_value=cast(KVCacheEntry, cache[key])
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :],
+                seqused_key_value=None
+                if train_size is None
+                else train_size.unsqueeze(-1),
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit="auto",
             )

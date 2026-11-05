@@ -140,7 +140,7 @@ def test_repr() -> None:
         sp.Sequential(sp.Standardize(), sp.PowerTransform())
     ) == dedent("""\
         Sequential(
-          Standardize(eps=0.0),
+          Standardize(),
           PowerTransform(),
         )""")
     assert repr(sp.Sequential(lambda table: table)) == dedent("""\

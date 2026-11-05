@@ -21,7 +21,7 @@ from typing_extensions import override
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import _record_compiled_stream, _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -88,18 +88,12 @@ def _move_categories(
     if device is None or device.type == "cpu":
         return tuple(categories)
 
-    groups: dict[
-        tuple[type[Tensor], torch.dtype, torch.dtype | None], list[int]
-    ] = defaultdict(list)
+    # Copy strings separately: views of a shared copy recompile per batch.
+    groups: dict[torch.dtype, list[int]] = defaultdict(list)
     moved: list[Tensor | None] = [None] * len(categories)
     for i, category in enumerate(categories):
-        if type(category) is Tensor or isinstance(category, StringTensor):
-            offset_dtype = (
-                category.data_offset[1].dtype
-                if isinstance(category, StringTensor)
-                else None
-            )
-            groups[(type(category), category.dtype, offset_dtype)].append(i)
+        if type(category) is Tensor:
+            groups[category.dtype].append(i)
         else:
             moved[i] = category.to(device)
 
@@ -1200,6 +1194,9 @@ class TableTensor(Tensor):
     ) -> Any:
         if func in cls.HANDLED_FUNCTIONS:
             return cls.HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+
+        if str(func) == "streams.record_stream.default":
+            return _record_compiled_stream(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"

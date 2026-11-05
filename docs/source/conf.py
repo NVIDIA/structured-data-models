@@ -51,6 +51,9 @@ autodoc_use_legacy_class_based = True
 AttributeDocumenter.member_order = 45
 PropertyDocumenter.member_order = 45
 autodoc_typehints = "both"
+napoleon_custom_sections = [
+    ("Additional Forward Parameters", "params_style"),
+]
 copybutton_prompt_text = r">>> |\.\.\. "
 copybutton_prompt_is_regexp = True
 suppress_warnings = ["config.cache"]

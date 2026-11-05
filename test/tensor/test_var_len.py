@@ -216,6 +216,31 @@ def test_arrow() -> None:
     assert tensor.tolist() == [[1, 2], None, [3]]
 
 
+def test_arrow_sliced_nullable() -> None:
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[0, 0, 0], [1], None, [2, 3]])[1:],
+    )
+
+    assert tensor.tolist() == [[1], None, [2, 3]]
+    assert tensor[torch.tensor([0, 2])].tolist() == [[1], [2, 3]]
+
+
+def test_sliced_offset_and_valid_views() -> None:
+    # Rows [[0, 0, 0], [1], None, [2, 3]]; inner tensors are views from row 1.
+    offset = torch.tensor([0, 3, 4, 4, 6])
+    valid = torch.tensor([True, True, False, True])
+    tensor = VarLenTensor(
+        data=torch.tensor([0, 0, 0, 1, 2, 3]),
+        offset=offset[1:],
+        valid=valid[1:],
+        size=(2,),
+        storage_offset=1,
+    )
+
+    assert tensor.tolist() == [None, [2, 3]]
+    assert tensor[torch.tensor([1, 0])].tolist() == [[2, 3], None]
+
+
 def test_arrow_bool() -> None:
     tensor = VarLenTensor.from_arrow(
         pa.array(

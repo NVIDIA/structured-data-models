@@ -38,7 +38,7 @@ Overview
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `OpenMDW-1.1, with BSD-3-Clause notice <https://huggingface.co/nvidia/Kumo-Relational>`__
    * - | :class:`~sdm.models.KumoForecast`
-       | (`Blog <https://developer.nvidia.com/blog/new-nvidia-nv-tesseract-time-series-models-advance-dataset-processing-and-anomaly-detection>`__)
+       | (`Paper <https://ieeexplore.ieee.org/abstract/document/11402442>`__)
      - 2025-05-06
      - 313.06M–317.26M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
@@ -49,6 +49,12 @@ Overview
      - 2.44M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
+   * - | :class:`~sdm.models.Chronos2`
+       | (`Paper <https://arxiv.org/abs/2510.15821>`__)
+     - 2025-10-17
+     - 119.48M
+     - `Apache-2.0 <https://github.com/amazon-science/chronos-forecasting/blob/main/LICENSE>`__
+     - `Apache-2.0 <https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/apache-2.0.md>`__
    * - | :class:`~sdm.models.TimesFM3`
        | (`Blog <https://arxiv.org/abs/2609.37959>`__)
      - 2026-08-31

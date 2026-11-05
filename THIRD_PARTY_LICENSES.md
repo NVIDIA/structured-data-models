@@ -3,6 +3,15 @@
 This project contains code or documentation derived from the following third-party projects.
 Runtime, test, and documentation dependencies are declared in [`pyproject.toml`](pyproject.toml)/[`uv.lock`](uv.lock), and example/benchmark dependencies are resolved separately and are not bundled with this repository.
 
+## scikit-learn
+
+- Source: https://github.com/scikit-learn/scikit-learn
+- License: BSD 3-Clause
+- Copyright: Copyright (c) 2007-2026 The scikit-learn developers.
+- License terms: https://github.com/scikit-learn/scikit-learn/blob/main/COPYING
+
+`scikit-learn` is an optional dependency installed with `structured-data-models[prior]`; its source code is not bundled with this repository.
+
 ## TabICLv2
 
 - Source: https://github.com/soda-inria/tabicl
@@ -22,6 +31,15 @@ The [`sdm/models/tabiclv2/`](sdm/models/tabiclv2/) and [`sdm/models/kumo/relatio
 
 The [`sdm/models/tabfm/`](sdm/models/tabfm/) implementation contains code derived from [`TabFM`](https://github.com/google-research/tabfm).
 Its weights are not bundled with this project and may be downloaded only after the user accepts their separate license.
+
+## Chronos-2
+
+- Source: https://github.com/amazon-science/chronos-forecasting
+- License: Apache License 2.0
+- License terms: [`sdm/models/chronos2/LICENSE`](sdm/models/chronos2/LICENSE)
+- Optional pretrained weights: https://huggingface.co/amazon/chronos-2
+
+The [`sdm/models/chronos2/`](sdm/models/chronos2/) implementation contains code derived from [`Chronos2`](https://github.com/amazon-science/chronos-forecasting).
 
 ## TimesFM 3.0
 

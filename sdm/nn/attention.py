@@ -148,6 +148,24 @@ class SDPA(torch.nn.Module):
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
+        if (  # Softmax over a single key is one, so skip SDPA:
+            key_size[0] == 1
+            and (attn_mask is None or attn_mask.dtype == torch.bool)
+            and seqused_key_value is None
+            and not torch.is_grad_enabled()
+            and (not self.training or self.dropout == 0.0)
+        ):
+            out = value
+            if query_size[-2] != value_size[-2]:
+                out = out.repeat_interleave(
+                    query_size[-2] // value_size[-2],
+                    dim=-2,
+                )
+            out = out.expand(batch_shape + query_size[:-1] + value_size[-1:])
+            if attn_mask is not None:
+                out = out.masked_fill(~attn_mask.transpose(-3, -2), 0.0)
+            return out
+
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
@@ -172,7 +190,7 @@ class SDPA(torch.nn.Module):
         key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
-        # CUDA attention kernels accept at most 65,535 batch entries per call:
+        # CUDA attention kernels accept at most 65,535 batch entries per call.
         outs = [
             F.scaled_dot_product_attention(
                 query=query[i : i + 65_535],
@@ -186,7 +204,11 @@ class SDPA(torch.nn.Module):
                 is_causal=is_causal,
                 scale=self.scale,
             ).transpose(-3, -2)  # [B, Q, Hq, C]
-            for i in range(0, query.size(0), 65_535)
+            for i in (
+                (0,)
+                if query.size(0) <= 65_535
+                else range(0, query.size(0), 65_535)
+            )
         ]
         out = outs[0] if len(outs) == 1 else torch.cat(outs)
 
@@ -748,7 +770,7 @@ class TransformerBlock(torch.nn.Module):
                 "already cached"
             )
 
-        if torch.is_grad_enabled() or torch.compiler.is_compiling():
+        if torch.is_grad_enabled():
             return self._forward(
                 query=query,
                 key_value=key_value,
@@ -999,11 +1021,7 @@ class TransformerBlock(torch.nn.Module):
         if self.post_attn_norm is not None:
             attn_out = self.post_attn_norm(attn_out)
 
-        if (
-            out is not None
-            and torch.compiler.is_compiling()
-            and not out.is_contiguous()
-        ):
+        if out is not None and torch.compiler.is_compiling():
             tmp = (attn_out + query).to(out.dtype)
             if self.mlp is not None:
                 tmp += self.mlp(tmp)

@@ -67,12 +67,12 @@ class SwiGLU(torch.nn.Module):
             hidden_channels, channels, bias=bias, **factory_kwargs
         )
 
-    def forward(self, tensor: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         r"""The forward pass.
 
         Args:
-            tensor: The tensor.
+            x: The tensor.
         """
-        value = self.up_lin(tensor)
-        gate = F.silu(self.gate_lin(tensor))
+        value = self.up_lin(x)
+        gate = F.silu(self.gate_lin(x))
         return self.down_lin(gate * value)

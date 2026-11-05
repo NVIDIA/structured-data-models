@@ -12,6 +12,7 @@ license = "Apache-2.0"
 license-files = [
     "LICENSE",
     "THIRD_PARTY_LICENSES.md",
+    "sdm/models/chronos2/LICENSE",
     "sdm/models/tabiclv2/LICENSE",
     "sdm/models/tabfm/LICENSE",
     "sdm/models/timesfm3/LICENSE",
@@ -60,6 +61,11 @@ Download = "https://github.com/NVIDIA/structured-data-models/releases"
 Homepage = "https://github.com/NVIDIA/structured-data-models"
 Repository = "https://github.com/NVIDIA/structured-data-models"
 Issues = "https://github.com/NVIDIA/structured-data-models/issues"
+
+[project.optional-dependencies]
+prior = [
+    "scikit-learn",
+]
 
 [dependency-groups]
 test-cpu = [
@@ -140,6 +146,9 @@ include = ["examples/**", "benchmark/**"]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
 unresolved-attribute = "ignore"
+
+[tool.ty.overrides.analysis]
+replace-imports-with-any = ["autogluon.**", "tabarena.**"]
 
 [[tool.ty.overrides]]
 include = ["sdm/_kernels/triton/**"]

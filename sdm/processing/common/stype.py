@@ -12,7 +12,6 @@ from sdm.processing import (
     EnsembleProcessor,
     Processor,
 )
-from sdm.stype import _ALL_STYPES
 
 
 class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -179,7 +178,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         return ensemble_table.select_stypes(
             tuple(
                 stype
-                for stype in _ALL_STYPES
+                for stype in Stype.all()
                 if str(stype) not in self.processors
             )
         )

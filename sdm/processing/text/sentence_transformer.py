@@ -185,10 +185,15 @@ class _CuDFTokenizer:
         from cudf.core.character_normalizer import CharacterNormalizer
         from cudf.core.wordpiece_tokenize import WordPieceVocabulary
 
+        if model.max_seq_length is None:
+            raise ValueError(
+                f"cuDF tokenization requires a maximum sequence length. "
+                f"Set 'max_seq_length' in {model.__class__.__name__!r}"
+            )
+
         vocab_tokens = [
             token for token, _ in sorted(vocab.items(), key=lambda x: x[1])
         ]
-        assert model.max_seq_length is not None
         return cls(
             vocabulary=WordPieceVocabulary(cudf.Series(vocab_tokens)),
             normalizer=CharacterNormalizer(
@@ -394,9 +399,7 @@ class SentenceTransformer(Processor):
             speed. The optimal value depends on your hardware, model size,
             precision, and input length.
         max_seq_length: Maximum number of tokens per text, including
-            special tokens. Longer inputs are truncated. When omitted,
-            the model's own limit is used, and a larger value is not
-            raised above that limit.
+            special tokens. Longer inputs are truncated.
     """
 
     requires_fit = False
@@ -415,12 +418,10 @@ class SentenceTransformer(Processor):
         self.batch_size = batch_size
         model = sentence_transformers.SentenceTransformer(model_name)
         if max_seq_length is not None:
-            model_max_seq_length = model.max_seq_length
-            assert model_max_seq_length is not None
-            model.max_seq_length = min(
-                max_seq_length,
-                model_max_seq_length,
-            )
+            if model.max_seq_length is not None:
+                max_seq_length = min(max_seq_length, model.max_seq_length)
+            model.max_seq_length = max_seq_length
+
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim

@@ -15,38 +15,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: D101, D102
+# ruff: noqa: D101
 
 import math
 from typing import Any
 
 import torch
-from torch import Tensor
 from torch.nn import Linear, ReLU, Sequential
 
 from sdm.nn import RMSNorm, RotaryEmbedding, SoftplusScale, TransformerBlock
-
-
-class ResidualBlock(torch.nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.mlp = Sequential(
-            Linear(in_channels, out_channels, bias=False, **factory_kwargs),
-            ReLU(),
-            Linear(out_channels, out_channels, bias=False, **factory_kwargs),
-        )
-        self.res = Linear(in_channels, out_channels, False, **factory_kwargs)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.mlp(x) + self.res(x)
 
 
 class TimesFM3TransformerBlock(TransformerBlock):

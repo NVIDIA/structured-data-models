@@ -21,7 +21,7 @@ In particular, it is
 The [`sdm.tensor`](api/tensor) package is layered from low-level tensor subclasses to full table schemas.
 Each subclass supports multi-dimensional shapes and strides, and preserves standard PyTorch ergonomics (*e.g.*, zero-copy views and slicing):
 
-- {py:class}`~sdm.tensor.VarLenTensor`: A tensor whose logical elements have variable-length payloads, *e.g.* for multi-categorical data.
+- {py:class}`~sdm.tensor.VarLenTensor`: A tensor whose logical elements have variable-length payloads, *e.g.*, for multi-categorical data.
 - {py:class}`~sdm.tensor.StringTensor`: A specialized {py:class}`~sdm.tensor.VarLenTensor` for representing UTF-8 strings.
 - {py:class}`~sdm.tensor.NullableTensor`: A tensor for nullable integer or boolean values.
 - {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.

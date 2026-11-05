@@ -371,6 +371,8 @@ class ICLModel(Model):
                     )
 
                 if x.is_cuda and len(contexts) > 1:
+                    # Keep class labels on GPU for compiled prediction.
+                    classes = batch_cache.pop("classes")
                     try:  # Copy to pinned CPU memory:
                         batch_cache = batch_cache._apply_tensor(
                             lambda tensor: torch.ops.aten._to_copy.default(
@@ -382,6 +384,7 @@ class ICLModel(Model):
                             )
                         )
                     finally:
+                        batch_cache["classes"] = classes
                         torch.cuda.current_stream(x.device).synchronize()
 
                 cache[i] = batch_cache
@@ -389,6 +392,10 @@ class ICLModel(Model):
             _release_offload_memory(offload)
 
         self._cache = cache.freeze()
+
+        # Prepare the stream before compiled predict to avoid recompilation.
+        if x.is_cuda and x.device not in self._transfer_streams:
+            self._transfer_streams[x.device] = torch.cuda.Stream(x.device)
 
     def predict(
         self,

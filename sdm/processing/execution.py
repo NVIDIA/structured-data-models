@@ -96,6 +96,14 @@ class RecipeExecution:
         if y is not None:
             y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
 
+            for processor in (
+                self.recipe.features,
+                self.recipe.output,
+            ):
+                for module in _iter_modules(processor):
+                    if isinstance(module, sp.TargetAwareEnsembleProcessor):
+                        module._target = y
+
             series_processors = tuple(
                 module
                 for processor in (self.recipe.features, self.recipe.target)
