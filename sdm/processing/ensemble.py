@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Iterable
-from typing import Self
+from typing import Any, Self, cast
 
 import torch
+from torch import Tensor
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm.nn._buffer import _EnsembleBuffer
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -30,6 +32,69 @@ class EnsembleProcessor(Processor):
     :class:`~sdm.tensor.TableTensor` and processes it as an ensemble
     with one member.
     """
+
+    def register_buffer(
+        self,
+        name: str,
+        tensor: Tensor | EnsembleTensor[Any] | None,
+        persistent: bool = True,
+    ) -> None:
+        """Register tensor or ensemble tensor state.
+
+        Args:
+            name: Attribute name of the buffer.
+            tensor: Tensor or ensemble of tensors supporting PyTorch buffer
+                operations, or ``None`` for an uninitialized buffer.
+            persistent: Whether to include the buffer in ``state_dict``.
+        """
+        if isinstance(tensor, EnsembleTensor):
+            tensor = cast(EnsembleTensor[Tensor], tensor)
+            self._buffers.pop(name, None)
+            self.add_module(
+                name,
+                _EnsembleBuffer(
+                    groups=tensor._groups,
+                    locations=tensor._locations,
+                    persistent=persistent,
+                ),
+            )
+            if persistent:
+                self._non_persistent_buffers_set.discard(name)
+            else:
+                self._non_persistent_buffers_set.add(name)
+            return
+        if isinstance(self._modules.get(name), _EnsembleBuffer):
+            del self._modules[name]
+        super().register_buffer(name, tensor, persistent=persistent)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        module = self.__dict__.get("_modules", {}).get(name)
+        if isinstance(module, _EnsembleBuffer) and (
+            value is None or isinstance(value, (Tensor, EnsembleTensor))
+        ):
+            self.register_buffer(name, value, persistent=module._persistent)
+            return
+        if isinstance(value, EnsembleTensor) and name in self.__dict__.get(
+            "_buffers", {}
+        ):
+            self.register_buffer(
+                name,
+                value,
+                persistent=name not in self._non_persistent_buffers_set,
+            )
+            return
+        super().__setattr__(name, value)
+
+    def _set_buffer(
+        self,
+        name: str,
+        value: Tensor | EnsembleTensor[Any],
+    ) -> None:
+        self.register_buffer(
+            name,
+            value,
+            persistent=name not in self._non_persistent_buffers_set,
+        )
 
     @staticmethod
     def as_processor(processor: object) -> EnsembleProcessor:

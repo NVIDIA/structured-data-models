@@ -4,8 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, Stype
-from sdm.nn._buffer import BufferList
+from sdm import EnsembleTable, EnsembleTensor, Stype
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
@@ -25,7 +24,8 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         super().__init__()
         self.probability = probability
-        self._signs: BufferList[Tensor] = BufferList()
+        self._signs: EnsembleTensor[Tensor]
+        self.register_buffer("_signs", EnsembleTensor(groups=(), locations=()))
 
     def _fit_ensemble(
         self,
@@ -42,7 +42,13 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
             sign.bernoulli_(self.probability, generator=generator)
             sign.mul_(-2).add_(1)
             signs.append(sign)
-        self._signs = BufferList(signs)
+        self._set_buffer(
+            "_signs",
+            EnsembleTensor(
+                groups=tuple(sign.unsqueeze(0) for sign in signs),
+                locations=tuple((i, 0) for i in range(len(signs))),
+            ),
+        )
 
     def _transform_ensemble(
         self,

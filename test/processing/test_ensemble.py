@@ -1,10 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
+import io
+from typing import cast
+
 import pytest
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
@@ -13,6 +17,7 @@ from sdm.processing import (
     Processor,
     Standardize,
 )
+from sdm.testing import withCUDA
 
 
 # TODO: Replace these stubs with real EnsembleProcessor subclasses once they
@@ -73,6 +78,80 @@ class _StatelessProcessor(Processor, InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return self._transform(table)
+
+
+@withCUDA
+def test_ensemble_buffer_roundtrip(device: torch.device) -> None:
+    values = EnsembleTensor(
+        groups=(torch.tensor([[1.0], [2.0]]), torch.tensor([[3.0, 4.0]])),
+        locations=((0, 1), (1, 0), (0, 0), (0, 1)),
+    )
+    source = IdentityEnsembleProcessor()
+    source.register_buffer("values", values)
+    source.to(device=device, dtype=torch.float64)
+    saved = io.BytesIO()
+    torch.save(torch.nn.Sequential(source).state_dict(), saved)
+    saved.seek(0)
+    restored = IdentityEnsembleProcessor()
+    restored.register_buffer("values", EnsembleTensor(groups=(), locations=()))
+    torch.nn.Sequential(restored).load_state_dict(
+        torch.load(saved, weights_only=True, map_location="cpu")
+    )
+    restored.to(device)
+    actual = cast(EnsembleTensor[torch.Tensor], restored.values)
+    assert isinstance(actual, EnsembleTensor)
+    assert len(actual) == len(values)
+    for index in range(len(values)):
+        torch.testing.assert_close(
+            actual[index], values[index].to(device).double()
+        )
+    assert actual[0].data_ptr() == actual[3].data_ptr()
+    assert all(buffer.device == device for buffer in restored.buffers())
+
+
+def test_ensemble_buffer_replacement_and_loading() -> None:
+    processor = IdentityEnsembleProcessor()
+    processor.register_buffer("values", torch.zeros(1))
+    processor.register_buffer(
+        "values",
+        EnsembleTensor(
+            groups=(torch.arange(6.0).reshape(2, 3),),
+            locations=((0, 0), (0, 1)),
+        ),
+    )
+    saved = copy.deepcopy(processor.state_dict())
+    processor.values = EnsembleTensor(
+        groups=(torch.ones(1, 1),), locations=((0, 0),)
+    )
+    processor.load_state_dict(saved)
+    actual = cast(EnsembleTensor[torch.Tensor], processor.values)
+    assert isinstance(actual, EnsembleTensor)
+    torch.testing.assert_close(actual[1], torch.tensor([3.0, 4.0, 5.0]))
+    cloned = copy.deepcopy(processor)
+    cloned_values = cast(EnsembleTensor[torch.Tensor], cloned.values)
+    assert isinstance(cloned_values, EnsembleTensor)
+    cloned_values[0].zero_()
+    torch.testing.assert_close(actual[0], torch.tensor([0.0, 1.0, 2.0]))
+    processor.register_buffer("values", torch.ones(1))
+    assert isinstance(processor.values, torch.Tensor)
+
+
+@withCUDA
+def test_nonpersistent_ensemble_buffer(device: torch.device) -> None:
+    processor = IdentityEnsembleProcessor()
+    processor.register_buffer(
+        "temporary",
+        EnsembleTensor(groups=(torch.ones(1, 2),), locations=((0, 0),)),
+        persistent=False,
+    )
+    processor.to(device)
+    temporary = cast(EnsembleTensor[torch.Tensor], processor.temporary)
+    assert isinstance(temporary, EnsembleTensor)
+    assert temporary[0].device == device
+    assert not any(
+        key.startswith("temporary.") for key in processor.state_dict()
+    )
+    processor.load_state_dict(processor.state_dict())
 
 
 def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
