@@ -42,7 +42,6 @@ class RevIN(torch.nn.Module):
             )
 
     @staticmethod
-    @torch.no_grad()
     def stats(
         x: Tensor,  # [..., R, D]
         mask: Tensor | None = None,  # [..., R, D]
