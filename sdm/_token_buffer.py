@@ -66,7 +66,14 @@ class TokenBuffer:
                 (*B, T, R, D), dtype=dtype, device=device
             )
             return
+        self._init_offload()
 
+    # Pinned allocation and the copy streams need real CUDA objects, which
+    # `torch.compile` cannot trace.
+    @torch.compiler.disable
+    def _init_offload(self) -> None:
+        *B, R, T, D = self.size
+        dtype, device = self.dtype, self.device
         if math.prod(B) != 1:
             raise ValueError(
                 "'offload' requires 'estimator_batch_size=1' and no more "
@@ -236,6 +243,7 @@ class TokenBuffer:
         # stored densely in its slot.
         from cuda.bindings import runtime
 
+        @torch.compiler.disable
         def copy(
             dst: int, dpitch: int, src: int, spitch: int, chunk, kind, stream
         ) -> None:

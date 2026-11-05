@@ -126,6 +126,31 @@ def test_row_embedding_offload(
 
 
 @onlyCUDA
+@pytest.mark.parametrize("build", [_kumo_tabular, _tabfm, _tabiclv2])
+@pytest.mark.usefixtures("compilation")
+def test_row_embedding_offload_compile(
+    build: Callable[[torch.device], Callable[..., Tensor]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDM_CHUNK_MEMORY_FRACTION", "1e-9")
+    device = torch.device("cuda")
+    embedding = build(device)
+    x = torch.randn(1, 40, 5, device=device)
+    y = torch.randint(0, 3, (1, 30), device=device)
+
+    def fit_predict(x: Tensor, y: Tensor) -> tuple[Tensor, Tensor]:
+        cache = Cache()
+        fit = embedding(x[:, :30], y, cache=cache, offload="cpu")
+        return fit, embedding(x[:, 30:], y[:, :0], cache=cache.freeze())
+
+    with torch.no_grad():
+        expected = fit_predict(x, y)
+        out = torch.compile(fit_predict, backend="eager")(x, y)
+
+    torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
 def test_row_embedding_offload_subsamples_keys() -> None:
     device = torch.device("cuda")
     embedding = _tabiclv2(device)
