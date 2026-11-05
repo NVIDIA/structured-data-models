@@ -32,9 +32,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.method = method
         self._permutations: EnsembleTensor[Tensor]
-        self.register_buffer(
-            "_permutations", EnsembleTensor(groups=(), locations=())
-        )
+        self.register_buffer("_permutations", None)
         self._host_permutations: tuple[tuple[int, ...], ...] = ()
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:

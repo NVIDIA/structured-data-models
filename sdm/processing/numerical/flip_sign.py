@@ -25,7 +25,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.probability = probability
         self._signs: EnsembleTensor[Tensor]
-        self.register_buffer("_signs", EnsembleTensor(groups=(), locations=()))
+        self.register_buffer("_signs", None)
 
     def _fit_ensemble(
         self,

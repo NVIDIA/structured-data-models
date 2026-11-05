@@ -32,12 +32,8 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
         self.fill_leading = fill_leading
         self._last_values: EnsembleTensor[Tensor]
         self._last_indices: EnsembleTensor[Tensor]
-        self.register_buffer(
-            "_last_values", EnsembleTensor(groups=(), locations=())
-        )
-        self.register_buffer(
-            "_last_indices", EnsembleTensor(groups=(), locations=())
-        )
+        self.register_buffer("_last_values", None)
+        self.register_buffer("_last_indices", None)
 
     def _fit_ensemble(
         self,

@@ -48,7 +48,7 @@ class EnsembleProcessor(Processor):
             persistent: Whether to include the buffer in ``state_dict``.
         """
         if isinstance(tensor, EnsembleTensor):
-            tensor = cast(EnsembleTensor[Tensor], tensor)
+            tensor = cast("EnsembleTensor[Tensor]", tensor)
             self._buffers.pop(name, None)
             self.add_module(
                 name,
@@ -94,6 +94,37 @@ class EnsembleProcessor(Processor):
             name,
             value,
             persistent=name not in self._non_persistent_buffers_set,
+        )
+
+    def _load_from_state_dict(
+        self,
+        state_dict: dict[str, Any],
+        prefix: str,
+        local_metadata: dict[str, Any],
+        strict: bool,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
+    ) -> None:
+        # Materialize buffers whose type was unknown before fitting.
+        for name, buffer in tuple(self._buffers.items()):
+            if buffer is not None or name in self._non_persistent_buffers_set:
+                continue
+            state = state_dict.get(f"{prefix}{name}")
+            if isinstance(state, Tensor):
+                self.register_buffer(name, torch.empty_like(state))
+            elif f"{prefix}{name}._extra_state" in state_dict:
+                self.register_buffer(
+                    name, EnsembleTensor(groups=(), locations=())
+                )
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
         )
 
     @staticmethod

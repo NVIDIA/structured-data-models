@@ -93,7 +93,7 @@ def test_ensemble_buffer_roundtrip(device: torch.device) -> None:
     torch.save(torch.nn.Sequential(source).state_dict(), saved)
     saved.seek(0)
     restored = IdentityEnsembleProcessor()
-    restored.register_buffer("values", EnsembleTensor(groups=(), locations=()))
+    restored.register_buffer("values", None)
     torch.nn.Sequential(restored).load_state_dict(
         torch.load(saved, weights_only=True, map_location="cpu")
     )
@@ -111,7 +111,12 @@ def test_ensemble_buffer_roundtrip(device: torch.device) -> None:
 
 def test_ensemble_buffer_replacement_and_loading() -> None:
     processor = IdentityEnsembleProcessor()
-    processor.register_buffer("values", torch.zeros(1))
+    processor.register_buffer("values", None)
+    processor.values = torch.zeros(1)
+    restored = IdentityEnsembleProcessor()
+    restored.register_buffer("values", None)
+    restored.load_state_dict(processor.state_dict())
+    torch.testing.assert_close(restored.values, torch.zeros(1))
     processor.register_buffer(
         "values",
         EnsembleTensor(

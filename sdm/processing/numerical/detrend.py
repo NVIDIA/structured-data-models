@@ -26,12 +26,8 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
         self.threshold = threshold
         self._slopes: EnsembleTensor[Tensor]
         self._intercepts: EnsembleTensor[Tensor]
-        self.register_buffer(
-            "_slopes", EnsembleTensor(groups=(), locations=())
-        )
-        self.register_buffer(
-            "_intercepts", EnsembleTensor(groups=(), locations=())
-        )
+        self.register_buffer("_slopes", None)
+        self.register_buffer("_intercepts", None)
 
     def _fit_ensemble(
         self,

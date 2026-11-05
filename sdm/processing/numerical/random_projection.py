@@ -32,9 +32,7 @@ class RandomProjection(EnsembleProcessor):
         self.channels = channels
         self.init = init
         self._weights: EnsembleTensor[torch.Tensor]
-        self.register_buffer(
-            "_weights", EnsembleTensor(groups=(), locations=())
-        )
+        self.register_buffer("_weights", None)
 
     def _fit_ensemble(
         self,
