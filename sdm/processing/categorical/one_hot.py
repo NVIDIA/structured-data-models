@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import cast
+from itertools import accumulate
 
 import torch
 
@@ -11,15 +11,13 @@ from sdm.tensor.categorical import _iter_categories
 
 
 class OneHotEncode(Processor):
-    """Expand categorical vocabularies into dense numerical indicators.
+    """One-hot encode categorical columns as dense numerical columns.
 
     Each category produces a column named ``<column>__one_hot_<code>`` in
-    vocabulary order. Negative codes (missing or unknown values) produce
-    all-zero indicators. Indicators use the table's numerical dtype.
+    vocabulary order. Missing and unknown values encode as zeros.
 
-    Use :class:`~sdm.processing.AlignCategories` before this processor to
-    learn vocabularies from context rows and keep columns consistent for
-    independently tensorized inputs.
+    Use :class:`~sdm.processing.AlignCategories` first to align context and
+    query vocabularies.
     """
 
     handles_stypes = (Stype.categorical,)
@@ -31,30 +29,36 @@ class OneHotEncode(Processor):
             categories.numel()
             for categories in _iter_categories(table.categorical)
         ]
-        # Compare each output indicator against its source column and code.
-        column_index = codes.new_tensor(
-            [index for index, size in enumerate(sizes) for _ in range(size)],
-            dtype=torch.long,
-        )
-        category_index = codes.new_tensor(
-            [index for size in sizes for index in range(size)],
-        )
-        indicators = (
-            codes.index_select(-1, column_index) == category_index
-        ).to(table.numerical.dtype)
         columns = tuple(
             f"{column}__one_hot_{index}"
             for column, size in zip(table.categorical_columns, sizes)
             for index in range(size)
         )
-        out = TableTensor(
-            columns={Stype.numerical: (*table.numerical_columns, *columns)},
-            numerical=torch.cat((table.numerical, indicators), dim=-1),
-        )
-        return cast(
-            TableTensor,
-            torch.cat(
-                (table.drop_stypes((Stype.numerical, Stype.categorical)), out),
-                dim=-1,
-            ),
+        numerical = table.numerical
+        if columns:
+            num_numerical = numerical.size(-1)
+            out = numerical.new_zeros(
+                (*codes.shape[:-1], num_numerical + len(columns))
+            )
+            if num_numerical:
+                out[..., :num_numerical] = numerical
+            offsets = codes.new_tensor(
+                list(accumulate(sizes, initial=num_numerical))[:-1],
+                dtype=torch.long,
+            )
+            # Write one per known category; missing codes contribute zero.
+            known = codes >= 0
+            indices = torch.where(known, codes + offsets, num_numerical)
+            out.scatter_add_(-1, indices, known.to(numerical.dtype))
+            numerical = out
+        return TableTensor(
+            columns={
+                **table.columns,
+                Stype.numerical: (*table.numerical_columns, *columns),
+                Stype.categorical: (),
+            },
+            numerical=numerical,
+            datetime=table.datetime,
+            text=table.text,
+            id=table.id,
         )
