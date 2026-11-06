@@ -266,25 +266,38 @@ def _attention_with_lse(
     scale: float | None,
 ) -> tuple[Tensor, Tensor]:  # [B, Hq, Q, C], [B, Hq, Q]
     # `F.scaled_dot_product_attention` does not return the log-sum-exp.
-    if not query.is_cuda:
+    # Query heads that share a key/value head attend as one longer query,
+    # since kernels of older PyTorch versions don't group key/value heads.
+    B, H, Q, C = query.size()
+    query = query.reshape(B, key.size(1), -1, C)  # [B, Hkv, Hq // Hkv * Q, C]
+    if query.device.type == "cpu":
         out, lse = torch.ops.aten._scaled_dot_product_flash_attention_for_cpu(
             query, key, value, scale=scale
         )
-        return out, lse
-    if (
-        query.dtype in (torch.float16, torch.bfloat16)
-        and query.size(-1) % 8 == 0
-        and query.size(-1) <= 256
-        and torch.cuda.get_device_capability(query.device)[0] >= 8
-    ):
-        out, lse, *_ = torch.ops.aten._scaled_dot_product_flash_attention(
-            query, key, value, scale=scale
-        )
-        return out, lse
-    out, lse, *_ = torch.ops.aten._scaled_dot_product_efficient_attention(
-        query, key, value, None, True, scale=scale
-    )
-    return out, lse[..., : query.size(-2)]
+    elif query.is_cuda:
+        if (
+            query.dtype in (torch.float16, torch.bfloat16)
+            and query.size(-1) % 8 == 0
+            and query.size(-1) <= 256
+            and torch.cuda.get_device_capability(query.device)[0] >= 8
+        ):
+            out, lse, *_ = torch.ops.aten._scaled_dot_product_flash_attention(
+                query, key, value, scale=scale
+            )
+        else:
+            out, lse, *_ = (
+                torch.ops.aten._scaled_dot_product_efficient_attention(
+                    query, key, value, None, True, scale=scale
+                )
+            )
+            lse = lse[..., : query.size(-2)]
+    else:
+        # Other devices, e.g., MPS, have no kernel returning the log-sum-exp.
+        scale = C**-0.5 if scale is None else scale
+        logits = (query @ key.mT).float() * scale
+        lse = logits.logsumexp(dim=-1)  # [B, Hkv, Hq // Hkv * Q]
+        out = (logits - lse[..., None]).exp().to(value.dtype) @ value
+    return out.reshape(B, H, Q, C), lse.reshape(B, H, Q)
 
 
 class Attention(torch.nn.Module):

@@ -64,9 +64,11 @@ def test_induced_transformer_block(
 
 @withCUDA
 @pytest.mark.parametrize("batch_size_limit", [None, 2, 4])
+@pytest.mark.parametrize("num_key_value_heads", [2, 1])
 def test_induced_transformer_block_summarize(
     device: torch.device,
     batch_size_limit: int | None,
+    num_key_value_heads: int,
 ) -> None:
     channels = 8
     module = InducedTransformerBlock(
@@ -75,6 +77,7 @@ def test_induced_transformer_block_summarize(
         inducing_block=TransformerBlock(
             channels=channels,
             num_query_heads=2,
+            num_key_value_heads=num_key_value_heads,
             mlp=torch.nn.Identity(),
             device=device,
         ),
