@@ -406,7 +406,9 @@ class AlignCategories(EnsembleProcessor):
             pending_categories: set[int] = set()
             for batch_categories in fitted_categories:
                 column_categories = batch_categories[column_index]
-                identity = id(column_categories)
+                identity = _identity(
+                    fitted_categories, column_index, column_categories
+                )
                 lookup = lookup_by_categories.get(identity)
                 if lookup is not None or identity in pending_categories:
                     continue
@@ -465,7 +467,13 @@ class AlignCategories(EnsembleProcessor):
                 continue
             lookup_by_categories = lookups_by_column[column_index]
             lookups = [
-                lookup_by_categories[id(batch_categories[column_index])]
+                lookup_by_categories[
+                    _identity(
+                        fitted_categories,
+                        column_index,
+                        batch_categories[column_index],
+                    )
+                ]
                 for batch_categories in fitted_categories
             ]
             column_codes = codes[..., column_index]
@@ -619,3 +627,18 @@ def _string_category_lookup_fake(
     # E.g. inputs ["red", "blue", "unknown"], fitted ["blue", "red"]:
     # real lookup [1, 0, -1]; the fake result only describes its shape (3,).
     return codes.new_empty((sum(input_layout[::3]),))
+
+
+def _identity(
+    fitted_categories: Sequence[Sequence[Tensor]],
+    column_index: int,
+    categories: Tensor,
+) -> int:
+    # Shared vocabularies are aligned once. Keying by position instead of
+    # `id()` keeps compiled graphs free of object-identity guards, so they
+    # serve refitted models.
+    return next(
+        index
+        for index, batch_categories in enumerate(fitted_categories)
+        if batch_categories[column_index] is categories
+    )
