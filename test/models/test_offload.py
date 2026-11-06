@@ -123,13 +123,17 @@ def test_row_embedding_offload(
             outs[offload, "predict"] = embedding(
                 x[:, 30:], y[:, :0], cache=cache.freeze()
             )
-            outs[offload] = embedding(x, y, offload=offload)
+            outs[offload, None] = embedding(x, y, offload=offload)
 
     # Chunked inducing-point summaries round differently in half precision.
-    tol = {} if dtype is None else {"atol": 5e-2, "rtol": 5e-2}
-    for key in ("fit", "predict"):
-        torch.testing.assert_close(outs["cpu", key], outs[None, key], **tol)
-    torch.testing.assert_close(outs["cpu"], outs[None], **tol)
+    tol = None if dtype is None else 5e-2
+    for key in ("fit", "predict", None):
+        torch.testing.assert_close(
+            outs["cpu", key],
+            outs[None, key],
+            atol=tol,
+            rtol=tol,
+        )
 
 
 @onlyCUDA
