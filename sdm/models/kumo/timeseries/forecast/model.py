@@ -357,12 +357,20 @@ class _KumoForecast(torch.nn.Module):
         x: Tensor,  # [..., C, R]
     ) -> tuple[Tensor, Tensor, Tensor]:
         mean, scale = self.revin.stats(x, correction=0)
+
+        # Mask leading patches with missing steps, unless all are missing:
+        patch_mask = x.isnan().unflatten(-1, (-1, self.patch_size)).any(-1)
+        patch_mask = patch_mask.int().cumprod(dim=-1).bool()  # [..., C, N]
+        patch_mask &= ~patch_mask.all(dim=-1, keepdim=True)
+        if not patch_mask.any():  # Pay for device sync here:
+            patch_mask = None
+
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
         x = self.pe(self.lin(x))  # [..., C, N, D]
 
-        x = self.icl(x)  # [..., C, N, D]
+        x = self.icl(x, patch_mask=patch_mask)  # [..., C, N, D]
         if self.cross_channel is not None:
             x = self.cross_channel(x)  # [..., C, N, D]
 
