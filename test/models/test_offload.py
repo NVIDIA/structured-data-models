@@ -183,6 +183,22 @@ def test_row_embedding_offload_subsamples_keys() -> None:
     torch.testing.assert_close(outs[1], outs[0])
 
 
+@pytest.mark.parametrize("build", [_kumo_tabular, _tabfm, _tabiclv2])
+def test_row_embedding_grad(
+    build: Callable[[torch.device], Callable[..., Tensor]],
+) -> None:
+    embedding = build(torch.device("cpu"))
+    x = torch.randn(1, 40, 5)
+    y = torch.randint(0, 3, (1, 30))
+
+    with torch.no_grad():
+        expected = embedding(x, y)
+    torch.testing.assert_close(embedding(x, y), expected)
+
+    with pytest.raises(RuntimeError, match="gradients are disabled"):
+        embedding(x, y, offload="cpu")
+
+
 def test_offload_requires_cuda_inputs() -> None:
     model = KumoTabular(task="classification", size="small", pretrained=False)
     x = TableTensor.from_tensor(torch.randn(8, 5))
