@@ -543,6 +543,48 @@ def _isfinite(inp: CategoricalTensor) -> Tensor:
     return inp._code >= 0
 
 
+@CategoricalTensor.implements(aten.masked_fill.Scalar)
+@CategoricalTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: CategoricalTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> CategoricalTensor:
+    if isinstance(value, Tensor) and value.dim() != 0:
+        raise RuntimeError("Expected 'value' to be zero-dimensional")
+    mask, code = torch.broadcast_tensors(mask, inp.code)
+    if code.size(-1) != inp.size(-1):
+        raise RuntimeError(
+            f"Can't expand the column dimension of '{inp.__class__.__name__}'"
+        )
+    if not isinstance(value, Tensor) and value != value:
+        return inp.__class__(code.masked_fill(mask, -1), inp.categories)
+    if inp.size(-1) == 0:
+        return inp.__class__(code.masked_fill(mask, -1), inp.categories)
+
+    missing = torch.as_tensor(value, device=inp.device).isnan()
+    fills = []
+    for i, category in enumerate(_iter_categories(inp)):
+        unmatched = code.new_zeros((1,), dtype=torch.bool)
+        if isinstance(category, VarLenTensor):
+            matches = unmatched
+        else:
+            if isinstance(category, NullableTensor):
+                matched = (category.data == value) & category.valid
+            else:
+                matched = category == value
+            matches = torch.cat((unmatched, matched.to(inp.device)))
+        index = matches.to(code.dtype).argmax() - 1
+        torch._assert_async(
+            missing | matches.any() | ~mask[..., i].any(),
+            "masked_fill value must be an existing category or NaN",
+        )
+        fills.append(torch.where(missing, -1, index))
+
+    fill = torch.stack(fills).to(code.dtype)
+    return inp.__class__(torch.where(mask, fill, code), inp.categories)
+
+
 @CategoricalTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: CategoricalTensor) -> CategoricalTensor:
