@@ -188,7 +188,10 @@ class TableTensor(Tensor):
 
     Args:
         size: The shape of the tensor ``[..., C]``.
-        columns: Column names grouped by semantic type.
+        columns: Column names grouped by semantic type. ``None`` leaves the
+            columns of a non-empty block unnamed, so that only its width
+            counts, *e.g.*, to let it vary under :func:`torch.compile`.
+            Operations on column names do not support unnamed blocks.
         numerical: The numerical column block of shape ``[..., C_num]``.
         categorical: The categorical column block of shape ``[..., C_cat]``.
         datetime: The ``datetime64[us]`` column block of shape ``[..., C_dt]``.
@@ -217,7 +220,7 @@ class TableTensor(Tensor):
     def __init__(
         self,
         size: Sequence[int] | None = None,
-        columns: Mapping[StypeLike, Sequence[str]] | None = None,
+        columns: Mapping[StypeLike, Sequence[str] | None] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
@@ -230,7 +233,7 @@ class TableTensor(Tensor):
     def __new__(
         cls,
         size: Sequence[int] | None = None,
-        columns: Mapping[StypeLike, Sequence[str]] | None = None,
+        columns: Mapping[StypeLike, Sequence[str] | None] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
@@ -305,7 +308,7 @@ class TableTensor(Tensor):
             id = ColumnarTensor((), size=size, device=device)
 
         columns = {
-            Stype(stype): tuple(names)
+            Stype(stype): None if names is None else tuple(names)
             for stype, names in (columns or {}).items()
         }
 
@@ -321,14 +324,17 @@ class TableTensor(Tensor):
                     f"{name}_{i}" for i in range(block.size(-1))
                 )
 
-            if block.size(-1) != len(columns[stype]):
-                _columns = "column" if len(columns[stype]) == 1 else "columns"
+            names = columns[stype]
+            if names is not None and block.size(-1) != len(names):
+                _columns = "column" if len(names) == 1 else "columns"
                 raise ValueError(
                     f"Expected {str(stype)!r} block to hold "
-                    f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
+                    f"{len(names)} {_columns} (got {block.size(-1)})"
                 )
 
-        column_names = list(chain.from_iterable(columns.values()))
+        column_names = list(
+            chain.from_iterable(names or () for names in columns.values())
+        )
         if len(column_names) != len(set(column_names)):
             raise ValueError("Expected column names to be unique")
 
@@ -362,11 +368,21 @@ class TableTensor(Tensor):
         column_to_loc = {
             name: (stype, i)
             for stype, names in stype_columns.items()
-            for i, name in enumerate(names)
+            for i, name in enumerate(names or ())
         }
+        num_columns = len(column_to_loc)
+        for stype, block in (
+            (Stype.numerical, numerical),
+            (Stype.categorical, categorical),
+            (Stype.datetime, datetime),
+            (Stype.text, text),
+            (Stype.id, id),
+        ):
+            if stype_columns[stype] is None:
+                num_columns = num_columns + block.size(-1)
         out = Tensor._make_wrapper_subclass(
             cls=cls,
-            size=(*numerical.size()[:-1], len(column_to_loc)),
+            size=(*numerical.size()[:-1], num_columns),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
@@ -919,7 +935,9 @@ class TableTensor(Tensor):
     def active_stypes(self) -> frozenset[Stype]:
         r"""Semantic types with at least one column."""
         return frozenset(
-            stype for stype, columns in self.column_groups if columns
+            stype
+            for stype, columns in self.column_groups
+            if columns is None or columns
         )
 
     @property
@@ -2057,9 +2075,9 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     columns = ref._columns
     if is_column_dim:
         columns = {
-            stype: tuple(
-                chain.from_iterable(t._columns[stype] for t in tensors)
-            )
+            stype: None
+            if any(t._columns[stype] is None for t in tensors)
+            else tuple(chain.from_iterable(t._columns[stype] for t in tensors))
             for stype, _ in TableTensor.items(ref)
         }
 

@@ -88,7 +88,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             stype.value
             for group in ensemble_table._iter_groups()
             for stype, columns in group.column_groups
-            if columns
+            if columns is None or columns  # Unnamed blocks are non-empty.
         )
         return tuple(
             stype for stype in self.processors if stype in active_stypes
