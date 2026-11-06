@@ -54,7 +54,7 @@ Default Recipe
            ),
            ClipSigma(threshold=4.0, method='log'),
            ShuffleColumns(method='random'),
-           SelectColumns(),
+           SelectColumns(max_columns=500),
          ),
        ),
      ),

@@ -362,7 +362,7 @@ default device.</p></li>
 </span><span data-line="41">      <span class="p">),</span>
 </span><span data-line="42">    <span class="p">),</span>
 </span><span data-line="43">    <span class="n">ShuffleColumns</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">'latin'</span><span class="p">),</span>
-</span><span data-line="44">    <span class="n">SelectColumns</span><span class="p">(),</span>
+</span><span data-line="44">    <span class="n">SelectColumns</span><span class="p">(</span><span class="n">max_columns</span><span class="o">=</span><span class="mi">500</span><span class="p">),</span>
 </span><span data-line="45">    <span class="n">Cast</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
 </span><span data-line="46">  <span class="p">),</span>
 </span><span data-line="47">  <span class="n">target</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
@@ -417,7 +417,7 @@ default device.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=94cf5d02"></script>
+      <script src="../../_static/documentation_options.js?v=a1f8be3f"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

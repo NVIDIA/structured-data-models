@@ -76,7 +76,7 @@ Default Recipe
          ),
        ),
        ShuffleColumns(method='latin'),
-       SelectColumns(),
+       SelectColumns(max_columns=500),
        Cast(torch.float32),
      ),
      target=Sequential(
