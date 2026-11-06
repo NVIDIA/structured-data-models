@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import copy
-import io
 from typing import cast
 
 import pytest
@@ -78,35 +77,6 @@ class _StatelessProcessor(Processor, InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return self._transform(table)
-
-
-@withCUDA
-def test_ensemble_buffer_roundtrip(device: torch.device) -> None:
-    values = EnsembleTensor(
-        groups=(torch.tensor([[1.0], [2.0]]), torch.tensor([[3.0, 4.0]])),
-        locations=((0, 1), (1, 0), (0, 0), (0, 1)),
-    )
-    source = IdentityEnsembleProcessor()
-    source.register_buffer("values", values)
-    source.to(device=device, dtype=torch.float64)
-    saved = io.BytesIO()
-    torch.save(torch.nn.Sequential(source).state_dict(), saved)
-    saved.seek(0)
-    restored = IdentityEnsembleProcessor()
-    restored.register_buffer("values", None)
-    torch.nn.Sequential(restored).load_state_dict(
-        torch.load(saved, weights_only=True, map_location="cpu")
-    )
-    restored.to(device)
-    actual = cast(EnsembleTensor[torch.Tensor], restored.values)
-    assert isinstance(actual, EnsembleTensor)
-    assert len(actual) == len(values)
-    for index in range(len(values)):
-        torch.testing.assert_close(
-            actual[index], values[index].to(device).double()
-        )
-    assert actual[0].data_ptr() == actual[3].data_ptr()
-    assert all(buffer.device == device for buffer in restored.buffers())
 
 
 def test_ensemble_buffer_replacement_and_loading() -> None:

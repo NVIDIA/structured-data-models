@@ -22,6 +22,8 @@ class RandomProjection(EnsembleProcessor):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _weights: EnsembleTensor[torch.Tensor]
+
     def __init__(
         self,
         channels: int,
@@ -31,7 +33,6 @@ class RandomProjection(EnsembleProcessor):
         super().__init__()
         self.channels = channels
         self.init = init
-        self._weights: EnsembleTensor[torch.Tensor]
         self.register_buffer("_weights", None)
 
     def _fit_ensemble(

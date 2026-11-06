@@ -14,7 +14,7 @@ from sdm import EnsembleTensor
 T = TypeVar("T", bound="Tensor | BufferList[Any]")
 
 
-class _EnsembleBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
+class _EnsembleTensorBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
     """Adapt ensemble tensor storage to PyTorch's module lifecycle."""
 
     def __init__(

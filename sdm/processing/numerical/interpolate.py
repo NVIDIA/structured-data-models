@@ -21,6 +21,9 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _last_values: EnsembleTensor[Tensor]
+    _last_indices: EnsembleTensor[Tensor]
+
     def __init__(
         self,
         *,
@@ -30,8 +33,6 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.fill_value = fill_value
         self.fill_leading = fill_leading
-        self._last_values: EnsembleTensor[Tensor]
-        self._last_indices: EnsembleTensor[Tensor]
         self.register_buffer("_last_values", None)
         self.register_buffer("_last_indices", None)
 

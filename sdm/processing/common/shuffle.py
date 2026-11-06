@@ -25,13 +25,14 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _permutations: EnsembleTensor[Tensor]
+
     def __init__(
         self,
         method: Literal["random", "latin"] = "random",
     ) -> None:
         super().__init__()
         self.method = method
-        self._permutations: EnsembleTensor[Tensor]
         self.register_buffer("_permutations", None)
         self._host_permutations: tuple[tuple[int, ...], ...] = ()
 

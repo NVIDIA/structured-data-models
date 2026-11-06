@@ -18,13 +18,14 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _signs: EnsembleTensor[Tensor]
+
     def __init__(
         self,
         probability: float = 0.5,
     ) -> None:
         super().__init__()
         self.probability = probability
-        self._signs: EnsembleTensor[Tensor]
         self.register_buffer("_signs", None)
 
     def _fit_ensemble(

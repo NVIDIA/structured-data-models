@@ -21,11 +21,12 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _slopes: EnsembleTensor[Tensor]
+    _intercepts: EnsembleTensor[Tensor]
+
     def __init__(self, threshold: float | None = None) -> None:
         super().__init__()
         self.threshold = threshold
-        self._slopes: EnsembleTensor[Tensor]
-        self._intercepts: EnsembleTensor[Tensor]
         self.register_buffer("_slopes", None)
         self.register_buffer("_intercepts", None)
 

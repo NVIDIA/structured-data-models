@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 
 from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
-from sdm.nn._buffer import _EnsembleBuffer
+from sdm.nn._buffer import _EnsembleTensorBuffer
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -52,7 +52,7 @@ class EnsembleProcessor(Processor):
             self._buffers.pop(name, None)
             self.add_module(
                 name,
-                _EnsembleBuffer(
+                _EnsembleTensorBuffer(
                     groups=tensor._groups,
                     locations=tensor._locations,
                     persistent=persistent,
@@ -63,13 +63,13 @@ class EnsembleProcessor(Processor):
             else:
                 self._non_persistent_buffers_set.add(name)
             return
-        if isinstance(self._modules.get(name), _EnsembleBuffer):
+        if isinstance(self._modules.get(name), _EnsembleTensorBuffer):
             del self._modules[name]
         super().register_buffer(name, tensor, persistent=persistent)
 
     def __setattr__(self, name: str, value: Any) -> None:
         module = self.__dict__.get("_modules", {}).get(name)
-        if isinstance(module, _EnsembleBuffer) and (
+        if isinstance(module, _EnsembleTensorBuffer) and (
             value is None or isinstance(value, (Tensor, EnsembleTensor))
         ):
             self.register_buffer(name, value, persistent=module._persistent)
