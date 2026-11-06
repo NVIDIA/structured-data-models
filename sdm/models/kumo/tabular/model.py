@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Any, ClassVar, Literal, cast
+from collections.abc import Callable, Iterable
+from typing import Any, ClassVar, Literal, Self, cast
 
 import torch
 from torch import Tensor
@@ -16,6 +16,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular.graph import _CudaGraphs
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -137,6 +138,36 @@ class KumoTabular(ICLModel):
             self._load_from_pretrained(size, device=device)
 
         self.eval()
+
+    def enable_cuda_graphs(
+        self, *, max_graphs: int = 4, max_memory_bytes: int = 2 * 1024**3
+    ) -> None:
+        """Enable bounded CUDA Graph replay for repeated predictions.
+
+        Args:
+            max_graphs: Maximum captured or rejected signatures per network.
+            max_memory_bytes: Maximum retained graph buffers and pools per task
+                network. Capture can temporarily exceed this budget.
+
+        Capture happens on first use. CPU, gradient-enabled execution, and
+        non-native CUDA allocators use normal execution. Serialize calls to
+        this model, including fit and capture. Refit after weight changes.
+        """
+        for model in self.models.values():
+            cast(_KumoTabular, model)._cuda_graphs = _CudaGraphs(
+                max_graphs=max_graphs, max_memory_bytes=max_memory_bytes
+            )
+
+    def disable_cuda_graphs(self) -> None:
+        """Disable replay and release all captured graphs."""
+        for model in self.models.values():
+            cast(_KumoTabular, model)._cuda_graphs = None
+
+    def clear(self) -> None:
+        """Clear context and graphs, preserving replay settings."""
+        super().clear()
+        for model in self.models.values():
+            cast(_KumoTabular, model)._clear_graphs()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
@@ -266,6 +297,7 @@ class _KumoTabular(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        self._cuda_graphs: _CudaGraphs | None = None
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.row_embedding = RowEmbedding(
@@ -305,9 +337,55 @@ class _KumoTabular(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        if (
+            self._cuda_graphs is not None
+            and not self.training
+            and cache is not None
+            and cache.is_replaying
+        ):
+            return self._cuda_graphs(
+                forward=self._forward,
+                x=x,
+                y=y,
+                categorical_mask=categorical_mask,
+                cache=cache,
+            )
+        return self._forward(x, y, categorical_mask, cache=cache)
+
+    def _forward(
+        self,
+        x: Tensor,
+        y: Tensor,
+        categorical_mask: Tensor,
+        *,
+        cache: Cache | None = None,
+    ) -> Tensor:
         x = self.row_embedding(x, y, categorical_mask, cache=cache)
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, cache=cache)
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        super().__setstate__(state)
+        self.__dict__.setdefault("_cuda_graphs", None)
+
+    def _clear_graphs(self) -> None:
+        if self._cuda_graphs is not None:
+            self._cuda_graphs.clear()
+
+    def train(self, mode: bool = True) -> Self:
+        if self.training != mode:
+            self._clear_graphs()
+        return super().train(mode)
+
+    def _apply(
+        self, fn: Callable[[Tensor], Tensor], recurse: bool = True
+    ) -> Self:
+        self._clear_graphs()
+        return super()._apply(fn, recurse)
+
+    def _load_from_state_dict(self, *args: Any, **kwargs: Any) -> None:
+        self._clear_graphs()
+        super()._load_from_state_dict(*args, **kwargs)
 
     def forward_train(
         self,
