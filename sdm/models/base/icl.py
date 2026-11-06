@@ -3,7 +3,7 @@
 
 import abc
 import copy
-from collections.abc import Hashable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -86,6 +86,21 @@ class ICLModel(Model):
                 f"{self.__class__.__name__!r} received unsupported tasks "
                 f"{invalid}"
             )
+
+        self._compiled_predict: Callable[..., TableTensor] | None = None
+
+    def compile(self, *args: Any, **kwargs: Any) -> None:
+        r"""Compile :meth:`predict` using :func:`torch.compile`.
+
+        Afterwards, :meth:`predict` runs the compiled function, also after
+        refitting. :meth:`forward` is not compiled. Pickled and copied models
+        do not keep the compiled function and predict eagerly.
+
+        Args:
+            args: Positional arguments passed to :func:`torch.compile`.
+            kwargs: Keyword arguments passed to :func:`torch.compile`.
+        """
+        self._compiled_predict = torch.compile(self._predict, *args, **kwargs)
 
     def forward(
         self,
@@ -381,6 +396,21 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        if (
+            self._compiled_predict is None
+            or self._cache is None
+            or torch.compiler.is_compiling()
+        ):
+            return self._predict(x, related_tables, callbacks=callbacks)
+        return self._predict_compiled(x, related_tables, callbacks=callbacks)
+
+    def _predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+    ) -> TableTensor:  # Recipe-defined output shape.
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -476,6 +506,23 @@ class ICLModel(Model):
             inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
+
+    def _predict_compiled(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None,
+        *,
+        callbacks: Sequence[Callback] | None,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        assert self._compiled_predict is not None
+        return self._compiled_predict(x, related_tables, callbacks=callbacks)
+
+    def __getstate__(self) -> dict[str, object]:
+        state = super().__getstate__()
+        # Like `torch.nn.Module.compile`, compiled functions are not kept;
+        # a copy's function would still run the original model.
+        state["_compiled_predict"] = None
+        return state
 
     # Abstract Methods ########################################################
 
