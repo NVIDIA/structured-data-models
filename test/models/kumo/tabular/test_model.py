@@ -403,7 +403,7 @@ def test_compile(
     num_classes: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(KumoTabular, "_predict_chunk_size", lambda *_: 8)
+    monkeypatch.setattr(KumoTabular, "_predict_chunk_size", lambda *_, **__: 8)
     task = "classification" if num_classes > 0 else "regression"
     model = _build(task, "small").to(device)
     x, y = _compile_data(num_classes, device)
@@ -431,6 +431,50 @@ def test_compile(
                 actual = model.predict(query)
                 expected = eager.predict(query)
                 assert actual.columns == expected.columns
+                torch.testing.assert_close(
+                    actual=actual.numerical,
+                    expected=expected.numerical,
+                    atol=1e-4,
+                    rtol=1e-4,
+                )
+    assert counter.frame_count == 1
+
+
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+def test_compile_columns(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(KumoTabular, "_predict_chunk_size", lambda *_, **__: 8)
+    model = _build("regression", "small").to(device)
+    counter = CompileCounter()
+    model.compile(backend=counter)
+
+    # Fits differ in columns, context rows, column order and dropped columns.
+    # Four estimators run every numerical transform of the default recipe.
+    for num_columns, num_context, constant in [
+        (5, 40, 1),
+        (17, 70, None),
+        (2, 50, None),
+        (500, 40, None),
+        (9, 50, None),
+        (9, 50, 3),
+    ]:
+        x = torch.randn(num_context + 9, num_columns, device=device)
+        if constant is not None:
+            x[:, constant] = 1.0
+        y = x.sum(dim=-1, keepdim=True)
+        columns = [f"{num_columns}_{i}" for i in range(num_columns)]
+        x = TableTensor.from_tensor(x, columns=columns)
+        y = TableTensor.from_tensor(y)
+        model.fit(x[:num_context], y[:num_context], num_estimators=4)
+        eager = copy.deepcopy(model)  # Copies predict eagerly.
+        stance = "default" if counter.frame_count == 0 else "fail_on_recompile"
+        with torch.compiler.set_stance(stance):
+            for size in (1, 9):
+                actual = model.predict(x[-size:])
+                expected = eager.predict(x[-size:])
                 torch.testing.assert_close(
                     actual=actual.numerical,
                     expected=expected.numerical,

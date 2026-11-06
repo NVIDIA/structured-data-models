@@ -800,7 +800,12 @@ class ICLModel(Model):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context.columns != x_query.columns:
+        # Compiled prediction checks unnamed blocks against the fitted input
+        # columns before preprocessing.
+        if any(
+            names is not None and names != x_context.columns[stype]
+            for stype, names in x_query.columns.items()
+        ):
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )
