@@ -62,6 +62,60 @@ def test_induced_transformer_block(
     torch.testing.assert_close(out_seqused, out_cross)
 
 
+@withCUDA
+@pytest.mark.parametrize("batch_size_limit", [None, 2, 4])
+@pytest.mark.parametrize("num_key_value_heads", [2, 1])
+def test_induced_transformer_block_summarize(
+    device: torch.device,
+    batch_size_limit: int | None,
+    num_key_value_heads: int,
+) -> None:
+    channels = 8
+    module = InducedTransformerBlock(
+        channels=channels,
+        num_inducing_points=4,
+        inducing_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            num_key_value_heads=num_key_value_heads,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
+        output_block=TransformerBlock(
+            channels=channels,
+            num_query_heads=2,
+            mlp=torch.nn.Identity(),
+            device=device,
+        ),
+        device=device,
+    )
+    # Zero-initialized output projections would hide the attention.
+    for parameter in module.parameters():
+        if not parameter.any():
+            torch.nn.init.normal_(parameter)
+    key_value = torch.randn(2, 3, 7, channels, device=device)
+
+    with torch.no_grad():
+        _, expected = module(
+            query=key_value[..., :0, :],
+            key_value=key_value,
+            return_key_value=True,
+        )
+        summary = None
+        for chunk in key_value.split([3, 4], dim=-2):
+            summary = module.summarize(
+                chunk,
+                key_len=key_value.size(-2),
+                summary=summary,
+                batch_size_limit=batch_size_limit,
+            )
+        assert summary is not None
+        out = module.induced_key_value(summary)
+
+    torch.testing.assert_close(out.key, expected.key)
+    torch.testing.assert_close(out.value, expected.value)
+
+
 def test_induced_transformer_block_kv_cache() -> None:
     batch_size = 2
     set_size = 6

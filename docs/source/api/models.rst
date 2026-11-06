@@ -73,6 +73,15 @@ Model API
    ~sdm.models.ICLModel
    ~sdm.models.Callback
 
+Runtime Configuration
+---------------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ~sdm.models.set_pinned_register_threads
+
 Models
 ------
 

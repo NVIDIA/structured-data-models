@@ -211,6 +211,7 @@ def test_tabiclv2_hierarchical_log_probs(
             *,
             num_classes: int | None = None,
             cache: object | None = None,
+            offload: str | None = None,
         ) -> torch.Tensor:
             return x
 

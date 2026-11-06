@@ -57,27 +57,29 @@ class CellEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C],
         categorical_mask: Tensor,  # [..., C],
         *,
+        columns: slice = slice(None),
         num_columns: Tensor | None = None,  # [...]
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
         **kwargs: Tensor,  # [..., R, C],
-    ) -> Tensor:  # [..., R, C, D]
+    ) -> Tensor:  # [..., R, N, D] for the N columns in `columns`
         if out is not None and torch.is_grad_enabled():
             raise RuntimeError(
                 "'out' is only supported when gradients are disabled"
             )
 
         *B, R, C = x.size()
-        if out is not None and out.size() != (*B, R, C, self.channels):
+        index = torch.arange(C, device=x.device)[columns]
+        N = index.size(0)
+        if out is not None and out.size() != (*B, R, N, self.channels):
             raise ValueError("'out' has an incorrect shape")
 
         # Feature grouping:
-        index = torch.arange(C, device=x.device)
         shift = 2 ** torch.arange(self.group_size, device=x.device) - 1
-        index = index.view(C, 1) + shift.view(1, self.group_size)
+        index = index.view(N, 1) + shift.view(1, self.group_size)
         if num_columns is None:
             index = index % C
-            x = x[..., index]  # [..., R, C, G]
+            x = x[..., index]  # [..., R, N, G]
             kwargs = {key: value[..., index] for key, value in kwargs.items()}
             categorical_mask = categorical_mask[..., None, index]
         else:
@@ -85,16 +87,16 @@ class CellEmbedding(torch.nn.Module):
             index = index % num_columns[..., None, None]
             index = index.flatten(-2)
             row_index = index.unsqueeze(-2).expand(*B, R, -1)
-            x = x.gather(-1, row_index).unflatten(-1, (C, self.group_size))
+            x = x.gather(-1, row_index).unflatten(-1, (N, self.group_size))
             kwargs = {
                 key: value.gather(-1, row_index).unflatten(
-                    -1, (C, self.group_size)
+                    -1, (N, self.group_size)
                 )
                 for key, value in kwargs.items()
             }
             categorical_mask = categorical_mask.expand(*B, C).gather(-1, index)
             categorical_mask = categorical_mask.unflatten(
-                -1, (C, self.group_size)
+                -1, (N, self.group_size)
             )
             categorical_mask = categorical_mask.unsqueeze(-3)
 
@@ -164,13 +166,13 @@ class CellEmbedding(torch.nn.Module):
 
         if out is None:
             out = x.new_empty(
-                (*B, R, C, self.channels),
+                (*B, R, N, self.channels),
                 dtype=torch.get_autocast_dtype(x.device.type)
                 if torch.is_autocast_enabled(x.device.type)
                 else x.dtype,
             )
 
-        rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
+        rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * N, 1))
         for chunk_index in range((R + rows_per_chunk - 1) // rows_per_chunk):
             start = chunk_index * rows_per_chunk
             self._forward(

@@ -11,7 +11,13 @@ __lazy_modules__ = {
     "sdm.models.timesfm3",
 }
 
-from sdm.models.base import Callback, Model, ICLModel, ECOC
+from sdm.models.base import (
+    Callback,
+    Model,
+    ICLModel,
+    ECOC,
+    set_pinned_register_threads,
+)
 from sdm.models.tabiclv2 import TabICLv2
 from sdm.models.tabfm import TabFM
 from sdm.models.kumo import (
@@ -29,6 +35,7 @@ __all__ = [
     "Model",
     "ICLModel",
     "ECOC",
+    "set_pinned_register_threads",
     "TabICLv2",
     "TabFM",
     "KumoTabular",

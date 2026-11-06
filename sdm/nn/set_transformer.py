@@ -160,3 +160,66 @@ class InducedTransformerBlock(torch.nn.Module):
             batch_size_limit=batch_size_limit,
             out=out,
         )  # [..., Q, C]
+
+    def summarize(
+        self,
+        key_value: Tensor,  # [..., KV, C]
+        *,
+        key_len: int,
+        summary: tuple[Tensor, Tensor] | None = None,
+        batch_size_limit: int | Literal["auto"] | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Accumulate the inducing points' attention over a key/value chunk.
+
+        Calling this on consecutive chunks of a key/value sequence and passing
+        the result to :meth:`induced_key_value` gives the same key/value
+        projections of :math:`H` as attending to the whole sequence at once,
+        up to rounding.
+
+        Args:
+            key_value: The key/value chunk with shape ``[..., KV, C]``.
+            key_len: The length of the whole key/value sequence.
+            summary: The summary of the preceding chunks, if any.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
+
+        Returns:
+            The summary of the chunks so far.
+        """
+        out, lse = self.inducing_block.partial(
+            query=self.inducing_points,  # [M, C]
+            key_value=key_value,  # [..., KV, C]
+            key_len=key_len,
+            batch_size_limit=batch_size_limit,
+        )  # [..., M, H, C // H], [..., M, H]
+        if summary is None:
+            return out, lse
+        summary_out, summary_lse = summary
+        total = summary_lse.logaddexp(lse)  # [..., M, H]
+        out = out.float() * (lse - total).exp()[..., None]
+        out += summary_out.float() * (summary_lse - total).exp()[..., None]
+        return out, total
+
+    def induced_key_value(
+        self,
+        summary: tuple[Tensor, Tensor],
+    ) -> KVCacheEntry:  # [..., M, H, C // H]
+        r"""The key/value projections of :math:`H` from a summary.
+
+        The result can be passed as ``key_value`` to :meth:`forward`.
+
+        Args:
+            summary: The summary of a whole key/value sequence returned by
+                :meth:`summarize`.
+        """
+        h = self.inducing_block.finish(
+            query=self.inducing_points,  # [M, C]
+            out=summary[0],  # [..., M, H, C // H]
+        )  # [..., M, C]
+        # An empty query only projects the key/value.
+        _, key_value = self.output_block(
+            query=h[..., :0, :],
+            key_value=h,
+            return_key_value=True,
+        )
+        return key_value

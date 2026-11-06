@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -127,6 +127,7 @@ class TabICLv2(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    supports_offload: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -188,6 +189,8 @@ class TabICLv2(ICLModel):
         related_query_tables: RelatedTables[TableTensor] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
+        *,
+        offload: Literal["cpu"] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -216,7 +219,12 @@ class TabICLv2(ICLModel):
             )
 
         if classes is None:
-            out = self.models[Task.regression](x, y, cache=cache)
+            out = self.models[Task.regression](
+                x,
+                y,
+                cache=cache,
+                offload=offload,
+            )
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
@@ -225,7 +233,11 @@ class TabICLv2(ICLModel):
             )
 
         out = self.models[Task.classification](
-            x, y, cache=cache, num_classes=len(classes)
+            x,
+            y,
+            cache=cache,
+            num_classes=len(classes),
+            offload=offload,
         )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
@@ -282,11 +294,18 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_classes: int | None = None,
+        offload: Literal["cpu"] | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if not y.is_floating_point():
             assert num_classes is not None
 
-        x = self.row_embedding(x, y, num_classes=num_classes, cache=cache)
+        x = self.row_embedding(
+            x,
+            y,
+            num_classes=num_classes,
+            cache=cache,
+            offload=offload,
+        )
         return self.icl_block(
             x=x,
             y=y,
