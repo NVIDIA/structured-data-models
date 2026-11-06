@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from sdm import Recipe
+from sdm.cache import Cache
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -61,28 +62,26 @@ def test_forward(
 
 
 @withCUDA
-@pytest.mark.parametrize("cached", [False, True])
-def test_autocast_output_is_float32(
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_autocast_forward_and_cache(
     device: torch.device,
-    cached: bool,
+    dtype: torch.dtype,
 ) -> None:
     model = TabICLv2(pretrained=False, device=device)
     x_context = torch.randn(5, 6, device=device)
     y_context = torch.randn(5, 1, device=device)
     x_query = torch.randn(3, 6, device=device)
-    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
-
     with torch.autocast(device_type=device.type, dtype=dtype):
-        if cached:
-            model.fit(x_context, y_context, recipe=Recipe())
-            out = model.predict(x_query)
-        else:
-            out = model(x_context, y_context, x_query, recipe=Recipe())
+        out = model(x_context, y_context, x_query, recipe=Recipe())
+        model.fit(x_context, y_context, recipe=Recipe())
+        cached_out = model.predict(x_query)
 
     assert out.numerical.dtype == torch.float32
+    torch.testing.assert_close(cached_out.numerical, out.numerical)
 
 
 @withCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize(
     "y_context",
     [
@@ -92,6 +91,7 @@ def test_autocast_output_is_float32(
 )
 def test_autocast_preserves_gradients_in_forward(
     device: torch.device,
+    dtype: torch.dtype,
     y_context: torch.Tensor,
 ) -> None:
     model = TabICLv2(pretrained=False, device=device)
@@ -99,14 +99,42 @@ def test_autocast_preserves_gradients_in_forward(
     x_context = torch.eye(2, device=device)
     y_context = y_context.to(device)
     x_query = torch.ones(1, 2, device=device)
-    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
-
     with torch.autocast(device_type=device.type, dtype=dtype):
         out = model(x_context, y_context, x_query)
 
     assert not torch.is_inference(out.numerical)
     out.numerical.sum().backward()
     assert any(p.grad is not None for p in model.parameters())
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@torch.no_grad()
+def test_row_embedding_autocast_regression(dtype: torch.dtype) -> None:
+    model = RowEmbedding(
+        num_classes=0,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        group_size=1,
+        num_inducing_points=2,
+        num_readout_tokens=1,
+        norm_bias=False,
+        device="cuda",
+    )
+    assert isinstance(model.y_lin, torch.nn.Linear)
+    model.y_lin.weight.fill_(1)
+    x = torch.arange(10, device="cuda", dtype=torch.float32).view(5, 2)
+    # These targets overflow an FP16 projection before residual addition.
+    y = torch.tensor([-100_000.0, 1.25, 100_000.0], device="cuda")
+    cache = Cache()
+    with torch.autocast(device_type="cuda", dtype=dtype):
+        out = model(x, y)
+        model(x[:3], y, cache=cache)
+        cached_out = model(x[3:], y[:0], cache=cache.freeze())
+
+    assert out.isfinite().all()
+    torch.testing.assert_close(cached_out, out[3:])
 
 
 @pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
