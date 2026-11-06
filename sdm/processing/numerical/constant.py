@@ -4,6 +4,7 @@
 from typing import cast
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
@@ -30,6 +31,8 @@ class DropConstantColumns(EnsembleProcessor):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _kept_index: Tensor | None
+
     def __init__(
         self,
         *,
@@ -43,6 +46,9 @@ class DropConstantColumns(EnsembleProcessor):
         # TODO: Consider recording the fitted column names if transforms should
         # verify that the numerical schema and order match fit.
         self._kept_indices: tuple[tuple[int, ...], ...] = ()
+        # Unnamed tables select kept columns by this tensor, so their number
+        # can vary under torch.compile. Set if all members keep the same.
+        self.register_buffer("_kept_index", None, persistent=False)
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
         r""":meta private:"""  # noqa: D415
@@ -50,7 +56,10 @@ class DropConstantColumns(EnsembleProcessor):
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        self._kept_indices = cast(tuple[tuple[int, ...], ...], state)
+        self._set_kept_indices(
+            kept_indices=cast(tuple[tuple[int, ...], ...], state),
+            device=self._fitted_state.device,
+        )
 
     def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
         # [N, C] or [..., N, C] -> [C] or [..., C].
@@ -70,6 +79,30 @@ class DropConstantColumns(EnsembleProcessor):
         left, right = values[..., :-1, :], values[..., 1:, :]
         changed = (right != left) & ~(right.isnan() & left.isnan())
         return changed.sum(dim=-2) >= self.threshold
+
+    def _set_kept_indices(
+        self,
+        kept_indices: tuple[tuple[int, ...], ...],
+        device: torch.device,
+    ) -> None:
+        self._kept_indices = kept_indices
+        index = None
+        if len(set(kept_indices)) == 1:
+            index = torch.tensor(
+                kept_indices[0], dtype=torch.long, device=device
+            )
+        self.register_buffer("_kept_index", index, persistent=False)
+
+    def _select_unnamed(self, table: TableTensor) -> TableTensor:
+        if self._kept_index is None:
+            raise NotImplementedError(
+                f"{self.__class__.__name__!r} selects columns of tables with "
+                "unnamed columns only after a fit in which all members keep "
+                "the same columns"
+            )
+        return table.replace_blocks(
+            numerical=table.numerical.index_select(-1, self._kept_index)
+        )
 
     @staticmethod
     def _select_columns(
@@ -100,11 +133,16 @@ class DropConstantColumns(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         keep = self._keep_mask(table.numerical).tolist()
-        self._kept_indices = (
-            tuple(index for index, kept in enumerate(keep) if kept),
+        self._set_kept_indices(
+            kept_indices=(
+                tuple(index for index, kept in enumerate(keep) if kept),
+            ),
+            device=table.device,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if table.numerical_columns is None:
+            return self._select_unnamed(table)
         return self._select_columns(table, self._kept_indices[0])
 
     def _fit_transform(
@@ -129,7 +167,10 @@ class DropConstantColumns(EnsembleProcessor):
             kept_indices = tuple(
                 index for index, kept in enumerate(keep) if kept
             )
-            self._kept_indices = (kept_indices,) * len(ensemble_table)
+            self._set_kept_indices(
+                kept_indices=(kept_indices,) * len(ensemble_table),
+                device=group.device,
+            )
             return
 
         masks = ensemble_table.replace_groups(
@@ -168,12 +209,21 @@ class DropConstantColumns(EnsembleProcessor):
                 kept_indices_by_member[member_id] = tuple(
                     index for index, kept in enumerate(keep) if kept
                 )
-        self._kept_indices = tuple(kept_indices_by_member)
+        self._set_kept_indices(
+            kept_indices=tuple(kept_indices_by_member),
+            device=groups[0].device,
+        )
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        groups = list(ensemble_table._iter_groups())
+        if groups[0].numerical_columns is None:
+            return ensemble_table.replace_groups(
+                [self._select_unnamed(group) for group in groups]
+            )
+
         if len(self._kept_indices) != len(ensemble_table):
             raise RuntimeError(
                 "DropConstantColumns must be fitted with the same number of "
