@@ -37,6 +37,29 @@ class MemberQuery(NamedTuple):
 class RecipeExecution:
     """Recipe execution manager during model processing."""
 
+    # Slots preserve updates that torch.compile can lose after torch.cond.
+    __slots__ = (
+        "__dict__",
+        "__weakref__",
+        "_num_estimators",
+        "_related_locations",
+        "_related_processors",
+        "_y_locations",
+        "recipe",
+    )
+
+    def __getstate__(self) -> dict[str, object]:
+        attributes, slots = cast(
+            tuple[dict[str, object] | None, dict[str, object]],
+            super().__getstate__(),
+        )
+        return {**(attributes or {}), **slots}
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        # Older executions stored these fields in the instance dictionary.
+        for name, value in state.items():
+            setattr(self, name, value)
+
     def __init__(self, recipe: Recipe) -> None:
         self.recipe = recipe
 
