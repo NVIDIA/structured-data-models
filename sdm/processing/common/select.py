@@ -106,3 +106,11 @@ class SelectColumns(EnsembleProcessor):
             tables=tables,
             member_table_ids=range(len(tables)),
         )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        arguments = [f"max_columns={self.max_columns!r}"]
+        if self.method != "first":
+            arguments.append(f"method={self.method!r}")
+        return (
+            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
+        )
