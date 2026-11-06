@@ -20,8 +20,10 @@ class RankGaussian(Processor):
     Query probabilities interpolate between retained fitted value-rank pairs
     and clamp to the endpoint probabilities.
 
-    When ``max_knots`` is set, each column retains at most that many pairs,
-    selected at evenly spaced normal quantiles between the fitted extremes.
+    When ``max_knots`` is set, each column retains exactly that many pairs,
+    selected at evenly spaced normal quantiles between the fitted extremes and
+    padded with the largest pair. The fitted state then has the same shape for
+    any number of fitted rows.
 
     NaN and infinite values are ignored during fitting. NaNs are preserved
     during transformation. Constant columns map to zero; columns without
@@ -81,7 +83,10 @@ class RankGaussian(Processor):
             rows = torch.arange(num_rows, device=values.device)
 
             if num_rows <= max_knots:
-                positions = rows.minimum(last)
+                # Pad with the largest value, so the knot count does not
+                # depend on the number of fitted rows.
+                steps = torch.arange(max_knots, device=values.device)
+                positions = steps.minimum(last)
             else:
                 # Index among distinct column values; a value starts a new
                 # one at its first occurrence.
