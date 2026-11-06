@@ -93,7 +93,7 @@ class ECOC(torch.nn.Module):
                     "'num_classes' must match the cached ECOC codebook "
                     f"(expected {codebook.size(-1)}, got {num_classes})"
                 )
-            kwargs["cache"] = cast(Cache, cache["ecoc_model"])
+            kwargs["cache"] = self._model_cache(cache)
         elif num_members == 1:
             # [T, K]
             codebook = self._draw_codebook(num_classes, x.device, generator)
@@ -137,6 +137,11 @@ class ECOC(torch.nn.Module):
         )  # [T, ..., R_query, K]
         active = index != self.max_classes - 1
         return scores.masked_fill(~active, 0).sum(dim=0) / active.sum(dim=0)
+
+    @staticmethod
+    def _model_cache(cache: Cache) -> Cache:
+        # The cache passed to `model`; nested when classes exceed capacity.
+        return cast(Cache, cache.get("ecoc_model", cache))
 
     def _draw_codebook(
         self,
