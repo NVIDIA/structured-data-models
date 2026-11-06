@@ -64,3 +64,15 @@ class ClipQuantiles(Processor):
             max=self.upper_bound,
         )
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        arguments = []
+        if self.q_low != 0.0:
+            arguments.append(f"q_low={self.q_low!r}")
+        if self.q_high != 1.0:
+            arguments.append(f"q_high={self.q_high!r}")
+        if not arguments:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
+        )
