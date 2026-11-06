@@ -93,6 +93,79 @@ class KumoTabular(ICLModel):
     For regression tasks, :class:`KumoTabular` predicts 999 quantiles named
     ``"q001"`` through ``"q999"``.
 
+    .. rubric:: Model sizes
+
+    .. list-table::
+       :header-rows: 1
+
+       * -
+         - ``"small"``
+         - ``"medium"``
+         - ``"large"``
+       * - Parameters
+         - 28M
+         - 62M
+         - ~215M
+       * - Column and row blocks
+         - 4
+         - 6
+         - 6
+       * - In-context blocks
+         - 12
+         - 24
+         - 24
+
+    .. rubric:: Design notes
+
+    * **Fourier cell embeddings:** Numerical values pass through sines and
+      cosines of 32 learned frequencies, which places values of very different
+      scales in one vector space. Missing values have a dedicated embedding, so
+      no imputation is required.
+    * **Length-aware attention temperature:** Each query is scaled by a
+      learned per-head coefficient times the logarithm of the number of keys,
+      which keeps attention sharp on contexts longer than those seen in
+      training.
+    * **Context cache and Test-GQA:** Context rows never attend to query rows,
+      so their keys and values are computed once and reused through
+      :meth:`~sdm.models.ICLModel.fit` and
+      :meth:`~sdm.models.ICLModel.predict`. Query rows use grouped-query
+      attention, which makes the cache each prediction reads 4 to 8 times
+      smaller, and a prediction does not depend on which other rows are scored
+      with it.
+    * **Classes:** Classification handles up to 10 classes per pass. More
+      classes are supported through error-correcting output codes.
+    * **Pretraining:** The weights are pretrained on synthetic tables only,
+      sampled from random structural causal models. Training uses three stages
+      of increasing context length, up to 60,000 context rows and 100 columns.
+
+    .. rubric:: Usage notes
+
+    :class:`KumoTabular` predicts from the context you provide, so which rows
+    you include, and how many, affects accuracy, memory use, and latency.
+
+    * **Choosing a context:** Options when the full training set is too large
+      are stratifying by label (check calibration afterwards, since the base
+      rate shifts), drawing rows from a recent window for drifting data,
+      retrieving nearest neighbors per query (which gives up the shared
+      context cache), and ensembling over several independent context samples.
+      Sweep context size on a fixed holdout to see where the gain flattens.
+    * **Missing and default values:** Missing values are handled natively.
+      Placeholders such as ``0`` or ``-1`` that mean "not available" look like
+      real measurements, so convert them to ``NaN`` and keep genuine zeros.
+    * **Special-value codes:** Codes such as ``9999999`` or ``-999`` can
+      distort a column. Map them to ``NaN`` and, if the code is informative,
+      add one indicator column per distinct meaning.
+    * **Time-ordered data:** Rows are treated as a set, so row order is not a
+      signal. Express temporal patterns as columns (lags, rolling statistics,
+      differences, seasonality, time since event) and evaluate with an
+      out-of-time split.
+    * **Large tables:** Pretraining covers up to 60,000 context rows and 100
+      columns. Beyond that, accuracy can degrade, so check a holdout. Very
+      wide tables may benefit from feature selection. The hosted NIM endpoint
+      limits the context to about 10K rows.
+
+    See :doc:`/kumo-tabular` for the full architecture and usage guide.
+
     Args:
         task: The tasks to initialize. If ``None``, all tasks supported by this
             model are initialized.

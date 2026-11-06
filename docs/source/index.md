@@ -22,6 +22,7 @@ A GPU-native library of foundation models, tensor subclasses, and data processor
 
 install
 overview
+kumo-tabular
 ```
 
 ```{toctree}
