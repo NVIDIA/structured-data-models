@@ -4,8 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, Stype
-from sdm.nn._buffer import BufferList
+from sdm import EnsembleTable, EnsembleTensor, Stype
 from sdm.processing import EnsembleInvertibleMixin, SeriesEnsembleProcessor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -22,11 +21,14 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _slopes: EnsembleTensor[Tensor]
+    _intercepts: EnsembleTensor[Tensor]
+
     def __init__(self, threshold: float | None = None) -> None:
         super().__init__()
         self.threshold = threshold
-        self._slopes: BufferList[Tensor] = BufferList()
-        self._intercepts: BufferList[Tensor] = BufferList()
+        self.register_buffer("_slopes", None)
+        self.register_buffer("_intercepts", None)
 
     def _fit_ensemble(
         self,
@@ -66,8 +68,16 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             slopes.append(slope)
             intercepts.append(mean - slope * time_mean)
 
-        self._slopes = BufferList(slopes)
-        self._intercepts = BufferList(intercepts)
+        self._set_buffer(
+            "_slopes",
+            EnsembleTensor(groups=slopes, locations=ensemble_table._locations),
+        )
+        self._set_buffer(
+            "_intercepts",
+            EnsembleTensor(
+                groups=intercepts, locations=ensemble_table._locations
+            ),
+        )
 
     def _transform_ensemble(
         self,
@@ -90,7 +100,10 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             x = group.numerical
             time = torch.arange(x.size(-2), device=x.device, dtype=x.dtype)
             time = time.view(-1, 1) + self._offset[first_member_id]
-            trend = self._intercepts[group_id] + self._slopes[group_id] * time
+            trend = (
+                self._intercepts._groups[group_id]
+                + self._slopes._groups[group_id] * time
+            )
 
             groups.append(group.replace_blocks(numerical=x - trend))
 
@@ -117,9 +130,12 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             x = group.numerical
             time = torch.arange(x.size(-2), device=x.device, dtype=x.dtype)
             time = time.view(-1, 1) + self._offset[first_member_id]
-            trend = self._intercepts[group_id] + self._slopes[group_id] * time
+            trend = (
+                self._intercepts._groups[group_id]
+                + self._slopes._groups[group_id] * time
+            )
 
-            x = x.unflatten(-1, (self._slopes[group_id].size(-1), -1))
+            x = x.unflatten(-1, (self._slopes._groups[group_id].size(-1), -1))
             x = (x + trend.unsqueeze(-1)).flatten(-2)
 
             groups.append(group.replace_blocks(numerical=x))
