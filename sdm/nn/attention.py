@@ -190,24 +190,30 @@ class SDPA(torch.nn.Module):
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
         # CUDA attention kernels accept at most 65,535 batch entries per call.
+        # Slice only when needed: slicing a dynamic batch adds a size guard.
+        chunks = [(query, key, value, attn_mask)]
+        if query.size(0) > 65_535:
+            chunks = [
+                (
+                    query[i : i + 65_535],
+                    key[i : i + 65_535],
+                    value[i : i + 65_535],
+                    None if attn_mask is None else attn_mask[i : i + 65_535],
+                )
+                for i in range(0, query.size(0), 65_535)
+            ]
         outs = [
             F.scaled_dot_product_attention(
-                query=query[i : i + 65_535],
-                key=key[i : i + 65_535],
-                value=value[i : i + 65_535],
-                attn_mask=None
-                if attn_mask is None
-                else attn_mask[i : i + 65_535],  # [B, Hq, Q, KV]
+                query=chunk_query,
+                key=chunk_key,
+                value=chunk_value,
+                attn_mask=chunk_mask,  # [B, Hq, Q, KV]
                 dropout_p=self.dropout if self.training else 0.0,
                 enable_gqa=enable_gqa,
                 is_causal=is_causal,
                 scale=self.scale,
             ).transpose(-3, -2)  # [B, Q, Hq, C]
-            for i in (
-                (0,)
-                if query.size(0) <= 65_535
-                else range(0, query.size(0), 65_535)
-            )
+            for chunk_query, chunk_key, chunk_value, chunk_mask in chunks
         ]
         out = outs[0] if len(outs) == 1 else torch.cat(outs)
 
