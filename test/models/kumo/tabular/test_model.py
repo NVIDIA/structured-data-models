@@ -1,15 +1,21 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
+import pickle
+from collections.abc import Callable
 from typing import Literal
 
+import numpy as np
+import pandas as pd
 import pytest
 import torch
+from torch._dynamo.testing import CompileCounter
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import KumoTabular
-from sdm.testing import onlyMPS
+from sdm.testing import onlyMPS, withCUDA
 
 
 def _build(
@@ -354,6 +360,129 @@ def test_estimator_batching_many_classes(
     )
     actual = model.predict(x_query)
     assert actual.columns == expected.columns
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+def _compile_data(
+    num_classes: int,
+    device: torch.device,
+) -> tuple[Callable[[int, int], TableTensor], TableTensor]:
+    rng = np.random.default_rng()
+    frame = pd.DataFrame(rng.standard_normal((200, 4)), columns=list("abcd"))
+    stypes = dict.fromkeys("abcd", Stype.numerical)
+    y_stype = Stype.numerical
+    target = frame.sum(axis=1)
+    if num_classes > 0:
+        # Every table gets its own category codes and vocabularies; "z"
+        # occurs only in the last 100 rows, which are used as queries.
+        frame["e"] = rng.integers(0, 5, 200)
+        frame["f"] = rng.choice(["x", "y", "z", None], 200)
+        frame.loc[:99, "f"] = rng.choice(["x", "y", None], 100)
+        stypes |= {"e": Stype.categorical, "f": Stype.categorical}
+        y_stype = Stype.categorical
+        target = pd.Series(np.arange(200) % num_classes)
+
+    def x(start: int, end: int) -> TableTensor:
+        rows = frame.iloc[start:end]
+        return TableTensor.from_pandas(rows, stypes=stypes, device=device)
+
+    y = TableTensor.from_pandas(
+        target.to_frame("y"),
+        stypes={"y": y_stype},
+        device=device,
+    )
+    return x, y
+
+
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+# More than 10 classes run through ECOC.
+@pytest.mark.parametrize("num_classes", [0, 3, 11])
+def test_compile(
+    device: torch.device,
+    num_classes: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(KumoTabular, "_predict_chunk_size", lambda *_: 8)
+    task = "classification" if num_classes > 0 else "regression"
+    model = _build(task, "small").to(device)
+    x, y = _compile_data(num_classes, device)
+    counter = CompileCounter()
+    model.compile(backend=counter)
+
+    def fit(num_context: int) -> None:
+        # Four estimators run every numerical transform of the default
+        # recipe. Seeding keeps the fitted column order the same across fits.
+        model.fit(
+            x(0, num_context),
+            y[:num_context],
+            num_estimators=4,
+            generator=torch.Generator(device).manual_seed(0),
+        )
+
+    fit(40)
+    model.predict(x(197, 200))
+    with torch.compiler.set_stance("fail_on_recompile"):
+        for num_context in (40, 70):
+            fit(num_context)
+            eager = copy.deepcopy(model)  # Copies predict eagerly.
+            for size in (0, 1, 2, 7, 8, 9, 17):
+                query = x(200 - size, 200)
+                actual = model.predict(query)
+                expected = eager.predict(query)
+                assert actual.columns == expected.columns
+                torch.testing.assert_close(
+                    actual=actual.numerical,
+                    expected=expected.numerical,
+                    atol=1e-4,
+                    rtol=1e-4,
+                )
+    assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
+def test_compile_dynamic() -> None:
+    model = _build("regression", "small")
+    x, y = _compile_data(0, torch.device("cpu"))
+    model.fit(x(0, 40), y[:40])
+    expected = model.predict(x(197, 200))
+    counter = CompileCounter()
+    model.compile(backend=counter, dynamic=None)
+
+    actual = model.predict(x(197, 200))
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    model.predict(x(195, 200))
+    # Automatic dynamic shapes recompile once the number of rows changes.
+    assert counter.frame_count == 2
+
+
+@pytest.mark.usefixtures("compilation")
+def test_compile_copy() -> None:
+    model = _build("regression", "small")
+    x, y = _compile_data(0, torch.device("cpu"))
+    model.fit(x(0, 40), y[:40])
+    counter = CompileCounter()
+    model.compile(backend=counter)
+    expected = model.predict(x(190, 200))
+
+    for clone in (copy.deepcopy(model), pickle.loads(pickle.dumps(model))):
+        actual = clone.predict(x(190, 200))
+        torch.testing.assert_close(actual.numerical, expected.numerical)
+        clone.fit(x(40, 80), y[40:80])
+        clone.predict(x(190, 200))
+    assert counter.frame_count == 1
+    actual = model.predict(x(190, 200))
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@pytest.mark.usefixtures("compilation")
+def test_torch_compile_predict() -> None:
+    model = _build("classification", "small")
+    x, y = _compile_data(3, torch.device("cpu"))
+    model.fit(x(0, 40), y[:40])
+    expected = model.predict(x(190, 200))
+
+    actual = torch.compile(model.predict, backend="eager")(x(190, 200))
     torch.testing.assert_close(actual.numerical, expected.numerical)
 
 

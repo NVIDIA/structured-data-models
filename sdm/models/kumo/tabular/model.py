@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -13,12 +13,15 @@ from torch import Tensor
 from torch.nn import Identity, Linear, ModuleDict
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
-from sdm.cache import Cache
-from sdm.models import ECOC, ICLModel
+from sdm._inference import inference_mode
+from sdm.cache import Cache, KVCacheEntry
+from sdm.models import ECOC, Callback, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
+from sdm.processing import AlignCategories
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
     "small": {
@@ -136,12 +139,63 @@ class KumoTabular(ICLModel):
         if pretrained:
             self._load_from_pretrained(size, device=device)
 
+        self._chunk_predict = False
+
         self.eval()
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
+
+    def compile(self, *args: Any, **kwargs: Any) -> None:
+        r"""Compile :meth:`predict` using :func:`torch.compile`.
+
+        By default (``dynamic=False``), :meth:`predict` runs one compiled
+        graph for queries of any number of rows. Refits on a different number
+        of context rows (at least two) reuse it if they keep the fitted
+        columns, column order (*e.g.*, the same ``generator`` seed) and
+        categories. To do so, :meth:`predict` maps query categories to the
+        categories seen in :meth:`fit` (unseen values become missing), splits
+        the rows of 2-D queries into chunks that the model runs without
+        splitting them further, and marks query and context rows as dynamic.
+        As in the default recipe, query rows must be predicted independently
+        of each other, and categorical features must depend only on category
+        values, not on their codes. Queries with callbacks or more than two
+        dimensions, and contexts of one row, are predicted eagerly.
+
+        Args:
+            args: Positional arguments passed to :func:`torch.compile`.
+            kwargs: Keyword arguments passed to :func:`torch.compile`, which
+                default to ``dynamic=False`` and ``fullgraph=True``. Any other
+                ``dynamic`` value compiles :meth:`predict` as is.
+        """
+        kwargs = {"dynamic": False, "fullgraph": True} | kwargs
+        super().compile(*args, **kwargs)
+        self._chunk_predict = kwargs["dynamic"] is False
+
+    def fit(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        y: Tensor | TableTensor,  # [..., R, 1]
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        r""":meta private:"""  # noqa: D415
+        super().fit(x, y, *args, **kwargs)
+
+        vocabulary = None
+        if (
+            isinstance(x, TableTensor)
+            and x.dim() == 2
+            and x.categorical.size(-1) > 0
+        ):
+            with inference_mode("no_grad"):
+                vocabulary = AlignCategories().fit(x)
+        # Compiled prediction maps query categories to these, so category
+        # sizes do not change between queries.
+        assert self._cache is not None
+        self._cache = Cache(self._cache, vocabulary=vocabulary).freeze()
 
     def _load_from_pretrained(
         self,
@@ -167,6 +221,102 @@ class KumoTabular(ICLModel):
             model.load_state_dict(ckpt, assign=True)
 
         return self
+
+    def _predict_compiled(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None,
+        *,
+        callbacks: Sequence[Callback] | None,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        if not self._chunk_predict:
+            return super()._predict_compiled(
+                x, related_tables, callbacks=callbacks
+            )
+        if x.dim() != 2 or related_tables is not None or callbacks:
+            return self._predict(x, related_tables, callbacks=callbacks)
+
+        assert self._compiled_predict is not None
+        assert self._cache is not None
+        vocabulary = self._cache["vocabulary"]
+        if vocabulary is not None and isinstance(x, TableTensor):
+            x = cast(AlignCategories, vocabulary).transform(x)
+
+        num_rows = x.size(-2)
+        chunk_size = self._predict_chunk_size(x.device)
+        # Marks require at least two rows per chunk and context.
+        if num_rows == 0 or chunk_size < 2 or not self._mark_context_rows():
+            return self._predict(x)
+
+        outs: list[Tensor] = []
+        for start in range(0, num_rows, chunk_size):
+            end = min(start + chunk_size, num_rows)
+            # Gather every chunk, so all chunks share one layout, and repeat
+            # the row of single-row chunks: 1-row inputs would specialize.
+            index = torch.arange(start, max(end, start + 2), device=x.device)
+            chunk = x.index_select(-2, index.clamp_(max=end - 1))
+            _mark_rows(chunk, max_rows=chunk_size)
+            out = self._compiled_predict(chunk)
+            outs.append(out[..., : end - start, :])
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=-2)
+        return cast(TableTensor, out)
+
+    def _mark_context_rows(self) -> bool:
+        # Cached ICL keys and values hold one entry per context row. Marks do
+        # not survive copies, so mark the cached tensors before every call.
+        assert self._cache is not None
+        tensors = [
+            tensor
+            for i in range(cast(int, self._cache["num_batches"]))
+            for name, entry in _flat_items(cast(Cache, self._cache[i]))
+            if name.startswith("icl_block.")
+            for tensor in cast(KVCacheEntry, entry)
+        ]
+        if any(tensor.size(-3) < 2 for tensor in tensors):
+            return False  # Sizes 0 and 1 always specialize.
+        for tensor in tensors:
+            torch._dynamo.mark_dynamic(
+                tensor,
+                tensor.dim() - 3,
+                min=2,
+                max=_MAX_ROWS,
+            )
+        return True
+
+    def _predict_chunk_size(self, device: torch.device) -> int:
+        # Row attention runs `members * ECOC tasks * rows` batch entries. At
+        # Kumo widths, it splits query rows before column attention and cell
+        # embedding do.
+        assert self._cache is not None
+        chunk_size = 65_535
+        for i in range(cast(int, self._cache["num_batches"])):
+            cache = cast(Cache, self._cache[i])
+            task = (
+                Task.regression
+                if cache["classes"] is None
+                else Task.classification
+            )
+            row_embedding = cast(_KumoTabular, self.models[task]).row_embedding
+            dtype = (
+                torch.get_autocast_dtype(device.type)
+                if torch.is_autocast_enabled(device.type)
+                else row_embedding.readout_token.dtype
+            )
+            row_block = cast(
+                KumoTabularTransformerBlock, row_embedding.row_blocks[0]
+            )
+            limit = row_block.auto_batch_size_limit(
+                device=device,
+                element_size=dtype.itemsize,
+                query_length=row_embedding.readout_token.size(-2)
+                + cast(Tensor, cache["categorical_mask"]).size(-1),
+            )
+            batch_size = len(cast(tuple, cache["x_schemas"]))
+            codebook = cast("Tensor | None", cache.get("ecoc_codebook"))
+            if codebook is not None:
+                batch_size *= codebook.size(-2)
+            chunk_size = min(chunk_size, limit // batch_size)
+        return chunk_size
 
     def _forward(
         self,
@@ -244,6 +394,28 @@ class KumoTabular(ICLModel):
             columns={"numerical": columns},
             numerical=out,
         )
+
+
+# PyTorch 2.14 requires an upper bound for dynamic sizes with a lower bound.
+_MAX_ROWS = 2**31 - 1
+
+
+def _flat_items(cache: Cache) -> Iterator[tuple[str, object]]:
+    # ECOC nests the network cache.
+    for name, entry in cache.items():
+        if isinstance(entry, Cache):
+            yield from _flat_items(entry)
+        else:
+            yield str(name), entry
+
+
+def _mark_rows(x: Tensor | TableTensor, max_rows: int) -> None:
+    dim = x.dim() - 2
+    torch._dynamo.mark_dynamic(x, dim, min=2, max=max_rows)
+    if isinstance(x, TableTensor):
+        # Marks only reach inner tensors of the same rank; the text layout
+        # has one more dimension.
+        torch._dynamo.mark_dynamic(x.text._layout, dim, min=2, max=max_rows)
 
 
 class _KumoTabular(torch.nn.Module):
