@@ -304,3 +304,19 @@ class QuantileTransform(Processor, InvertibleMixin):
             n_samples,
         ).movedim(-1, -2)
         return table.replace_blocks(numerical=inverse)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        arguments = []
+        if self._n_quantiles != 1000:
+            arguments.append(f"n_quantiles={self._n_quantiles!r}")
+        if self.subsample != 10_000:
+            arguments.append(f"subsample={self.subsample!r}")
+        if self.output_distribution != "uniform":
+            arguments.append(
+                f"output_distribution={self.output_distribution!r}"
+            )
+        if not arguments:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
+        )
