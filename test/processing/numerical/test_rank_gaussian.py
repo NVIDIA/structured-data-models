@@ -115,7 +115,12 @@ def test_batched_missing_values_match_independent_columns(
 
 
 @withCUDA
-def test_few_distinct_values_match_all_knots(device: torch.device) -> None:
+# Sixteen knots exceed the ten fitted rows and pad the fitted pairs.
+@pytest.mark.parametrize("max_knots", [4, 16])
+def test_few_distinct_values_match_all_knots(
+    device: torch.device,
+    max_knots: int,
+) -> None:
     context = torch.tensor(
         [
             [0, 0, 0, torch.nan],
@@ -134,7 +139,7 @@ def test_few_distinct_values_match_all_knots(device: torch.device) -> None:
     )
     table = TableTensor.from_tensor(context)
     query = TableTensor.from_tensor(edge_query(context))
-    processor = RankGaussian(max_knots=4)
+    processor = RankGaussian(max_knots=max_knots)
     reference = RankGaussian()
     torch.testing.assert_close(
         actual=processor.fit_transform(table).numerical,
