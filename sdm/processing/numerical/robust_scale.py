@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
+
 import torch
 from torch import Tensor
 
@@ -42,6 +44,10 @@ class RobustScale(Processor, InvertibleMixin):
         self.quantile_range = (low, high)
         self.register_buffer("median", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
+
+    def _column_dims(self) -> Iterator[tuple[Tensor, int]]:
+        yield self.median, -1
+        yield self.scale, -1
 
     def _fit(
         self,
