@@ -20,8 +20,10 @@ class RankGaussian(Processor):
     Query probabilities interpolate between retained fitted value-rank pairs
     and clamp to the endpoint probabilities.
 
-    When ``max_knots`` is set, each column retains at most that many pairs,
-    selected at evenly spaced normal quantiles between the fitted extremes.
+    When ``max_knots`` is set, each column retains exactly that many pairs,
+    selected at evenly spaced normal quantiles between the fitted extremes and
+    padded with the largest pair. The fitted state then has the same shape for
+    any number of fitted rows.
 
     NaN and infinite values are ignored during fitting. NaNs are preserved
     during transformation. Constant columns map to zero; columns without
@@ -78,18 +80,20 @@ class RankGaussian(Processor):
             # Rounding to one would give an infinite normal quantile.
             probabilities.clamp_(max=1 - torch.finfo(dtype).eps)
             last = (count - 1).clamp_min(0)
-            rows = torch.arange(num_rows, device=values.device)
+            steps = torch.arange(max_knots, device=values.device)
 
             if num_rows <= max_knots:
-                positions = rows.minimum(last)
+                # Pad with the largest value, so the knot count does not
+                # depend on the number of fitted rows.
+                positions = steps.minimum(last)
             else:
                 # Index among distinct column values; a value starts a new
                 # one at its first occurrence.
+                rows = torch.arange(num_rows, device=values.device)
                 distinct = (left == rows).cumsum(dim=-1).sub_(1)
                 num_distinct = distinct.gather(-1, last) + 1
                 # Knots at the first occurrence of each distinct value, padded
                 # with the largest one.
-                steps = torch.arange(max_knots, device=values.device)
                 positions = torch.searchsorted(
                     distinct,
                     steps.minimum(num_distinct - 1),
