@@ -152,13 +152,15 @@ class KumoTabular(ICLModel):
 
         By default (``dynamic=False``), :meth:`predict` runs one compiled
         graph per device, precision and number of estimators for 2-D queries
-        of any non-zero number of rows. Query rows must be predicted
-        independently of each other, and categorical features must depend
-        only on category values, not on their codes, as in the default recipe.
-        Query categories not seen in :meth:`fit` become missing. Empty
-        queries, queries with callbacks or more than two dimensions, and
-        queries with categorical features until the next :meth:`fit` are
-        predicted eagerly.
+        of any non-zero number of rows, also after refits on another number of
+        context rows (at least two) that keep the fitted columns, their order
+        (*e.g.*, the same ``generator`` seed), categories and classes. Query
+        rows must be predicted independently of each other, and categorical
+        features must depend only on category values, not on their codes, as
+        in the default recipe. Query categories not seen in :meth:`fit` become
+        missing. Empty queries, queries with callbacks or more than two
+        dimensions, one-row contexts, and queries with categorical features
+        until the next :meth:`fit` are predicted eagerly.
 
         Args:
             args: Positional arguments passed to :func:`torch.compile`.
@@ -251,8 +253,8 @@ class KumoTabular(ICLModel):
             for cache in self._batch_caches()
         )
         # Empty queries have no row to repeat, and marks require at least two
-        # rows per chunk.
-        if num_rows == 0 or chunk_size < 2:
+        # rows per chunk and context.
+        if num_rows == 0 or chunk_size < 2 or not self._mark_context_rows():
             return self._predict(x)
 
         outs: list[Tensor] = []
@@ -272,6 +274,18 @@ class KumoTabular(ICLModel):
             outs.append(out[..., : end - start, :])
         out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=-2)
         return cast(TableTensor, out)
+
+    def _mark_context_rows(self) -> bool:
+        # Marks do not survive copies, so mark before every call.
+        for cache in self._batch_caches():
+            icl_block = self._network(cache).icl_block
+            for tensor, dim in icl_block.context_row_dims(
+                ECOC._model_cache(cache)
+            ):
+                if tensor.size(dim) < 2:
+                    return False  # Sizes 0 and 1 always specialize.
+                torch._dynamo.mark_dynamic(tensor, dim, min=2, max=_MAX_ROWS)
+        return True
 
     def _batch_caches(self) -> list[Cache]:
         assert self._cache is not None
@@ -359,6 +373,10 @@ class KumoTabular(ICLModel):
             columns={"numerical": columns},
             numerical=out,
         )
+
+
+# PyTorch 2.14 requires an upper bound for dynamic sizes with a lower bound.
+_MAX_ROWS = 2**31 - 1
 
 
 class _KumoTabular(torch.nn.Module):

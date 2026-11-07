@@ -431,6 +431,42 @@ def test_compile(
     assert counter.frame_count == 1
 
 
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+def test_compile_refit(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_, **__: 8)
+    model = _build("classification", "small").to(device)
+    x, y = _compile_data(11, device)
+    counter = CompileCounter()
+    model.compile(backend=counter)
+    query = x(191, 200)
+
+    # One-row contexts predict eagerly.
+    for num_context in (40, 1, 130):
+        # Seeding keeps the fitted column and class order across refits.
+        model.fit(
+            x(0, num_context),
+            y[:num_context],
+            num_estimators=4,
+            generator=torch.Generator(device).manual_seed(0),
+        )
+        eager = copy.deepcopy(model)
+        stance = "default" if counter.frame_count == 0 else "fail_on_recompile"
+        with torch.compiler.set_stance(stance):
+            actual = model.predict(query)
+        expected = eager.predict(query)
+        torch.testing.assert_close(
+            actual=actual.numerical,
+            expected=expected.numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
 @onlyCUDA
 @pytest.mark.usefixtures("compilation")
 def test_compile_inductor() -> None:
