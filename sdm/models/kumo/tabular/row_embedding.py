@@ -4,6 +4,7 @@
 # ruff: noqa: D101, D102
 
 import math
+from collections.abc import Iterator
 from typing import Any, cast
 
 import torch
@@ -232,19 +233,52 @@ class RowEmbedding(torch.nn.Module):
 
         return self.norm(buffer if buffer is not None else x).flatten(-2)
 
-    def max_query_rows(self, cache: Cache, device: torch.device) -> int:
+    def max_query_rows(
+        self,
+        cache: Cache,
+        device: torch.device,
+        num_columns: int | None = None,
+    ) -> int:
         # Query rows that row attention runs without splitting its batch of
-        # estimators per row; cached keys have shape [..., C, I, H, D].
+        # estimators per row, for the fitted or `num_columns` columns; cached
+        # keys have shape [..., C, I, H, D].
         key = cast(KVCacheEntry, cache["row_embedding.col_block0"]).key
-        dtype = (
-            torch.get_autocast_dtype(device.type)
-            if torch.is_autocast_enabled(device.type)
-            else self.readout_token.dtype
-        )
         row_block = cast(KumoTabularTransformerBlock, self.row_blocks[0])
         limit = row_block.auto_batch_size_limit(
             device=device,
-            element_size=dtype.itemsize,
-            query_length=self.readout_token.size(-2) + key.size(-4),
+            element_size=self._element_size(device),
+            query_length=self.readout_token.size(-2)
+            + (key.size(-4) if num_columns is None else num_columns),
         )
         return limit // math.prod(key.size()[:-4])
+
+    def max_columns(
+        self,
+        cache: Cache,
+        device: torch.device,
+        num_rows: int,
+    ) -> int:
+        # Columns that column attention runs without splitting its batch of
+        # estimators per column, for `num_rows` query rows.
+        key = cast(KVCacheEntry, cache["row_embedding.col_block0"]).key
+        col_block = cast(InducedTransformerBlock, self.col_blocks[0])
+        limit = col_block.output_block.auto_batch_size_limit(
+            device=device,
+            element_size=self._element_size(device),
+            query_length=num_rows,
+            key_value_length=key.size(-3),
+        )
+        return limit // math.prod(key.size()[:-4])
+
+    def _element_size(self, device: torch.device) -> int:
+        if torch.is_autocast_enabled(device.type):
+            return torch.get_autocast_dtype(device.type).itemsize
+        return self.readout_token.element_size()
+
+    def column_dims(self, cache: Cache) -> Iterator[tuple[Tensor, int]]:
+        yield from self.cell_embedding.column_dims(cache)
+        # Cached column-attention keys and values of shape [..., C, I, H, D].
+        for i in range(len(self.col_blocks)):
+            key = f"row_embedding.col_block{i}"
+            for tensor in cast(KVCacheEntry, cache[key]):
+                yield tensor, tensor.dim() - 4

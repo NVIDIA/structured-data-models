@@ -467,6 +467,58 @@ def test_compile_refit(
     assert counter.frame_count == 1
 
 
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+def test_compile_columns(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_, **__: 8)
+    model = _build("classification", "small").to(device)
+    counter = CompileCounter()
+    model.compile(backend=counter)
+    # More than 10 classes run through ECOC.
+    y = TableTensor.from_pandas(
+        pd.DataFrame({"y": np.arange(40) % 11}),
+        stypes={"y": Stype.categorical},
+        device=device,
+    )
+
+    # Refits differ in the number and names of columns.
+    for num_columns in (17, 5, 2, 100):
+        x = torch.randn(49, num_columns, device=device)
+        if num_columns == 5:
+            x[:, 1] = 1.0  # Dropped as constant.
+        x = TableTensor.from_tensor(
+            x, columns=[f"{num_columns}_{i}" for i in range(num_columns)]
+        )
+        # Seeding keeps the class order across refits.
+        model.fit(
+            x[:40],
+            y,
+            num_estimators=4,
+            generator=torch.Generator(device).manual_seed(0),
+        )
+        eager = copy.deepcopy(model)
+        stance = "default" if counter.frame_count == 0 else "fail_on_recompile"
+        with torch.compiler.set_stance(stance):
+            actual = model.predict(x[40:])
+        expected = eager.predict(x[40:])
+        assert actual.columns == expected.columns
+        torch.testing.assert_close(
+            actual=actual.numerical,
+            expected=expected.numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+    with pytest.raises(ValueError, match="named"):
+        model.predict(
+            TableTensor(columns={Stype.numerical: None}, numerical=x.numerical)
+        )
+
+
 @onlyCUDA
 @pytest.mark.usefixtures("compilation")
 def test_compile_inductor() -> None:

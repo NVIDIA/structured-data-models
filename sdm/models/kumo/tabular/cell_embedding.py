@@ -3,6 +3,7 @@
 
 # ruff: noqa: D101, D102
 
+from collections.abc import Iterator
 from typing import Literal, cast
 
 import torch
@@ -76,6 +77,10 @@ class CellEmbedding(TabFMCellEmbedding):
             out=out,
             missing=missing,
         )
+
+    def column_dims(self, cache: Cache) -> Iterator[tuple[Tensor, int]]:
+        # Cached imputation means of shape [..., 1, C].
+        yield cast(Tensor, cache["cell_impute_mean"]), -1
 
     def _forward(  # type: ignore
         self,

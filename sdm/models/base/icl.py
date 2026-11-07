@@ -396,6 +396,8 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        if isinstance(x, TableTensor) and None in x.columns.values():
+            raise ValueError("Expected query columns to be named")
         if (
             self._compiled_predict is None
             or self._cache is None
@@ -800,7 +802,11 @@ class ICLModel(Model):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context.columns != x_query.columns:
+        # Compiled prediction unnames query columns that match the fitted ones.
+        if any(
+            names is not None and names != x_context.columns[stype]
+            for stype, names in x_query.columns.items()
+        ):
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )
