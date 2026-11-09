@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import warnings
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
@@ -21,6 +22,17 @@ class SelectColumns(EnsembleProcessor):
             member the next consecutive chunk, wrapping to the first column
             after the last. For five columns and ``max_columns=2``, members
             0, 1, and 2 receive columns (0, 1), (2, 3), and (4, 0).
+
+    .. warning::
+        Each ensemble member keeps at most ``max_columns`` columns per
+        semantic type. If a table has more columns than
+        ``num_estimators * max_columns``, some columns are never seen by any
+        member, and this processor emits a warning. Below that bound, coverage
+        can still have gaps when columns are chosen by shuffling: with
+        ``"first"`` after :class:`~sdm.processing.ShuffleColumns`, a column is
+        seen by about ``1 - (1 - max_columns / n) ** num_estimators`` of the
+        runs for ``n`` columns. Increase ``num_estimators`` or reduce the
+        number of columns before the model.
     """
 
     handles_stypes = tuple(Stype)
@@ -41,6 +53,7 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        self._warn_if_columns_unseen(ensemble_table)
         if all(
             group.size(-1) <= self.max_columns
             for group in ensemble_table._iter_groups()
@@ -106,6 +119,28 @@ class SelectColumns(EnsembleProcessor):
             tables=tables,
             member_table_ids=range(len(tables)),
         )
+
+    def _warn_if_columns_unseen(self, ensemble_table: EnsembleTable) -> None:
+        widths: dict[str, int] = {}
+        for group in ensemble_table._iter_groups():
+            for stype, column_names in group.column_groups:
+                key = str(getattr(stype, "value", stype))
+                widths[key] = max(widths.get(key, 0), len(column_names))
+        capacity = len(ensemble_table) * self.max_columns
+        for name, width in widths.items():
+            if width > capacity:
+                warnings.warn(
+                    f"{self.__class__.__name__} keeps at most "
+                    f"{self.max_columns} {name} columns per estimator, but "
+                    f"the table has {width} and there are "
+                    f"{len(ensemble_table)} estimators. At least "
+                    f"{width - capacity} columns are never seen by any "
+                    f"estimator. Increase the number of estimators to at "
+                    f"least {-(-width // self.max_columns)}, or reduce the "
+                    f"number of columns before the model.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
     def __repr__(self, *, indent: int = 0) -> str:
         arguments = [f"max_columns={self.max_columns!r}"]

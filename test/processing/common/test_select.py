@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import warnings
+
 import pytest
 import torch
 
@@ -46,3 +48,28 @@ def test_select_columns_round_robin_routes_members() -> None:
             columns=columns,
         )
         assert out[member_id].equal(expected)
+
+
+def test_select_columns_warns_when_columns_cannot_be_covered() -> None:
+    table = TableTensor(
+        numerical=torch.arange(10, dtype=torch.float).view(2, 5),
+    )
+    select = SelectColumns(max_columns=2, method="first")
+
+    with pytest.warns(RuntimeWarning, match="never seen"):
+        select.fit_transform_ensemble(
+            EnsembleTable.from_table(table, num_members=2)
+        )
+
+
+def test_select_columns_does_not_warn_when_columns_can_be_covered() -> None:
+    table = TableTensor(
+        numerical=torch.arange(10, dtype=torch.float).view(2, 5),
+    )
+    select = SelectColumns(max_columns=2, method="first")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        select.fit_transform_ensemble(
+            EnsembleTable.from_table(table, num_members=3)
+        )
