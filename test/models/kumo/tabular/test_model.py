@@ -3,6 +3,7 @@
 
 from typing import Literal
 
+import pandas as pd
 import pytest
 import torch
 from torch._dynamo.testing import CompileCounter
@@ -449,6 +450,30 @@ def test_compile_predict_query_rows(
         torch.testing.assert_close(
             actual=actual.numerical,
             expected=expected.numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
+def test_compile_predict_categories() -> None:
+    def table(values: list[str]) -> TableTensor:
+        frame = pd.DataFrame({"n": range(len(values)), "c": values})
+        stypes = {"n": Stype.numerical, "c": Stype.categorical}
+        return TableTensor.from_pandas(frame, stypes=stypes)
+
+    model = _build("regression", "small")
+    model.fit(table(["x", "y", "x", "y"]), torch.randn(4, 1))
+
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter)
+    # Every query has its own categories; "z" is not a fitted one.
+    for values in (["y", "x"], ["x", "z", "y"], ["z", "z"]):
+        query = table(values)
+        torch.testing.assert_close(
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
             atol=1e-4,
             rtol=1e-4,
         )

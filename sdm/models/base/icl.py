@@ -503,6 +503,8 @@ class ICLModel(Model):
         independently of each other and that the model implements
         :meth:`_max_query_rows`. Empty queries and queries with related
         tables, callbacks or more than two dimensions are predicted eagerly.
+        So are categorical queries unless the fitted recipe maps their
+        categories to the fitted ones.
         """
 
         def predict_rows(
@@ -519,6 +521,18 @@ class ICLModel(Model):
                 or callbacks
             ):
                 return self.predict(x, related_tables, callbacks=callbacks)
+
+            if isinstance(x, TableTensor) and x.categorical.size(-1) > 0:
+                # Fitted categories keep category sizes the same across
+                # queries.
+                execution = cast(
+                    RecipeExecution,
+                    self._cache["recipe_execution"],
+                )
+                aligned = execution._align_categories(x)
+                if aligned is None:
+                    return self.predict(x)
+                x = aligned
 
             # Marks require at least two rows per chunk.
             max_rows = self._max_query_rows(x.device)

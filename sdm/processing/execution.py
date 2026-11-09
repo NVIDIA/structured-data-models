@@ -300,6 +300,30 @@ class RecipeExecution:
 
         return tuple(members)
 
+    def _align_categories(self, x: TableTensor) -> TableTensor | None:
+        """Map query categories to the ones fitted by ``recipe.features``.
+
+        Returns ``None`` unless the features hold an
+        :class:`~sdm.processing.AlignCategories` with one list of categories
+        for all members and as many columns as ``x``. It must be the first
+        processor to use the categorical columns.
+        """
+        align = next(
+            (
+                module
+                for module in self.recipe.features.modules()
+                if isinstance(module, sp.AlignCategories)
+            ),
+            None,
+        )
+        if (
+            align is None
+            or len(align._categories) != 1
+            or len(align._categories[0]) != x.categorical.size(-1)
+        ):
+            return None
+        return align.transform(x)
+
     def inverse_transform_target(
         self,
         outputs: Sequence[TableTensor],

@@ -179,9 +179,14 @@ class KumoTabular(ICLModel):
         of any non-zero number of rows; a new :meth:`fit` compiles a new
         graph, as do text columns of fewer than two bytes in total. Query
         rows must be predicted independently of each other.
-        Empty queries, queries with related tables, callbacks or more than
-        two dimensions, and queries of tables with too many columns for one
-        column attention call are predicted eagerly.
+        Query categories are mapped to the ones seen in :meth:`fit` by the
+        recipe's :class:`~sdm.processing.AlignCategories`, which must be the
+        first processor to use the categorical features and share its
+        categories across estimators, as in the default recipe. Otherwise,
+        categorical queries are predicted eagerly, as are empty queries,
+        queries with related tables, callbacks or more than two dimensions,
+        and queries of tables with too many columns for one column attention
+        call.
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`, which
