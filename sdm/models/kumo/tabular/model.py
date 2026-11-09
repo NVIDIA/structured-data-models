@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -170,6 +170,51 @@ class KumoTabular(ICLModel):
             coverage possible.
         """  # noqa: D212
         return default_recipe()
+
+    def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
+        r"""Compile :meth:`predict` using :func:`torch.compile`.
+
+        By default (``dynamic=False``), the returned function runs one
+        compiled graph per :meth:`fit`, device and precision for 2-D queries
+        of any non-zero number of rows; a new :meth:`fit` compiles a new
+        graph, as do text columns of fewer than two bytes in total. Query
+        rows must be predicted independently of each other.
+        Empty queries, queries with related tables, callbacks or more than
+        two dimensions, and queries of tables with too many columns for one
+        column attention call are predicted eagerly.
+
+        Args:
+            kwargs: Keyword arguments passed to :func:`torch.compile`, which
+                default to ``dynamic=False`` and ``fullgraph=True``. Any other
+                ``dynamic`` value compiles :meth:`predict` as is.
+
+        Returns:
+            The compiled function, which is called like :meth:`predict`.
+            :meth:`predict` itself is not compiled.
+        """
+        kwargs = {"dynamic": False, "fullgraph": True} | kwargs
+        compiled = super()._compile_predict(**kwargs)
+        if kwargs["dynamic"] is not False:
+            return compiled
+        return self._with_dynamic_rows(compiled)
+
+    def _max_query_rows(self, device: torch.device) -> int:
+        assert self._cache is not None
+        regression = cast(Cache, self._cache[0])["classes"] is None
+        task = Task.regression if regression else Task.classification
+        row_embedding = cast(_KumoTabular, self.models[task]).row_embedding
+        caches = (
+            cast(Cache, self._cache[i])
+            for i in range(cast(int, self._cache["num_batches"]))
+        )
+        return min(
+            row_embedding.max_query_rows(
+                # ECOC nests the model cache when classes exceed capacity.
+                cache=cast(Cache, cache.get("ecoc_model", cache)),
+                device=device,
+            )
+            for cache in caches
+        )
 
     def _load_from_pretrained(
         self,

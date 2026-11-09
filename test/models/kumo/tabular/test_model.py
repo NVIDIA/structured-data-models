@@ -10,7 +10,7 @@ from torch._dynamo.testing import CompileCounter
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import KumoTabular
-from sdm.testing import onlyMPS
+from sdm.testing import onlyMPS, withCUDA
 
 
 def _build(
@@ -401,6 +401,54 @@ def test_compile_predict_static_shapes(
         torch.testing.assert_close(
             actual=predict(x[40:]).numerical,
             expected=model.predict(x[40:]).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+# More than 10 classes run through ECOC.
+@pytest.mark.parametrize("num_classes", [0, 11])
+def test_compile_predict_query_rows(
+    device: torch.device,
+    num_classes: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(KumoTabular, "_max_query_rows", lambda *_: 8)
+    task = "classification" if num_classes > 0 else "regression"
+    model = _build(task, "small").to(device)
+    # The size of the text storage differs from query to query.
+    text = StringTensor.from_list([["a" * i] for i in range(49)])
+    x = torch.cat(
+        [
+            TableTensor.from_tensor(torch.randn(49, 4)),
+            TableTensor.from_tensor(text, columns=["text"]),
+        ],
+        dim=-1,
+    ).to(device)
+    y = torch.randn(40, 1, device=device)
+    if num_classes > 0:
+        y = TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor.from_tensor(
+                torch.arange(40, device=device)
+                .remainder(num_classes)
+                .unsqueeze(-1)
+            ),
+        )
+    # Four estimators run every numerical transform of the default recipe.
+    model.fit(x[:40], y, num_estimators=4)
+
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter)
+    for size in (3, 1, 9):
+        actual = predict(x[-size:])
+        expected = model.predict(x[-size:])
+        torch.testing.assert_close(
+            actual=actual.numerical,
+            expected=expected.numerical,
             atol=1e-4,
             rtol=1e-4,
         )

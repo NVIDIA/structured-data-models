@@ -28,7 +28,7 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
-from sdm.tensor.table import TableSchema
+from sdm.tensor.table import TableSchema, _mark_dynamic_rows
 
 
 class ICLModel(Model):
@@ -491,6 +491,61 @@ class ICLModel(Model):
         """
         kwargs = {"isolate_recompiles": True} | kwargs
         return torch.compile(self.predict, **kwargs)
+
+    def _with_dynamic_rows(
+        self,
+        predict: Callable[..., TableTensor],
+    ) -> Callable[..., TableTensor]:
+        r"""Run one graph of a compiled :meth:`predict` for any query rows.
+
+        Wraps a ``predict`` compiled with ``dynamic=False`` for 2-D queries of
+        any non-zero number of rows. Requires that query rows are predicted
+        independently of each other and that the model implements
+        :meth:`_max_query_rows`. Empty queries and queries with related
+        tables, callbacks or more than two dimensions are predicted eagerly.
+        """
+
+        def predict_rows(
+            x: Tensor | TableTensor,  # [..., R, D]
+            related_tables: RelatedTables | None = None,
+            *,
+            callbacks: Sequence[Callback] | None = None,
+        ) -> TableTensor:  # Recipe-defined output shape.
+            if (
+                self._cache is None
+                or x.dim() != 2
+                or x.size(-2) == 0
+                or related_tables is not None
+                or callbacks
+            ):
+                return self.predict(x, related_tables, callbacks=callbacks)
+
+            # Marks require at least two rows per chunk.
+            max_rows = self._max_query_rows(x.device)
+            if max_rows < 2:
+                return self.predict(x)
+
+            num_rows = x.size(-2)
+            outs: list[Tensor] = []
+            for start in range(0, num_rows, max_rows):
+                end = min(start + max_rows, num_rows)
+                # Gather every chunk, so all chunks share one layout, and
+                # repeat the row of single-row chunks: 1-row inputs would
+                # specialize.
+                index = torch.arange(
+                    start, max(end, start + 2), device=x.device
+                )
+                chunk = x.index_select(-2, index.clamp_(max=end - 1))
+                _mark_dynamic_rows(chunk, min_rows=2, max_rows=max_rows)
+                outs.append(predict(chunk)[..., : end - start, :])
+            out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=-2)
+            return cast(TableTensor, out)
+
+        return predict_rows
+
+    def _max_query_rows(self, device: torch.device) -> int:
+        r"""The query rows the fitted model predicts without size branches."""
+        raise NotImplementedError
 
     # Abstract Methods ########################################################
 

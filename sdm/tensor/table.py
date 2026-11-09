@@ -2153,3 +2153,25 @@ def _align_like(inp: TableTensor, ref: TableTensor) -> TableTensor:
         columns=cast(Mapping[StypeLike, Sequence[str]], ref._columns),
         **blocks,
     )
+
+
+def _mark_dynamic_rows(inp: Tensor, min_rows: int, max_rows: int) -> None:
+    """Mark the rows of a tensor or table as dynamic for ``torch.compile``."""
+    tensors = [inp]
+    if isinstance(inp, TableTensor):
+        # Marks reach inner tensors of the same rank only; the text layout
+        # has one more dimension.
+        text = inp.text
+        tensors.append(text._layout)
+        # The text storage varies in size with the rows; fewer than two
+        # elements specialize.
+        for storage in (text._data, text._offset, text._valid):
+            if storage is not None:
+                torch._dynamo.maybe_mark_dynamic(storage, 0)
+    for tensor in tensors:
+        torch._dynamo.mark_dynamic(
+            tensor,
+            inp.dim() - 2,
+            min=min_rows,
+            max=max_rows,
+        )
