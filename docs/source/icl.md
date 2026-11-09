@@ -125,7 +125,7 @@ model(
 
 ### Wide tables
 
-The default recipes of {py:class}`~sdm.models.KumoTabular` and {py:class}`~sdm.models.TabFM` shuffle the columns with {py:class}`~sdm.processing.common.ShuffleColumns` and then keep the first 500 columns per estimator with {py:class}`~sdm.processing.SelectColumns`.
+The default recipes of tabular models shuffle the columns with {py:class}`~sdm.processing.common.ShuffleColumns` and then keep the first 500 columns per estimator with {py:class}`~sdm.processing.SelectColumns`.
 Each estimator therefore sees at most 500 columns per semantic type, counted after preprocessing.
 Tables with up to 500 columns are not affected.
 
