@@ -44,7 +44,7 @@ Available model implementations are listed in [`sdm.models`](api/models).
 Each model supports direct one-shot {py:meth}`~sdm.models.ICLModel.forward` calls and cached {py:meth}`~sdm.models.ICLModel.fit`/{py:meth}`~sdm.models.ICLModel.predict` execution for efficient context reuse:
 
 ```python
-model = sdm.models.TabICLv2(device="cuda")
+model = sdm.models.KumoTabular(device="cuda")
 
 out = model(
     x_context=table[:300].drop_columns("target"),

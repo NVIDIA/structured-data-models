@@ -78,7 +78,7 @@ table = sdm.TableTensor.from_pandas(
 )
 
 # Access to a variety of pre-trained structured data models:
-model = sdm.models.TabICLv2(device="cuda")
+model = sdm.models.KumoTabular(device="cuda")
 
 # Default in-context learning forward pass:
 model(
