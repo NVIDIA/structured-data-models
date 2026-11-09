@@ -3,7 +3,7 @@
 
 import abc
 import copy
-from collections.abc import Hashable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -476,6 +476,21 @@ class ICLModel(Model):
             inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
+
+    def compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
+        r"""Compile :meth:`predict` using :func:`torch.compile`.
+
+        Args:
+            kwargs: Keyword arguments passed to :func:`torch.compile`.
+                ``isolate_recompiles`` defaults to ``True``, since all models
+                would otherwise share one recompile limit.
+
+        Returns:
+            The compiled function, which is called like :meth:`predict`.
+            :meth:`predict` itself is not compiled.
+        """
+        kwargs = {"isolate_recompiles": True} | kwargs
+        return torch.compile(self.predict, **kwargs)
 
     # Abstract Methods ########################################################
 
