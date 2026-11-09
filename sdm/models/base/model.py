@@ -145,6 +145,12 @@ class _Prefetcher(Generic[T]):
     def __enter__(self) -> Self:
         if self._transfer_stream is not None:
             self._compute_stream = torch.cuda.current_stream(self._device)
+        # Work around PyTorch 2.14 Inductor's unbound `default_stream` for
+        # an initial side-stream copy.
+        if (
+            self._transfer_stream is not None
+            and not torch.compiler.is_compiling()
+        ):
             try:
                 self._next = _transfer(
                     item=self._items[0],
