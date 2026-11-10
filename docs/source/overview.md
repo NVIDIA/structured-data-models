@@ -41,7 +41,7 @@ table = sdm.TableTensor.from_pandas(
 
 Models then consume these tensor containers through a shared in-context learning interface.
 Available model implementations are listed in [`sdm.models`](api/models).
-Each model supports direct one-shot {py:meth}`~sdm.models.ICLModel.forward` calls and cached {py:meth}`~sdm.models.ICLModel.fit`/{py:meth}`~sdm.models.ICLModel.predict` execution for efficient context reuse:
+Each {py:class}`~sdm.models.ICLModel` supports direct one-shot {py:meth}`~sdm.models.ICLModel.forward` calls and cached {py:meth}`~sdm.models.ICLModel.fit`/{py:meth}`~sdm.models.ICLModel.predict` execution for efficient context reuse:
 
 ```python
 model = sdm.models.KumoTabular(device="cuda")

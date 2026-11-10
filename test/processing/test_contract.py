@@ -112,6 +112,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Callable(lambda table: table)),
     ProcessorCase(sp.DropStypes(Stype.id)),
     ProcessorCase(sp.ToNumerical()),
+    ProcessorCase(sp.ToOneHot()),
     ProcessorCase(sp.ShuffleColumns()),
     ProcessorCase(sp.SelectColumns(2)),
     ProcessorCase(sp.TFIDF(ngram_range=(2, 2))),

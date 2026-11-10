@@ -9,11 +9,10 @@ from sdm.processing import Processor
 
 
 class ClipQuantiles(Processor):
-    """Clamp feature columns to fitted quantile bounds.
+    """Clamp each numerical column to its fitted quantile bounds.
 
     Values outside the fitted bounds are discarded, so this processor is not
-    invertible. Quantile transform bounds are fitted independently for each
-    feature column.
+    invertible. Bounds are fitted independently for each column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
@@ -65,3 +64,15 @@ class ClipQuantiles(Processor):
             max=self.upper_bound,
         )
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        arguments = []
+        if self.q_low != 0.0:
+            arguments.append(f"q_low={self.q_low!r}")
+        if self.q_high != 1.0:
+            arguments.append(f"q_high={self.q_high!r}")
+        if not arguments:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
+        )

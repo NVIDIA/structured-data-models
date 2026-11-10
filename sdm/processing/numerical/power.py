@@ -216,14 +216,14 @@ def _optimize_lambdas(
 
 
 class PowerTransform(Processor, InvertibleMixin):
-    """Apply a feature-wise Yeo-Johnson power transform.
+    """Apply a Yeo-Johnson power transform to each numerical column.
 
     NaN and infinite values are left out of the fitted statistics. NaN values
     are preserved during the transform.
 
     Args:
-        standardize: If ``True``, zero-mean and unit-variance the transformed
-            features using statistics fitted after the power transform.
+        standardize: If ``True``, standardize each transformed numerical
+            column using statistics fitted after the power transform.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -333,4 +333,12 @@ class PowerTransform(Processor, InvertibleMixin):
                 torch.fmin(inverse, self.max),
                 inverse,
             )
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.standardize:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"standardize={self.standardize!r})"
         )

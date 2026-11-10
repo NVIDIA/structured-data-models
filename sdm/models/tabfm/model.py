@@ -106,7 +106,13 @@ class TabFM(ICLModel):
 
     @classmethod
     def default_recipe(cls) -> Recipe:
-        r""":meta private:"""  # noqa: D415
+        r"""
+        .. warning::
+            Each estimator uses at most 500 columns. For wide tables, some
+            columns may remain unused across the ensemble.
+            Use at least ``ceil(num_columns / 500)`` estimators to make full
+            coverage possible.
+        """  # noqa: D212
         return default_recipe()
 
     def _load_from_pretrained(
