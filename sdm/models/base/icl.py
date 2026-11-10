@@ -477,7 +477,7 @@ class ICLModel(Model):
         ):
             return recipe_execution.transform_output(outs)
 
-    def compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
+    def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
         r"""Compile :meth:`predict` using :func:`torch.compile`.
 
         Args:
