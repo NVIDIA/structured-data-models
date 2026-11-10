@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib
+import inspect
 from datetime import date
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
@@ -45,7 +46,10 @@ html_theme_options = {
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 autosummary_generate = True
-autosummary_context = {"import_module": importlib.import_module}
+autosummary_context = {
+    "import_module": importlib.import_module,
+    "getdoc": inspect.getdoc,
+}
 autodoc_member_order = "bysource"
 autodoc_use_legacy_class_based = True
 AttributeDocumenter.member_order = 45
