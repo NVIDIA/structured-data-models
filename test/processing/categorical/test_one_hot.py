@@ -39,11 +39,11 @@ def test_one_hot(device: torch.device, batch_shape: tuple[int, ...]) -> None:
     ).expand(*batch_shape, 3, 5)
     torch.testing.assert_close(out.numerical, expected)
     assert out.numerical_columns == (
-        "color__0",
-        "color__1",
-        "size__0",
-        "size__1",
-        "size__2",
+        "color_0",
+        "color_1",
+        "size_0",
+        "size_1",
+        "size_2",
     )
     assert out.categorical_columns == ()
 
