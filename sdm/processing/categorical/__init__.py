@@ -6,13 +6,13 @@
 from sdm.processing.categorical.align import AlignCategories
 from sdm.processing.categorical.shuffle import ShuffleCategories
 from sdm.processing.categorical.impute import ImputeMode
+from sdm.processing.categorical.one_hot import ToOneHot
 from sdm.processing.categorical.count import AddCategoryCounts
-from sdm.processing.categorical.one_hot import OneHotEncode
 
 __all__ = [
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
+    "ToOneHot",
     "AddCategoryCounts",
-    "OneHotEncode",
 ]
