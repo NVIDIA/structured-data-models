@@ -68,7 +68,7 @@ class SelectColumns(EnsembleProcessor):
             groups = []
             for group in ensemble_table._iter_groups():
                 columns: Mapping[StypeLike, Sequence[str]] = {
-                    stype: column_names[: self.max_columns]
+                    stype.value: column_names[: self.max_columns]
                     for stype, column_names in group.column_groups
                 }
                 blocks = {
@@ -90,7 +90,7 @@ class SelectColumns(EnsembleProcessor):
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.
                 if num_columns == 0:
-                    columns[stype] = column_names
+                    columns[stype.value] = column_names
                     blocks[stype] = block
                     continue
                 chunk_size = min(self.max_columns, num_columns)
@@ -99,7 +99,7 @@ class SelectColumns(EnsembleProcessor):
                 wrap_count = chunk_size - first_count
                 # Consecutive chunk from ``start``, wrapping past the last
                 # column back to the first.
-                columns[stype] = (
+                columns[stype.value] = (
                     column_names[start : start + first_count]
                     + column_names[:wrap_count]
                 )

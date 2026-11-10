@@ -151,7 +151,7 @@ class AddCalendarFields(Processor):
             )
 
         out_table = TableTensor(
-            columns={Stype.numerical: columns},
+            columns={Stype.numerical.value: columns},
             numerical=out,
         )
 
