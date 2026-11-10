@@ -137,6 +137,24 @@ with torch.amp.autocast("cuda", dtype=torch.float16):
 Preprocessing and postprocessing routines remain outside the model’s autocast policy.
 They will run with the dtypes of the model inputs.
 
+## Context Selection
+
+The context determines which labeled examples the model can use for prediction.
+Its size and composition affect accuracy, memory use, and latency.
+Using all available training rows as context is generally preferred, but may exceed your memory or latency budget.
+When a smaller context is needed, useful selection strategies include:
+
+- **Random sampling:** Use a representative subset as a baseline.
+- **Stratified sampling:** Preserve class proportions or ensure rare classes are represented.
+  If sampling changes class proportions, evaluate probability calibration on data with the expected deployment distribution.
+- **Recency windows:** For changing data distributions, select examples from the period most relevant to the queries.
+- **Retrieval:** Select relevant examples for each query, such as nearest neighbors.
+  Query-specific contexts reduce opportunities to reuse cached context state.
+- **Context ensembling:** Predict from several context samples and combine their predictions.
+  This reduces the size of each context but increases total inference work.
+
+Choose the strategy and context size using validation data, and include only labels that would be available at prediction time.
+
 ## Embeddings
 
 Intermediate embeddings of an {py:class}`~sdm.models.ICLModel` can be captured by attaching a standard PyTorch hook at any child module, *e.g.*, via {py:meth}`torch.nn.Module.register_forward_pre_hook`.

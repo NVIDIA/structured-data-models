@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, cast
 
 import torch
@@ -127,6 +127,30 @@ class TabICLv2(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+
+    paper: ClassVar[str] = "https://arxiv.org/abs/2602.11139"
+    source: ClassVar[str] = "https://github.com/soda-inria/tabicl"
+    release_date: ClassVar[str] = "2026-02-12"
+    parameter_count: ClassVar[str] = "27.55M-28.54M"
+    code_license: ClassVar[tuple[str, str]] = (
+        "BSD-3-Clause",
+        "https://github.com/soda-inria/tabicl/blob/main/LICENSE",
+    )
+    weights_license: ClassVar[tuple[str, str]] = (
+        "BSD-3-Clause",
+        "https://huggingface.co/jingang/TabICL",
+    )
+    metadata: ClassVar[Mapping[str, str]] = {
+        "Classification Output": (
+            "Class probabilities; hierarchical classification "
+            "for more than 10 classes"
+        ),
+        "Regression Output": (
+            '999 quantiles named ``"q001"`` through ``"q999"``'
+        ),
+        "Missing Values": "Mean imputation in the default recipe",
+        "Pretraining Scope": "Up to 60,000 rows and 100 columns",
+    }
 
     def __init__(
         self,

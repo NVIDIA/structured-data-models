@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import partial
 from typing import Any, ClassVar, cast
 
@@ -61,6 +61,27 @@ class KumoAnomaly(Model):
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
+
+    paper: ClassVar[str] = "https://arxiv.org/abs/2610.12754"
+    source: ClassVar[str] = "https://github.com/NVIDIA/Kumo-TS"
+    release_date: ClassVar[str] = "2026-06-29"
+    parameter_count: ClassVar[str] = "2.44M"
+    code_license: ClassVar[tuple[str, str]] = (
+        "Apache-2.0",
+        "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
+    )
+    weights_license: ClassVar[tuple[str, str]] = (
+        "Apache-2.0",
+        "https://huggingface.co/nvidia/Kumo-Anomaly",
+    )
+    metadata: ClassVar[Mapping[str, str]] = {
+        "Output": (
+            'Reconstruction scores named ``"mae"`` and boolean anomaly '
+            'labels named ``"scs"`` and ``"macs"`` per time step'
+        ),
+        "Missing Values": "Mean imputation in the default recipe",
+        "Pretraining Scope": "Up to 40 columns",
+    }
 
     def __init__(
         self,

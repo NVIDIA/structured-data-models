@@ -127,6 +127,7 @@ def api_names(module_name: str) -> list[str]:
 def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
     renderer = generate.AutosummaryRenderer(app)
     source[0] = renderer.env.from_string(source[0]).render(
+        **app.config.autosummary_context,
         api_names=api_names,
     )
 
@@ -144,6 +145,7 @@ def _patch_autosummary_jinja(app: Sphinx) -> None:
                 errors="ignore",
             )
             source = renderer.env.from_string(source).render(
+                **app.config.autosummary_context,
                 api_names=api_names,
             )
             documented.extend(
