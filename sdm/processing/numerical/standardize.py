@@ -15,7 +15,7 @@ from sdm.processing.numerical._stats import (
 
 
 class Standardize(Processor, InvertibleMixin):
-    """Center and scale each feature column.
+    """Center and scale each numerical column.
 
     Constant columns use a unit scale to keep the transform finite and
     invertible. NaN and infinite values are ignored when fitting statistics
