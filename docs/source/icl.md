@@ -171,7 +171,6 @@ handle = head.register_forward_pre_hook(_embedding)
 
 Such embeddings can be used for downstream analysis, such as clustering, retrieval, or similarity search.
 
-
 (relational-context)=
 
 ## Relational Context
