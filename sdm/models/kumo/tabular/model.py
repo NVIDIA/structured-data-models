@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -92,6 +92,31 @@ class KumoTabular(ICLModel):
 
     For regression tasks, :class:`KumoTabular` predicts 999 quantiles named
     ``"q001"`` through ``"q999"``.
+
+    .. list-table::
+      :header-rows: 1
+
+      * - Property
+        - Value
+      * - Release date
+        - 2026-09-28
+      * - Parameter count
+        - 27.46M to 215.68M, depending on model size.
+      * - Classification
+        - Class probabilities; up to 10 classes per pass, with
+          error-correcting output codes (ECOC) for more classes.
+      * - Regression
+        - 999 quantiles named ``"q001"`` through ``"q999"``.
+      * - Missing values
+        - Handled natively; no imputation required.
+      * - Pretraining scope
+        - Up to 60,000 context rows and 100 columns; these are not hard
+          inference limits.
+      * - Code license
+        - `Apache-2.0
+          <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__.
+      * - Weights license
+        - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Tabular/>`__.
 
     .. rubric:: Model sizes
 
@@ -185,6 +210,19 @@ class KumoTabular(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+
+    metadata: ClassVar[Mapping[str, str]] = {
+        "Release Date": "2026-09-28",
+        "Parameter Count": "27.46M-215.68M",
+        "Classification Output": "Class probabilities; ECOC for more than 10 classes",
+        "Regression": '999 quantiles named ``"q001"`` through ``"q999"``',
+        "Missing Values": "Handled natively; no imputation required.",
+        "Pretraining Scope": "Up to 60,000 context rows and 100 columns",
+        "Code License": "Apache-2.0",
+        "Code License Link": "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
+        "Weight License": "OpenMDW-1.1",
+        "Weight License Link": "https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE",
+    }
 
     def __init__(
         self,
