@@ -10,6 +10,7 @@ from sdm.processing.categorical._categorical import (
     _check_categorical_codes,
     _check_categories,
 )
+from sdm.tensor.categorical import _iter_categories
 
 
 class ImputeMode(Processor):
@@ -105,6 +106,6 @@ class ImputeMode(Processor):
         )
         categorical = CategoricalTensor(
             code=code,
-            categories=table.categorical.categories,
+            categories=tuple(_iter_categories(table.categorical)),
         )
         return table.replace_blocks(categorical=categorical)
