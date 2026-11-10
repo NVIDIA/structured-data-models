@@ -207,7 +207,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.TabFM"><code class="docutils literal notranslate"><span class="pre">TabFM</span></code></a></li>
-<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
+<li><a class="reference internal" href="#model-details">Model Details</a></li>
 <li><a class="reference internal" href="#default-recipe">Default Recipe</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -287,11 +287,23 @@ v1.0</a> without showing the interactive license prompt.</p></li>
 </dl>
 </dd></dl>
 
-<section id="capabilities">
-<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<section id="model-details">
+<h2>Model Details<a class="headerlink" href="#model-details" title="Link to this heading">#</a></h2>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><strong>Release Date</strong></p></td>
+<td><p>2026-06-30</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Parameter Count</strong></p></td>
+<td><p>1.64B-1.65B</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Code License</strong></p></td>
+<td><p><a class="reference external" href="https://github.com/google-research/tabfm/blob/main/LICENSE">Apache-2.0</a></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Weights License</strong></p></td>
+<td><p><a class="reference external" href="https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE">TabFM Non-Commercial v1.0</a></p></td>
+</tr>
 <tr class="row-odd"><td><p><strong>Supported Input Semantic Types</strong></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
@@ -309,6 +321,18 @@ v1.0</a> without showing the interactive license prompt.</p></li>
 </tr>
 <tr class="row-even"><td><p><strong>Related Table Support</strong></p></td>
 <td><p>❌</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Classification Output</strong></p></td>
+<td><p>Class probabilities; up to 10 classes</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Regression Output</strong></p></td>
+<td><p>Point predictions named <code class="docutils literal notranslate"><span class="pre">&quot;pred&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Missing Values</strong></p></td>
+<td><p>Mean imputation in the default recipe</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Pretraining Scope</strong></p></td>
+<td><p>Unknown</p></td>
 </tr>
 </tbody>
 </table>
@@ -391,7 +415,7 @@ coverage possible.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=d367bc7c"></script>
+      <script src="../../_static/documentation_options.js?v=576a607b"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

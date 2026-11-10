@@ -6,15 +6,23 @@
 .. autoclass:: TabICLv2
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, release_date, parameter_count, code_license, weights_license, metadata
 
 
 
-Capabilities
-------------
+Model Details
+-------------
 
 .. list-table::
 
+   * - **Release Date**
+     - 2026-02-12
+   * - **Parameter Count**
+     - 27.55M-28.54M
+   * - **Code License**
+     - `BSD-3-Clause <https://github.com/soda-inria/tabicl/blob/main/LICENSE>`__
+   * - **Weights License**
+     - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
    * - **Supported Input Semantic Types**
      - ``numerical``
    * - **Supported Target Semantic Types**
@@ -27,6 +35,19 @@ Capabilities
      - ❌
    * - **Related Table Support**
      - ❌
+
+   * - **Classification Output**
+     - Class probabilities; hierarchical classification for more than 10 classes
+
+   * - **Regression Output**
+     - 999 quantiles named ``"q001"`` through ``"q999"``
+
+   * - **Missing Values**
+     - Mean imputation in the default recipe
+
+   * - **Pretraining Scope**
+     - Up to 60,000 rows and 100 columns
+
 
 Default Recipe
 --------------

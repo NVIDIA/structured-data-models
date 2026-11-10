@@ -207,7 +207,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.TabICLv2"><code class="docutils literal notranslate"><span class="pre">TabICLv2</span></code></a></li>
-<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
+<li><a class="reference internal" href="#model-details">Model Details</a></li>
 <li><a class="reference internal" href="#default-recipe">Default Recipe</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -339,11 +339,23 @@ model are initialized.</p></li>
 </dl>
 </dd></dl>
 
-<section id="capabilities">
-<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<section id="model-details">
+<h2>Model Details<a class="headerlink" href="#model-details" title="Link to this heading">#</a></h2>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><strong>Release Date</strong></p></td>
+<td><p>2026-02-12</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Parameter Count</strong></p></td>
+<td><p>27.55M-28.54M</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Code License</strong></p></td>
+<td><p><a class="reference external" href="https://github.com/soda-inria/tabicl/blob/main/LICENSE">BSD-3-Clause</a></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Weights License</strong></p></td>
+<td><p><a class="reference external" href="https://huggingface.co/jingang/TabICL">BSD-3-Clause</a></p></td>
+</tr>
 <tr class="row-odd"><td><p><strong>Supported Input Semantic Types</strong></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
@@ -361,6 +373,18 @@ model are initialized.</p></li>
 </tr>
 <tr class="row-even"><td><p><strong>Related Table Support</strong></p></td>
 <td><p>❌</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Classification Output</strong></p></td>
+<td><p>Class probabilities; hierarchical classification for more than 10 classes</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Regression Output</strong></p></td>
+<td><p>999 quantiles named <code class="docutils literal notranslate"><span class="pre">&quot;q001&quot;</span></code> through <code class="docutils literal notranslate"><span class="pre">&quot;q999&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Missing Values</strong></p></td>
+<td><p>Mean imputation in the default recipe</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Pretraining Scope</strong></p></td>
+<td><p>Up to 60,000 rows and 100 columns</p></td>
 </tr>
 </tbody>
 </table>
@@ -440,7 +464,7 @@ model are initialized.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=d367bc7c"></script>
+      <script src="../../_static/documentation_options.js?v=576a607b"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

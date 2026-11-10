@@ -6,15 +6,23 @@
 .. autoclass:: KumoForecast
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, release_date, parameter_count, code_license, weights_license, metadata
 
 
 
-Capabilities
-------------
+Model Details
+-------------
 
 .. list-table::
 
+   * - **Release Date**
+     - 2026-04-07
+   * - **Parameter Count**
+     - 313.06M-317.26M
+   * - **Code License**
+     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
+   * - **Weights License**
+     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
    * - **Supported Input Semantic Types**
      - ``numerical``
    * - **Supported Target Semantic Types**
@@ -27,6 +35,16 @@ Capabilities
      - ✅
    * - **Related Table Support**
      - ❌
+
+   * - **Output**
+     - Point predictions per target and time step
+
+   * - **Missing Values**
+     - Handled natively
+
+   * - **Pretraining Scope**
+     - Up to 512 rows
+
 
 Default Recipe
 --------------

@@ -6,15 +6,23 @@
 .. autoclass:: KumoAnomaly
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, release_date, parameter_count, code_license, weights_license, metadata
 
 
 
-Capabilities
-------------
+Model Details
+-------------
 
 .. list-table::
 
+   * - **Release Date**
+     - 2026-06-29
+   * - **Parameter Count**
+     - 2.44M
+   * - **Code License**
+     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
+   * - **Weights License**
+     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
    * - **Supported Input Semantic Types**
      - ``numerical``
    * - **Supported Target Semantic Types**
@@ -27,6 +35,16 @@ Capabilities
      - ❌
    * - **Related Table Support**
      - ❌
+
+   * - **Output**
+     - Reconstruction scores named ``"mae"`` and boolean anomaly labels named ``"scs"`` and ``"macs"`` per time step
+
+   * - **Missing Values**
+     - Mean imputation in the default recipe
+
+   * - **Pretraining Scope**
+     - Up to 40 columns
+
 
 Default Recipe
 --------------

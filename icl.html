@@ -210,6 +210,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#model-concepts">Model Concepts</a></li>
 <li><a class="reference internal" href="#ensembling">Ensembling</a></li>
 <li><a class="reference internal" href="#autocasting">Autocasting</a></li>
+<li><a class="reference internal" href="#context-selection">Context Selection</a></li>
 <li><a class="reference internal" href="#embeddings">Embeddings</a></li>
 <li><a class="reference internal" href="#relational-context">Relational Context</a></li>
 </ul>
@@ -364,6 +365,24 @@ For example, to run the model forward pass in <a class="reference external" href
 <p>Preprocessing and postprocessing routines remain outside the model’s autocast policy.
 They will run with the dtypes of the model inputs.</p>
 </section>
+<section id="context-selection">
+<h2>Context Selection<a class="headerlink" href="#context-selection" title="Link to this heading">#</a></h2>
+<p>The context determines which labeled examples the model can use for prediction.
+Its size and composition affect accuracy, memory use, and latency.
+Using all available training rows as context is generally preferred, but may exceed your memory or latency budget.
+When a smaller context is needed, useful selection strategies include:</p>
+<ul class="simple">
+<li><p><strong>Random sampling:</strong> Use a representative subset as a baseline.</p></li>
+<li><p><strong>Stratified sampling:</strong> Preserve class proportions or ensure rare classes are represented.
+If sampling changes class proportions, evaluate probability calibration on data with the expected deployment distribution.</p></li>
+<li><p><strong>Recency windows:</strong> For changing data distributions, select examples from the period most relevant to the queries.</p></li>
+<li><p><strong>Retrieval:</strong> Select relevant examples for each query, such as nearest neighbors.
+Query-specific contexts reduce opportunities to reuse cached context state.</p></li>
+<li><p><strong>Context ensembling:</strong> Predict from several context samples and combine their predictions.
+This reduces the size of each context but increases total inference work.</p></li>
+</ul>
+<p>Choose the strategy and context size using validation data, and include only labels that would be available at prediction time.</p>
+</section>
 <section id="embeddings">
 <h2>Embeddings<a class="headerlink" href="#embeddings" title="Link to this heading">#</a></h2>
 <p>Intermediate embeddings of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> can be captured by attaching a standard PyTorch hook at any child module, <em>e.g.</em>, via <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_forward_pre_hook" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.register_forward_pre_hook()</span></code></a>.
@@ -513,7 +532,7 @@ Given rows from <code class="docutils literal notranslate"><span class="pre">x_c
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=d367bc7c"></script>
+      <script src="_static/documentation_options.js?v=576a607b"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>

@@ -207,7 +207,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.Chronos2"><code class="docutils literal notranslate"><span class="pre">Chronos2</span></code></a></li>
-<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
+<li><a class="reference internal" href="#model-details">Model Details</a></li>
 <li><a class="reference internal" href="#default-recipe">Default Recipe</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -294,11 +294,23 @@ information through variate attention. (default: <code class="docutils literal n
 </dl>
 </dd></dl>
 
-<section id="capabilities">
-<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<section id="model-details">
+<h2>Model Details<a class="headerlink" href="#model-details" title="Link to this heading">#</a></h2>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><strong>Release Date</strong></p></td>
+<td><p>2025-10-17</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Parameter Count</strong></p></td>
+<td><p>119.48M</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Code License</strong></p></td>
+<td><p><a class="reference external" href="https://github.com/amazon-science/chronos-forecasting/blob/main/LICENSE">Apache-2.0</a></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Weights License</strong></p></td>
+<td><p><a class="reference external" href="https://huggingface.co/amazon/chronos-2">Apache-2.0</a></p></td>
+</tr>
 <tr class="row-odd"><td><p><strong>Supported Input Semantic Types</strong></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
@@ -316,6 +328,15 @@ information through variate attention. (default: <code class="docutils literal n
 </tr>
 <tr class="row-even"><td><p><strong>Related Table Support</strong></p></td>
 <td><p>❌</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Output</strong></p></td>
+<td><p>21 quantiles per target and time step named <code class="docutils literal notranslate"><span class="pre">&quot;{target}__q01&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;{target}__q05&quot;</span></code> through <code class="docutils literal notranslate"><span class="pre">&quot;{target}__q95&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;{target}__q99&quot;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Missing Values</strong></p></td>
+<td><p>Handled natively</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Pretraining Scope</strong></p></td>
+<td><p>Up to 8,192 rows and 32 columns</p></td>
 </tr>
 </tbody>
 </table>
@@ -363,7 +384,7 @@ information through variate attention. (default: <code class="docutils literal n
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=d367bc7c"></script>
+      <script src="../../_static/documentation_options.js?v=576a607b"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
