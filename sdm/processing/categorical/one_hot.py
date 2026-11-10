@@ -10,14 +10,11 @@ from sdm.processing import Processor
 from sdm.tensor.categorical import _iter_categories
 
 
-class OneHotEncode(Processor):
+class ToOneHot(Processor):
     """One-hot encode categorical columns.
 
     Each category produces a column named ``<column>_<code>`` in
     vocabulary order. Missing and unknown values encode as zeros.
-
-    Use :class:`~sdm.processing.AlignCategories` first to align context and
-    query vocabularies.
     """
 
     handles_stypes = (Stype.categorical,)
