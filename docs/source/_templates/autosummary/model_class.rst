@@ -5,12 +5,10 @@
 .. autoclass:: {{ objname }}
    :members:
    :show-inheritance:
-{%- if objname != "ICLModel" %}
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables
-{%- endif %}
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe
 
-{% if objname != "ICLModel" %}
 {% set cls = import_module(module) | attr(objname) %}
+
 Capabilities
 ------------
 
@@ -38,7 +36,9 @@ Capabilities
 Default Recipe
 --------------
 
+{% set doc = getdoc(cls.default_recipe) %}
+{% if doc and ":meta private:" not in doc %}{{ doc }}{% endif %}
+
 .. code-block:: python
 
 {{ cls.default_recipe() | string | indent(3, true) }}
-{% endif %}
