@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -157,6 +157,28 @@ class KumoRelational(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
+
+    release_date: ClassVar[str] = "2026-04-14"
+    parameter_count: ClassVar[str] = "29.93M-30.94M"
+    code_license: ClassVar[tuple[str, str]] = (
+        "Apache-2.0",
+        "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
+    )
+    weight_license: ClassVar[tuple[str, str]] = (
+        "OpenMDW-1.1, with BSD-3-Clause notice",
+        "https://huggingface.co/nvidia/Kumo-Relational/blob/main/LICENSE",
+    )
+    metadata: ClassVar[Mapping[str, str]] = {
+        "Classification Output": (
+            "Class probabilities; hierarchical classification "
+            "for more than 10 classes"
+        ),
+        "Regression Output": (
+            '999 quantiles named ``"q001"`` through ``"q999"``'
+        ),
+        "Missing Values": "Mean imputation in the default recipe",
+        "Pretraining Scope": "Up to 10,000 examples",
+    }
 
     def __init__(
         self,

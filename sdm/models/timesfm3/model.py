@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from itertools import product
 from typing import Any, ClassVar, cast
 
@@ -100,6 +101,25 @@ class TimesFM3(ICLModel):
     supports_multi_target: ClassVar[bool] = True
     supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
+
+    release_date: ClassVar[str] = "2026-08-31"
+    parameter_count: ClassVar[str] = "330.71M"
+    code_license: ClassVar[tuple[str, str]] = (
+        "Apache-2.0",
+        "https://github.com/google-research/timesfm/blob/master/LICENSE",
+    )
+    weight_license: ClassVar[tuple[str, str]] = (
+        "TimesFM Non-Commercial v1.0",
+        "https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE",
+    )
+    metadata: ClassVar[Mapping[str, str]] = {
+        "Output": (
+            '9 quantiles per target and time step named ``"{target}_q10"`` '
+            'through ``"{target}_q90"``'
+        ),
+        "Missing Values": "Interpolation in the default recipe",
+        "Pretraining Scope": "Up to 15,360 rows and 32 columns",
+    }
 
     def __init__(
         self,

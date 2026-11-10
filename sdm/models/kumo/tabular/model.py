@@ -110,17 +110,25 @@ class KumoTabular(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
+    release_date: ClassVar[str] = "2026-09-28"
+    parameter_count: ClassVar[str] = "27.46M-215.68M"
+    code_license: ClassVar[tuple[str, str]] = (
+        "Apache-2.0",
+        "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
+    )
+    weight_license: ClassVar[tuple[str, str]] = (
+        "OpenMDW-1.1",
+        "https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE",
+    )
     metadata: ClassVar[Mapping[str, str]] = {
-        "Release Date": "2026-09-28",
-        "Parameter Count": "27.46M-215.68M",
-        "Classification Output": "Class probabilities; ECOC for more than 10 classes",
-        "Regression": '999 quantiles named ``"q001"`` through ``"q999"``',
-        "Missing Values": "Handled natively; no imputation required.",
-        "Pretraining Scope": "Up to 60,000 context rows and 100 columns",
-        "Code License": "Apache-2.0",
-        "Code License Link": "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
-        "Weight License": "OpenMDW-1.1",
-        "Weight License Link": "https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE",
+        "Classification Output": (
+            "Class probabilities; ECOC for more than 10 classes"
+        ),
+        "Regression Output": (
+            '999 quantiles named ``"q001"`` through ``"q999"``'
+        ),
+        "Missing Values": "Handled natively",
+        "Pretraining Scope": "Up to 60,000 rows and 100 columns",
     }
 
     def __init__(
