@@ -128,13 +128,15 @@ class TabICLv2(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
+    paper: ClassVar[str] = "https://arxiv.org/abs/2602.11139"
+    source: ClassVar[str] = "https://github.com/soda-inria/tabicl"
     release_date: ClassVar[str] = "2026-02-12"
     parameter_count: ClassVar[str] = "27.55M-28.54M"
     code_license: ClassVar[tuple[str, str]] = (
         "BSD-3-Clause",
         "https://github.com/soda-inria/tabicl/blob/main/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "BSD-3-Clause",
         "https://huggingface.co/jingang/TabICL",
     )

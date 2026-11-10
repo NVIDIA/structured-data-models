@@ -99,13 +99,17 @@ class Chronos2(ICLModel):
     supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
+    paper: ClassVar[str] = "https://arxiv.org/abs/2510.15821"
+    source: ClassVar[str] = (
+        "https://github.com/amazon-science/chronos-forecasting"
+    )
     release_date: ClassVar[str] = "2025-10-17"
     parameter_count: ClassVar[str] = "119.48M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://github.com/amazon-science/chronos-forecasting/blob/main/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://huggingface.co/amazon/chronos-2",
     )

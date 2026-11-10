@@ -62,13 +62,15 @@ class KumoAnomaly(Model):
         {Stype.numerical}
     )
 
+    paper: ClassVar[str] = "https://arxiv.org/abs/2610.12754"
+    source: ClassVar[str] = "https://github.com/NVIDIA/Kumo-TS"
     release_date: ClassVar[str] = "2026-06-29"
     parameter_count: ClassVar[str] = "2.44M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://huggingface.co/nvidia/Kumo-Anomaly",
     )

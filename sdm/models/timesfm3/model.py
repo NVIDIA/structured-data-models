@@ -102,13 +102,17 @@ class TimesFM3(ICLModel):
     supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
+    paper: ClassVar[str] = (
+        "https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting/"
+    )
+    source: ClassVar[str] = "https://github.com/google-research/timesfm"
     release_date: ClassVar[str] = "2026-08-31"
     parameter_count: ClassVar[str] = "330.71M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://github.com/google-research/timesfm/blob/master/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "TimesFM Non-Commercial v1.0",
         "https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE",
     )

@@ -13,54 +13,30 @@ Overview
      - Parameter Count
      - Code License
      - Weights License
-   * - | :class:`~sdm.models.TabICLv2`
-       | (`Paper <https://arxiv.org/abs/2602.11139>`__)
-     - 2026-02-12
-     - 27.55M–28.54M
-     - `BSD-3-Clause <https://github.com/soda-inria/tabicl/blob/main/LICENSE>`__
-     - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
-   * - | :class:`~sdm.models.TabFM`
-       | (`Paper <https://arxiv.org/abs/2609.37959>`__)
-     - 2026-06-30
-     - 1.64B–1.65B
-     - `Apache-2.0 <https://github.com/google-research/tabfm/blob/b8a8b090c66d1b9e7af278003461582219996b6a/LICENSE>`__
-     - `TabFM Non-Commercial v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/77cb9cc1b4fd3a9c77fbb9552c218200bb4dab83/LICENSE>`__
-   * - | :class:`~sdm.models.KumoTabular`
-       | (`Blog <https://huggingface.co/blog/nvidia/kumo-tabular>`__)
-     - 2026-09-28
-     - 27.46M–215.68M
-     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Tabular/>`__
-   * - | :class:`~sdm.models.KumoRelational`
-       | (`Paper <https://arxiv.org/abs/2604.12596>`__)
-     - 2026-04-14
-     - 29.93M–30.94M
-     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - `OpenMDW-1.1, with BSD-3-Clause notice <https://huggingface.co/nvidia/Kumo-Relational>`__
-   * - | :class:`~sdm.models.KumoForecast`
-       | (`Paper <https://ieeexplore.ieee.org/abstract/document/11402442>`__)
-     - 2025-05-06
-     - 313.06M–317.26M
-     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
-   * - | :class:`~sdm.models.KumoAnomaly`
-       | (`Paper <https://arxiv.org/abs/2610.12754>`__)
-     - 2025-05-06
-     - 2.44M
-     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-     - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Anomaly>`__
-   * - | :class:`~sdm.models.Chronos2`
-       | (`Paper <https://arxiv.org/abs/2510.15821>`__)
-     - 2025-10-17
-     - 119.48M
-     - `Apache-2.0 <https://github.com/amazon-science/chronos-forecasting/blob/main/LICENSE>`__
-     - `Apache-2.0 <https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/apache-2.0.md>`__
-   * - | :class:`~sdm.models.TimesFM3`
-       | (`Blog <https://arxiv.org/abs/2609.37959>`__)
-     - 2026-08-31
-     - 330.71M
-     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
-     - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
+{% for name in api_names("sdm.models") if name not in api_names("sdm.models.base") %}
+{% set cls = import_module("sdm.models") | attr(name) %}
+   * - | :class:`~sdm.models.{{ name }}`
+       | |{{ name }}-paper| |{{ name }}-source|
+     - {{ cls.release_date }}
+     - {{ cls.parameter_count }}
+     - `{{ cls.code_license[0] }} <{{ cls.code_license[1] }}>`__
+     - `{{ cls.weights_license[0] }} <{{ cls.weights_license[1] }}>`__
+{% endfor %}
+
+{% for name in api_names("sdm.models") if name not in api_names("sdm.models.base") %}
+{% set cls = import_module("sdm.models") | attr(name) %}
+.. |{{ name }}-paper| image:: https://cdn.simpleicons.org/arxiv
+   :width: 16px
+   :height: 16px
+   :alt: Paper for {{ name }}
+   :target: {{ cls.paper }}
+
+.. |{{ name }}-source| image:: https://cdn.simpleicons.org/github/808080
+   :width: 16px
+   :height: 16px
+   :alt: Source for {{ name }}
+   :target: {{ cls.source }}
+{% endfor %}
 
 Model API
 ---------

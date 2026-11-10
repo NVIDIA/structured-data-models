@@ -110,13 +110,17 @@ class KumoTabular(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
+    paper: ClassVar[str] = "https://huggingface.co/blog/nvidia/kumo-tabular"
+    source: ClassVar[str] = (
+        "https://github.com/NVIDIA/structured-data-models/tree/main/sdm/models/kumo/tabular"
+    )
     release_date: ClassVar[str] = "2026-09-28"
     parameter_count: ClassVar[str] = "27.46M-215.68M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "OpenMDW-1.1",
         "https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE",
     )

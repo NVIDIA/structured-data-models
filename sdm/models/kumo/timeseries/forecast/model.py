@@ -80,13 +80,17 @@ class KumoForecast(ICLModel):
     supports_context_only_columns: ClassVar[bool] = True
     supports_related_tables: ClassVar[bool] = False
 
+    paper: ClassVar[str] = (
+        "https://ieeexplore.ieee.org/abstract/document/11402442"
+    )
+    source: ClassVar[str] = "https://github.com/NVIDIA/Kumo-TS"
     release_date: ClassVar[str] = "2026-04-07"
     parameter_count: ClassVar[str] = "313.06M-317.26M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://huggingface.co/nvidia/Kumo-Forecast",
     )

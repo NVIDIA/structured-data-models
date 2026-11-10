@@ -158,13 +158,17 @@ class KumoRelational(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = True
 
+    paper: ClassVar[str] = "https://arxiv.org/abs/2604.12596"
+    source: ClassVar[str] = (
+        "https://github.com/NVIDIA/structured-data-models/tree/main/sdm/models/kumo/relational"
+    )
     release_date: ClassVar[str] = "2026-04-14"
     parameter_count: ClassVar[str] = "29.93M-30.94M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
         "https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE",
     )
-    weight_license: ClassVar[tuple[str, str]] = (
+    weights_license: ClassVar[tuple[str, str]] = (
         "OpenMDW-1.1, with BSD-3-Clause notice",
         "https://huggingface.co/nvidia/Kumo-Relational/blob/main/LICENSE",
     )
