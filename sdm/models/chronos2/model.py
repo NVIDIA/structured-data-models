@@ -111,9 +111,9 @@ class Chronos2(ICLModel):
     )
     metadata: ClassVar[Mapping[str, str]] = {
         "Output": (
-            '21 quantiles per target and time step named ``"{target}_q01"``, '
-            '``"{target}_q05"`` through ``"{target}_q95"``, '
-            '``"{target}_q99"``'
+            '21 quantiles per target and time step named ``"{target}__q01"``, '
+            '``"{target}__q05"`` through ``"{target}__q95"``, '
+            '``"{target}__q99"``'
         ),
         "Missing Values": "Handled natively",
         "Pretraining Scope": "Up to 8,192 rows and 32 columns",

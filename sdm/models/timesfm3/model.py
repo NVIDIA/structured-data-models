@@ -114,8 +114,8 @@ class TimesFM3(ICLModel):
     )
     metadata: ClassVar[Mapping[str, str]] = {
         "Output": (
-            '9 quantiles per target and time step named ``"{target}_q10"`` '
-            'through ``"{target}_q90"``'
+            '9 quantiles per target and time step named ``"{target}__q10"`` '
+            'through ``"{target}__q90"``'
         ),
         "Missing Values": "Interpolation in the default recipe",
         "Pretraining Scope": "Up to 15,360 rows and 32 columns",
