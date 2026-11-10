@@ -284,7 +284,7 @@ They are examples supplied at inference time, and the model predicts query rows 
 </span><span data-line="10">    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
 </span><span data-line="11"><span class="p">)</span>
 </span><span data-line="12">
-</span><span data-line="13"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+</span><span data-line="13"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">KumoTabular</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
 </span><span data-line="14"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
 </span><span data-line="15">    <span class="n">x_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">"target"</span><span class="p">),</span>
 </span><span data-line="16">    <span class="n">y_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">],</span>
@@ -513,7 +513,7 @@ Given rows from <code class="docutils literal notranslate"><span class="pre">x_c
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=c3a2c2b0"></script>
+      <script src="_static/documentation_options.js?v=d367bc7c"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>

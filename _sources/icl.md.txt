@@ -45,7 +45,7 @@ table = sdm.TableTensor.from_pandas(
     device="cuda",
 )
 
-model = sdm.models.TabICLv2(device="cuda")
+model = sdm.models.KumoTabular(device="cuda")
 out = model(
     x_context=table[:300].drop_columns("target"),
     y_context=table[:300, "target"],
