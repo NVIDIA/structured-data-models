@@ -123,25 +123,6 @@ model(
 )
 ```
 
-### Wide tables
-
-The default recipes of tabular models shuffle the columns with {py:class}`~sdm.processing.common.ShuffleColumns` and then keep the first 500 columns per estimator with {py:class}`~sdm.processing.SelectColumns`.
-Each estimator therefore sees at most 500 columns per semantic type, counted after preprocessing.
-Tables with up to 500 columns are not affected.
-
-For a table with `n` columns and `E` estimators:
-
-- If `n > 500 * E`, some columns are never seen by any estimator, and `SelectColumns` emits a `RuntimeWarning`.
-- If `n <= 500 * E`, columns can still be missed because the selection is random. A column is seen by at least one estimator with probability about `1 - (1 - 500 / n) ** E`. For `n = 3000`, this is about 77% for `E = 8`, 95% for `E = 16`, and 99.6% for `E = 32`.
-- Each column is seen by only about `E * 500 / n` estimators on average, so a column can have little influence on the averaged prediction.
-
-For wide tables, use one or more of these options:
-
-- Increase `num_estimators` to at least `2 * n / 500`.
-- Pre-select the columns with signal, for example with a tree-based model, and pass at most 500 columns.
-- Raise `SelectColumns.max_columns` in a custom recipe if memory allows. Memory use and accuracy at larger widths are not validated for the default checkpoints.
-- For feature importance or leave-one-feature-out comparisons, fix the column set yourself before the model. Do not rely on the shuffle, because a feature pair can be split across estimators and the selection changes between runs.
-
 ## Autocasting
 
 An {py:class}`~sdm.models.ICLModel` does **not** enable mixed-precision autocasting by default.
