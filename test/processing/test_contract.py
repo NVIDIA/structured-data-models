@@ -255,6 +255,30 @@ def test_save_and_load_preserves_fitted_processor_behavior(
         assert actual[member_id].equal(expected[member_id])
 
 
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize(
+    "case",
+    PROCESSOR_CASES,
+    ids=lambda case: type(case.processor).__name__,
+)
+def test_transform_compiles(case: ProcessorCase) -> None:
+    table = case.make_table()
+    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
+    # Members that end up with the same schema are stacked, and stacking text
+    # columns is data-dependent.
+    processor.fit_ensemble(table, generator=torch.Generator().manual_seed(0))
+    expected = processor.transform_ensemble(table)
+    compiled = torch.compile(
+        processor.transform_ensemble,
+        backend="eager",
+        fullgraph=True,
+    )
+    actual = compiled(table)
+    assert len(actual) == len(expected)
+    for member_id in range(len(actual)):
+        assert actual[member_id].equal(expected[member_id])
+
+
 @pytest.mark.parametrize(
     "case",
     INVERTIBLE_PROCESSOR_CASES,
