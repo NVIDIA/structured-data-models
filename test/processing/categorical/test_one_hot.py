@@ -12,9 +12,7 @@ from sdm.testing import withCUDA
 
 @withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2, 3)])
-def test_one_hot_values_and_columns(
-    device: torch.device, batch_shape: tuple[int, ...]
-) -> None:
+def test_one_hot(device: torch.device, batch_shape: tuple[int, ...]) -> None:
     codes = torch.tensor(
         [[0, -1, 1], [1, -1, 0], [-1, -1, -1]],
         device=device,
@@ -32,7 +30,7 @@ def test_one_hot_values_and_columns(
         ),
     )
 
-    out = sp.OneHotEncode().transform(table)
+    out = sp.ToOneHot().transform(table)
 
     expected = torch.tensor(
         [[1, 0, 0, 1, 0], [0, 1, 1, 0, 0], [0, 0, 0, 0, 0]],
@@ -41,11 +39,11 @@ def test_one_hot_values_and_columns(
     ).expand(*batch_shape, 3, 5)
     torch.testing.assert_close(out.numerical, expected)
     assert out.numerical_columns == (
-        "color_0",
-        "color_1",
-        "size_0",
-        "size_1",
-        "size_2",
+        "color__0",
+        "color__1",
+        "size__0",
+        "size__1",
+        "size__2",
     )
     assert out.categorical_columns == ()
 
@@ -59,7 +57,7 @@ def test_one_hot_alignment_uses_context_vocabulary() -> None:
         pd.DataFrame({"color": ["blue", "red", "green", None]}),
         stypes={"color": "categorical"},
     )
-    processor = sp.Sequential(sp.AlignCategories(), sp.OneHotEncode())
+    processor = sp.Sequential(sp.AlignCategories(), sp.ToOneHot())
     fitted = processor.fit_transform(context)
     actual = processor.transform(query)
 
@@ -79,7 +77,7 @@ def test_one_hot_empty_inputs(rows: int, categories: int) -> None:
         ),
     )
 
-    out = sp.OneHotEncode().transform(table)
+    out = sp.ToOneHot().transform(table)
 
     assert out.numerical.shape == (rows, categories)
     assert out.categorical.shape == (rows, 0)
