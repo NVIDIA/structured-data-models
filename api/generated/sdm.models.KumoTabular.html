@@ -319,6 +319,13 @@ default device.</p></li>
 </section>
 <section id="default-recipe">
 <h2>Default Recipe<a class="headerlink" href="#default-recipe" title="Link to this heading">#</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Each estimator uses at most 500 columns. For wide tables, some
+columns may remain unused across the ensemble.
+Use at least <code class="docutils literal notranslate"><span class="pre">ceil(num_columns</span> <span class="pre">/</span> <span class="pre">500)</span></code> estimators to make full
+coverage possible.</p>
+</div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">Recipe</span><span class="p">(</span>
 </span><span data-line="2">  <span class="n">features</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
 </span><span data-line="3">    <span class="n">StypeDispatch</span><span class="p">(</span>
@@ -417,7 +424,7 @@ default device.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a82016d5"></script>
+      <script src="../../_static/documentation_options.js?v=c3a2c2b0"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
