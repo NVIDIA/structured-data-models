@@ -19,7 +19,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, cast
 
 import torch
@@ -83,6 +83,25 @@ class TabFM(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
+    paper: ClassVar[str] = "https://arxiv.org/abs/2609.37959"
+    source: ClassVar[str] = "https://github.com/google-research/tabfm"
+    release_date: ClassVar[str] = "2026-06-30"
+    parameter_count: ClassVar[str] = "1.64B-1.65B"
+    code_license: ClassVar[tuple[str, str]] = (
+        "Apache-2.0",
+        "https://github.com/google-research/tabfm/blob/main/LICENSE",
+    )
+    weights_license: ClassVar[tuple[str, str]] = (
+        "TabFM Non-Commercial v1.0",
+        "https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE",
+    )
+    metadata: ClassVar[Mapping[str, str]] = {
+        "Classification Output": "Class probabilities; up to 10 classes",
+        "Regression Output": 'Point predictions named ``"pred"``',
+        "Missing Values": "Mean imputation in the default recipe",
+        "Pretraining Scope": "Unknown",
+    }
+
     def __init__(
         self,
         task: TaskLike | Iterable[TaskLike] | None,
@@ -106,7 +125,13 @@ class TabFM(ICLModel):
 
     @classmethod
     def default_recipe(cls) -> Recipe:
-        r""":meta private:"""  # noqa: D415
+        r"""
+        .. warning::
+            Each estimator uses at most 500 columns. For wide tables, some
+            columns may remain unused across the ensemble.
+            Use at least ``ceil(num_columns / 500)`` estimators to make full
+            coverage possible.
+        """  # noqa: D212
         return default_recipe()
 
     def _load_from_pretrained(

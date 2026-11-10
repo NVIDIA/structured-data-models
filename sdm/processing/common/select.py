@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import torch
 
 from sdm import EnsembleTable, Stype, StypeLike, TableTensor
+from sdm._warnings import warn_once
 from sdm.processing import EnsembleProcessor
 
 
@@ -41,6 +43,21 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+
+        capacity = len(ensemble_table) * self.max_columns
+        widths: dict[str, int] = defaultdict(int)
+        for group in ensemble_table._iter_groups():
+            for stype, block in TableTensor.items(group):
+                widths[stype.value] = max(widths[stype.value], block.size(-1))
+        if max(widths.values(), default=0) > capacity:
+            warn_once(
+                key="select-columns-coverage",
+                message=(
+                    "Some columns will not be seen by any estimator. "
+                    "Increase the number of estimators for better coverage."
+                ),
+            )
+
         if all(
             group.size(-1) <= self.max_columns
             for group in ensemble_table._iter_groups()
