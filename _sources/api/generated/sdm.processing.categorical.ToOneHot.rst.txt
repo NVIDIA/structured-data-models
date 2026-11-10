@@ -1,9 +1,9 @@
-﻿OneHotEncode
-============
+﻿ToOneHot
+========
 
 .. currentmodule:: sdm.processing.categorical
 
-.. autoclass:: OneHotEncode
+.. autoclass:: ToOneHot
    :members:
    :show-inheritance:
    :exclude-members: handles_stypes, requires_fit
