@@ -553,7 +553,7 @@ def test_compile_predict() -> None:
     x = torch.randn(2, 3)
 
     counter = CompileCounter()
-    predict = model.compile_predict(backend=counter)
+    predict = model._compile_predict(backend=counter)
     torch.testing.assert_close(
         predict(x).numerical,
         model.predict(x).numerical,
