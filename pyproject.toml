@@ -86,7 +86,6 @@ doc = [
     "shibuya",
     "sphinx",
     "sphinx-copybutton",
-    "sphinxcontrib-mermaid",
 ]
 dev = [
     { include-group = "test" },
