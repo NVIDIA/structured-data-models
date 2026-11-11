@@ -171,7 +171,8 @@ class CellEmbedding(torch.nn.Module):
             )
 
         rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
-        for start in range(0, R, rows_per_chunk):
+        for chunk_index in range((R + rows_per_chunk - 1) // rows_per_chunk):
+            start = chunk_index * rows_per_chunk
             self._forward(
                 x=x[..., start : start + rows_per_chunk, :, :],
                 freq=freq,

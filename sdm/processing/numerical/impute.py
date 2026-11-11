@@ -10,7 +10,7 @@ from sdm.processing.numerical._stats import _isfinite
 
 
 class ImputeMean(Processor):
-    """Replace missing feature values with fitted per-column means.
+    """Replace missing numerical values with fitted per-column means.
 
     Infinite values are ignored when fitting the mean but preserved during
     transformation.
@@ -56,3 +56,11 @@ class ImputeMean(Processor):
         numerical = table.numerical
         numerical = torch.where(numerical.isnan(), self._mean, numerical)
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.fill_value == 0.0:
+            return super().__repr__(indent=indent)
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"fill_value={self.fill_value!r})"
+        )

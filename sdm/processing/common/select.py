@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import torch
 
 from sdm import EnsembleTable, Stype, StypeLike, TableTensor
+from sdm._warnings import warn_once
 from sdm.processing import EnsembleProcessor
 
 
@@ -41,6 +43,21 @@ class SelectColumns(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+
+        capacity = len(ensemble_table) * self.max_columns
+        widths: dict[str, int] = defaultdict(int)
+        for group in ensemble_table._iter_groups():
+            for stype, block in TableTensor.items(group):
+                widths[stype.value] = max(widths[stype.value], block.size(-1))
+        if max(widths.values(), default=0) > capacity:
+            warn_once(
+                key="select-columns-coverage",
+                message=(
+                    "Some columns will not be seen by any estimator. "
+                    "Increase the number of estimators for better coverage."
+                ),
+            )
+
         if all(
             group.size(-1) <= self.max_columns
             for group in ensemble_table._iter_groups()
@@ -51,7 +68,7 @@ class SelectColumns(EnsembleProcessor):
             groups = []
             for group in ensemble_table._iter_groups():
                 columns: Mapping[StypeLike, Sequence[str]] = {
-                    stype: column_names[: self.max_columns]
+                    stype.value: column_names[: self.max_columns]
                     for stype, column_names in group.column_groups
                 }
                 blocks = {
@@ -73,7 +90,7 @@ class SelectColumns(EnsembleProcessor):
                 num_columns = len(column_names)
                 # Empty blocks are passed through unchanged.
                 if num_columns == 0:
-                    columns[stype] = column_names
+                    columns[stype.value] = column_names
                     blocks[stype] = block
                     continue
                 chunk_size = min(self.max_columns, num_columns)
@@ -82,7 +99,7 @@ class SelectColumns(EnsembleProcessor):
                 wrap_count = chunk_size - first_count
                 # Consecutive chunk from ``start``, wrapping past the last
                 # column back to the first.
-                columns[stype] = (
+                columns[stype.value] = (
                     column_names[start : start + first_count]
                     + column_names[:wrap_count]
                 )
@@ -105,4 +122,12 @@ class SelectColumns(EnsembleProcessor):
         return ensemble_table.replace_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        arguments = [f"max_columns={self.max_columns!r}"]
+        if self.method != "first":
+            arguments.append(f"method={self.method!r}")
+        return (
+            f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
         )

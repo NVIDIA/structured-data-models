@@ -20,7 +20,7 @@ class ShuffleCategories(EnsembleProcessor):
     together so decoded values remain unchanged. Negative codes represent
     missing values and are preserved unchanged. Only categorical columns
     are supported; use :class:`~sdm.processing.StypeDispatch` to apply this
-    processor to the categorical block of a mixed feature table.
+    processor to the categorical block of a mixed table.
 
     Args:
         method: Permutation strategy. ``"random"`` remaps codes

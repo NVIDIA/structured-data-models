@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm._memory import split_size
+from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -118,8 +118,8 @@ class ClipSigma(Processor):
             device=out.device,
         )
         for inp, clipped in zip(
-            numerical.split(size, dim=-2),
-            out.split(size, dim=-2),
+            _split_tensor(numerical, size, dim=-2),
+            _split_tensor(out, size, dim=-2),
             strict=True,
         ):
             log_abs = inp.abs().log1p_().to(dtype)

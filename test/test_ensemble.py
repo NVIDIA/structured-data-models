@@ -6,7 +6,32 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, EnsembleTensor, TableTensor
+
+
+def test_tensor_member_selection() -> None:
+    first = torch.tensor([[1.0], [2.0], [3.0]])
+    second = torch.tensor([[4.0]])
+    ensemble = EnsembleTensor(
+        groups=(first, second),
+        locations=((0, 0), (1, 0), (0, 2), (0, 1), (1, 0)),
+    )
+
+    selected = ensemble[4, 1, 2, 4, 0]
+
+    assert isinstance(selected, EnsembleTensor)
+    assert len(selected) == 5
+    torch.testing.assert_close(
+        torch.stack([selected[index] for index in range(len(selected))]),
+        torch.tensor([[4.0], [4.0], [3.0], [4.0], [1.0]]),
+    )
+    assert selected[0].data_ptr() == selected[1].data_ptr()
+    assert selected[0].data_ptr() == selected[3].data_ptr()
+    sliced = ensemble[:3:2]
+    torch.testing.assert_close(torch.stack((sliced[0], sliced[1])), first[::2])
+    assert sliced[0].data_ptr() == first[0].data_ptr()
+    assert ensemble[:] is ensemble
+    assert len(ensemble[()]) == 0
 
 
 def test_shared_member_table() -> None:
@@ -184,49 +209,6 @@ def test_gather_members_rejects_source_count_mismatch() -> None:
             tables=(ensemble_table,),
             member_ids=(0, 1),
         )
-
-
-def test_getitem_preserves_groups_and_order() -> None:
-    tables = tuple(
-        TableTensor.from_tensor(torch.tensor([[value]], dtype=torch.float32))
-        for value in range(3)
-    )
-    ensemble_table = EnsembleTable(
-        groups=(cast(TableTensor, torch.stack(tables)),),
-        locations=((0, 2), (0, 0), (0, 1), (0, 2)),
-    )
-
-    output = ensemble_table[1, 3, 0]
-
-    assert len(output) == 3
-    assert output.num_groups == 1
-    assert next(output._iter_groups()).size(0) == 2
-    assert output[0].equal(tables[0])
-    assert output[1].equal(tables[2])
-    assert output[2].equal(tables[2])
-
-    output = ensemble_table[1:4:2]
-
-    assert len(output) == 2
-    assert output.num_groups == 1
-    assert next(output._iter_groups()).size(0) == 2
-    assert output[0].equal(tables[0])
-    assert output[1].equal(tables[2])
-
-
-@pytest.mark.parametrize("member_ids", [(0, 2, 4), (4, 2, 0), (0, 3, 4)])
-def test_getitem_strided_members(member_ids: tuple[int, ...]) -> None:
-    values = torch.arange(30).float().reshape(5, 3, 2)
-    table = EnsembleTable(
-        groups=(TableTensor.from_tensor(values),),
-        locations=tuple((0, index) for index in range(5)),
-    )
-
-    selected = table[member_ids]
-
-    assert len(selected) == len(member_ids)
-    for position, index in enumerate(member_ids):
-        torch.testing.assert_close(selected[position].numerical, values[index])
 
 
 def test_concatenate_columns_preserves_member_order() -> None:

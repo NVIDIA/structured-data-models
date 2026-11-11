@@ -84,3 +84,9 @@ class RandomProjection(EnsembleProcessor):
             group_position[group_id] += 1
 
         return EnsembleTable(groups=groups, locations=locations)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"channels={self.channels!r})"
+        )

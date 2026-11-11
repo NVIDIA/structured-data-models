@@ -1,0 +1,59 @@
+name: 🐛 Bug Report
+description: Create a report to help us reproduce and fix the bug
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this problem! Issues that do not follow the checklist below may be closed.
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: I have reviewed the [contributing guidelines](https://github.com/Nvidia/structured-data-models/blob/main/CONTRIBUTING.md) and [AI policy](https://github.com/Nvidia/structured-data-models/blob/main/AGENTS.md#ai-policy).
+          required: true
+        - label: I have searched the [existing and past issues](https://github.com/Nvidia/structured-data-models/issues?q=is%3Aissue+sort%3Acreated-desc+) and this bug has not been reported yet.
+          required: true
+        - label: I have checked whether the bug also reproduces on the latest `main`.
+  - type: textarea
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is, and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproducible code example
+      description: |
+        A minimal, self-contained script that we can copy and run to reproduce the bug. Please trim down any irrelevant code.
+        Use synthetic or publicly available data, and include any required checkpoint name or revision.
+      render: python
+      placeholder: |
+        # All necessary imports at the beginning
+        import torch
+        import sdm
+
+        # A succinct reproducing example trimmed down to the essential parts:
+        ...
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Error message or observed output
+      description: The **full** traceback of the exception, or the output that shows the incorrect behavior.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Versions
+      description: |
+        Your structured-data-models version or Git commit, how you installed it (e.g. pip, editable source checkout, or container image and tag), and the output of `python -m torch.utils.collect_env`.
+      render: text
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for contributing 🎉!

@@ -15,7 +15,13 @@ def warn_once(
     category: type[Warning] = RuntimeWarning,
     stacklevel: int = 2,
 ) -> None:
-    r"""Issue a warning once per process."""
+    r"""Issue a warning once per process.
+
+    The warning is not issued from compiled code.
+    """
+    if torch.compiler.is_compiling():
+        return
+
     if not torch.is_warn_always_enabled() and key in _warned_once:
         return
 

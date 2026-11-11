@@ -15,7 +15,7 @@ table = sdm.TableTensor.from_pandas(
     stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device=device,
 )
-model = sdm.models.TabICLv2(device=device)
+model = sdm.models.KumoTabular(device=device)
 
 # Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
