@@ -180,15 +180,12 @@ class KumoForecast(ICLModel):
                     pad=(0, 0, self.model.context_size - table.size(-2), 0),
                     value=0,
                 )
-                context_tables[i] = TableTensor(
-                    columns={
-                        str(stype): names
-                        for stype, names in table.columns.items()
-                    },
-                    numerical=numerical,
-                )
-            else:
-                context_tables[i] = table.replace_blocks(numerical=numerical)
+            context_tables[i] = TableTensor(
+                columns={
+                    str(stype): names for stype, names in table.columns.items()
+                },
+                numerical=numerical,
+            )
         x_context, y_context = context_tables
         kwargs.update(alpha=alpha, k=k, temperature=temperature)
         return super().forward(x_context, y_context, x_query, *args, **kwargs)
