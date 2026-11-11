@@ -3,6 +3,7 @@
 
 # ruff: noqa: D101, D102
 
+from collections.abc import Iterator
 from typing import Any, cast
 
 import torch
@@ -159,6 +160,12 @@ class ICLBlock(torch.nn.Module):
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
+
+    def context_row_dims(self, cache: Cache) -> Iterator[tuple[Tensor, int]]:
+        # The context-row dimensions of the cached state.
+        for i in range(len(self.layers)):
+            for tensor in cast(KVCacheEntry, cache[f"icl_block.layer{i}"]):
+                yield tensor, -3  # [..., R_context, H, D]
 
 
 def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:

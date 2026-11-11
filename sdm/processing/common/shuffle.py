@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
 from typing import Literal, cast
 
 import torch
@@ -34,6 +35,10 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         self.method = method
         self._permutations: BufferList[Tensor] = BufferList()
         self._host_permutations: tuple[tuple[int, ...], ...] = ()
+
+    def _column_dims(self) -> Iterator[tuple[Tensor, int]]:
+        for permutation in self._permutations:
+            yield permutation, -1
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
         r""":meta private:"""  # noqa: D415
@@ -121,13 +126,13 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         tables: list[TableTensor] = []
         for member_id in range(len(ensemble_table)):
             table = ensemble_table[member_id]
-            host_permutation = self._host_permutations[member_id]
+            names = table.numerical_columns
+            if names is not None:
+                names = tuple(
+                    names[i] for i in self._host_permutations[member_id]
+                )
             shuffled = table.__class__(
-                columns={
-                    Stype.numerical: tuple(
-                        table.numerical_columns[i] for i in host_permutation
-                    )
-                },
+                columns={Stype.numerical: names},
                 numerical=table.numerical.index_select(
                     -1, self._permutations[member_id]
                 ),

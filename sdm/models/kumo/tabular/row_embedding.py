@@ -4,6 +4,7 @@
 # ruff: noqa: D101, D102
 
 import math
+from collections.abc import Iterator
 from typing import Any, cast
 
 import torch
@@ -232,11 +233,18 @@ class RowEmbedding(torch.nn.Module):
 
         return self.norm(buffer if buffer is not None else x).flatten(-2)
 
-    def max_query_rows(self, cache: Cache, device: torch.device) -> int:
+    def max_query_rows(
+        self,
+        cache: Cache,
+        device: torch.device,
+        num_columns: int | None = None,
+    ) -> int:
         # The query rows `forward` embeds without splitting an attention
-        # batch, as limited by the blocks that split.
+        # batch, as limited by the blocks that split, for the fitted or
+        # `num_columns` columns.
         key = cast(KVCacheEntry, cache["row_embedding.col_block0"]).key
         *B, C, M = key.size()[:-2]  # [..., C, M, H, D]
+        C = C if num_columns is None else num_columns
         K = self.readout_token.size(-2)
         element_size = (
             torch.get_autocast_dtype(device.type)
@@ -256,3 +264,11 @@ class RowEmbedding(torch.nn.Module):
             device, element_size, num_rows, M
         )
         return num_rows if math.prod(B) * C <= limit else 0
+
+    def column_dims(self, cache: Cache) -> Iterator[tuple[Tensor, int]]:
+        # The column dimensions of the cached state.
+        yield cast(Tensor, cache["cell_impute_mean"]), -1  # [..., 1, C]
+        for i in range(len(self.col_blocks)):
+            key = f"row_embedding.col_block{i}"
+            for tensor in cast(KVCacheEntry, cache[key]):
+                yield tensor, -4  # [..., C, M, H, D]

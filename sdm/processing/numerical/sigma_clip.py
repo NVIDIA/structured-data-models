@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from collections.abc import Iterator
 from typing import Literal
 
 import torch
@@ -46,6 +47,10 @@ class ClipSigma(Processor):
         self.method = method
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
+
+    def _column_dims(self) -> Iterator[tuple[Tensor, int]]:
+        yield self.lower_bound, -1
+        yield self.upper_bound, -1
 
     def _fit(
         self,

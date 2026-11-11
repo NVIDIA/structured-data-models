@@ -460,6 +460,80 @@ def test_compile_predict_query_rows(
     assert counter.frame_count == 1
 
 
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+# Numerical tables also vary in their columns.
+@pytest.mark.parametrize("numerical", [True, False])
+def test_compile_predict_refit(
+    device: torch.device,
+    numerical: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_: 8)
+    model = _build("classification", "small").to(device)
+    # More than 10 classes run through ECOC.
+    y = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor.from_tensor(
+            torch.arange(130, device=device).remainder(11).unsqueeze(-1)
+        ),
+    )
+    category = TableTensor(
+        columns={Stype.categorical: ("categorical",)},
+        categorical=CategoricalTensor(
+            code=torch.arange(139).remainder(3).unsqueeze(-1),
+            categories=(StringTensor.from_list(["a", "b", "c"]),),
+        ),
+    ).to(device)
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        dynamic=False,
+    )
+    # Columns and context rows; the second fit drops a constant column.
+    for num_columns, num_rows in [(17, 40), (5, 40), (2, 130), (100, 60)]:
+        if not numerical:
+            num_columns = 4
+        x = torch.randn(139, num_columns, device=device)
+        x[:, 1] = 1.0 if num_columns == 5 else x[:, 1]
+        x = TableTensor.from_tensor(
+            x, columns=[f"{num_columns}_{i}" for i in range(num_columns)]
+        )
+        if not numerical:
+            x = torch.cat([x, category], dim=-1)
+        # Seeding keeps the column and class order across fits.
+        model.fit(
+            x[:num_rows],
+            y[:num_rows],
+            num_estimators=4,
+            generator=torch.Generator(device).manual_seed(0),
+        )
+        for size in (3, 1, 9):
+            stance = "fail_on_recompile" if counter.frame_count else "default"
+            with torch.compiler.set_stance(stance):
+                actual = predict(x[-size:])
+            expected = model.predict(x[-size:])
+            assert actual.columns == expected.columns
+            torch.testing.assert_close(
+                actual=actual.numerical,
+                expected=expected.numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
+    assert counter.frame_count == 1
+
+    if numerical:
+        with pytest.raises(ValueError, match="named"):
+            model.predict(
+                TableTensor(
+                    columns={Stype.numerical: None},
+                    numerical=x.numerical,
+                )
+            )
+
+
 @onlyMPS
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_default_recipe_on_mps(
