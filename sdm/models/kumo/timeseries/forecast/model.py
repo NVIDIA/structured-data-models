@@ -170,27 +170,28 @@ class KumoForecast(ICLModel):
             )
             x_query = x_query[..., :0]
 
-        x_context = self._prepare_history(x_context)
-        y_context = self._prepare_history(y_context)
+        context_tables = [x_context, y_context]
+        for i, table in enumerate(context_tables):
+            numerical = table.numerical
+            numerical = numerical.masked_fill(numerical.isnan(), 0)
+            if table.size(-2) < self.model.context_size:
+                numerical = torch.nn.functional.pad(
+                    numerical,
+                    pad=(0, 0, self.model.context_size - table.size(-2), 0),
+                    value=0,
+                )
+                context_tables[i] = TableTensor(
+                    columns={
+                        str(stype): names
+                        for stype, names in table.columns.items()
+                    },
+                    numerical=numerical,
+                )
+            else:
+                context_tables[i] = table.replace_blocks(numerical=numerical)
+        x_context, y_context = context_tables
         kwargs.update(alpha=alpha, k=k, temperature=temperature)
         return super().forward(x_context, y_context, x_query, *args, **kwargs)
-
-    def _prepare_history(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical
-        numerical = numerical.masked_fill(numerical.isnan(), 0)
-        if table.size(-2) < self.model.context_size:
-            numerical = torch.nn.functional.pad(
-                numerical,
-                pad=(0, 0, self.model.context_size - table.size(-2), 0),
-                value=0,
-            )
-            return TableTensor(
-                columns={
-                    str(stype): names for stype, names in table.columns.items()
-                },
-                numerical=numerical,
-            )
-        return table.replace_blocks(numerical=numerical)
 
     def fit(self, *args: Any, **kwargs: Any) -> None:
         r""":meta private:"""  # noqa: D415
