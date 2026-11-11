@@ -3,6 +3,7 @@
 
 import abc
 import copy
+import functools
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
@@ -28,7 +29,7 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
-from sdm.tensor.table import TableSchema
+from sdm.tensor.table import TableSchema, _mark_dynamic_rows
 
 
 class ICLModel(Model):
@@ -381,6 +382,70 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        return self._predict(x, related_tables, callbacks=callbacks)
+
+    def _predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+        compiled: Callable[..., TableTensor] | None = None,
+    ) -> TableTensor:  # Recipe-defined output shape.
+        # Predict the query in chunks of rows that fit one pass each. A
+        # compiled pass records one graph that every chunk reuses.
+        predict_chunk = self._predict_chunk if compiled is None else compiled
+        chunk_size: int | None = None
+        if (
+            self._cache is not None
+            and related_tables is None
+            and not callbacks
+        ):
+            chunk_size = self._query_chunk_size(x.device)
+        if chunk_size is None:
+            return predict_chunk(x, related_tables, callbacks=callbacks)
+
+        num_rows = x.size(-2)
+        if num_rows == 0 or (compiled is None and num_rows <= chunk_size):
+            return self._predict_chunk(x)
+
+        outs: list[Tensor] = []
+        for start in range(0, num_rows, chunk_size):
+            end = min(start + chunk_size, num_rows)
+            if compiled is None:
+                chunk = x[..., start:end, :]
+            else:
+                # Gather every chunk, so all chunks share one layout, and
+                # repeat the row of single-row chunks: 1-row inputs would
+                # specialize.
+                index = torch.arange(
+                    start, max(end, start + 2), device=x.device
+                )
+                chunk = x.index_select(-2, index.clamp_(max=end - 1))
+                _mark_dynamic_rows(chunk, min_rows=2, max_rows=chunk_size)
+            outs.append(predict_chunk(chunk)[..., : end - start, :])
+        with inference_mode("inference"):
+            out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=-2)
+        return cast(TableTensor, out)
+
+    def _query_chunk_size(self, device: torch.device) -> int | None:
+        r"""The query rows the fitted model predicts in one pass.
+
+        Models that predict query rows independently of each other return the
+        number of rows, more than two, that one pass predicts without chunking
+        internally. :meth:`predict` then splits larger queries, and a
+        compiled :meth:`predict` runs one graph for any non-zero number of
+        query rows. ``None`` predicts every query in one pass.
+        """
+        return None
+
+    def _predict_chunk(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+    ) -> TableTensor:  # Recipe-defined output shape.
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -490,7 +555,8 @@ class ICLModel(Model):
             :meth:`predict` itself is not compiled.
         """
         kwargs = {"isolate_recompiles": True} | kwargs
-        return torch.compile(self.predict, **kwargs)
+        compiled = torch.compile(self._predict_chunk, **kwargs)
+        return functools.partial(self._predict, compiled=compiled)
 
     # Abstract Methods ########################################################
 

@@ -171,6 +171,25 @@ class KumoTabular(ICLModel):
         """  # noqa: D212
         return default_recipe()
 
+    def _query_chunk_size(self, device: torch.device) -> int | None:
+        assert self._cache is not None
+        regression = cast(Cache, self._cache[0])["classes"] is None
+        task = Task.regression if regression else Task.classification
+        row_embedding = cast(_KumoTabular, self.models[task]).row_embedding
+        caches = (
+            cast(Cache, self._cache[i])
+            for i in range(cast(int, self._cache["num_batches"]))
+        )
+        num_rows = min(
+            row_embedding.max_query_rows(
+                # ECOC nests the model cache when classes exceed capacity.
+                cache=cast(Cache, cache.get("ecoc_model", cache)),
+                device=device,
+            )
+            for cache in caches
+        )
+        return num_rows if num_rows > 2 else None
+
     def _load_from_pretrained(
         self,
         size: Literal["small", "medium", "large"],
