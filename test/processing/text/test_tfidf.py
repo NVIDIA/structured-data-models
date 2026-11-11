@@ -6,7 +6,7 @@ import torch
 
 from sdm import EnsembleTable, StringTensor, TableTensor
 from sdm.processing import TFIDF
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_preserves_leading_dimensions() -> None:
@@ -344,3 +344,29 @@ def test_tfidf_failed_refit_preserves_ensemble_state(
     output = processor.transform_ensemble(ensemble_table)
     for member_id in range(len(ensemble_table)):
         assert output[member_id].equal(expected[member_id])
+
+
+@withCUDA
+def test_transform_compiles(compilation: None, device: torch.device) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+        pytest.importorskip("cupy")
+        pytest.importorskip("pylibcudf")
+
+    train = TableTensor.from_tensor(
+        StringTensor.from_list(
+            [["ab", "x y"], ["ab ac", "y"], ["ac", "z"]],
+            device=device,
+        )
+    )
+    test = TableTensor.from_tensor(
+        StringTensor.from_list([["ac zz", "y z"], [None, "x"]], device=device)
+    )
+    encoder = TFIDF(ngram_range=(2, 3)).fit(train)
+
+    compiled = torch.compile(
+        encoder.transform,
+        backend="inductor",
+        fullgraph=True,
+    )
+    assert compiled(test).equal(encoder.transform(test))

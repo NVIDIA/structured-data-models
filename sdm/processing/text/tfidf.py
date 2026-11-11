@@ -14,19 +14,37 @@ from torch.utils.dlpack import from_dlpack
 
 from sdm import EnsembleTable, StringTensor, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
+from sdm.processing.categorical.align import (
+    _flatten_strings,
+    _unflatten_strings,
+)
 from sdm.tensor.io import arrow_as_tensor
+from sdm.tensor.var_len import _contiguous
 
 
 class _TFIDFState(torch.nn.Module):
     def __init__(
         self,
-        vocabularies: list[pa.Array],
+        vocabularies: list[StringTensor],
         idfs: list[Tensor],
     ) -> None:
         super().__init__()
-        self.vocabularies = vocabularies
-        for column, idf in enumerate(idfs):
+        self.num_columns = len(idfs)
+        for column, (vocabulary, idf) in enumerate(zip(vocabularies, idfs)):
+            # The vocabulary is saved as strings in the extra state.
+            self.register_buffer(
+                f"vocabulary_{column}",
+                vocabulary,
+                persistent=False,
+            )
             self.register_buffer(f"idf_{column}", idf)
+
+    @property
+    def vocabularies(self) -> list[StringTensor]:
+        return [
+            cast(StringTensor, self.get_buffer(f"vocabulary_{column}"))
+            for column in range(self.num_columns)
+        ]
 
 
 class TFIDF(EnsembleProcessor):
@@ -81,7 +99,7 @@ class TFIDF(EnsembleProcessor):
         r""":meta private:"""  # noqa: D415
         vocabularies = tuple(
             tuple(
-                tuple(cast(list[str], vocabulary.to_pylist()))
+                tuple(cast(list[str], vocabulary.tolist()))
                 for vocabulary in cast(_TFIDFState, state).vocabularies
             )
             for state in self._states
@@ -104,7 +122,10 @@ class TFIDF(EnsembleProcessor):
             [
                 _TFIDFState(
                     [
-                        pa.array(vocabulary, type=pa.large_string())
+                        StringTensor.from_list(
+                            list(vocabulary),
+                            device=self._idf_template.device,
+                        )
                         for vocabulary in state_vocabularies
                     ],
                     [
@@ -117,8 +138,8 @@ class TFIDF(EnsembleProcessor):
         )
         self._member_state_ids = member_state_ids
 
+    @staticmethod
     def _character_ngrams(
-        self,
         tensor: StringTensor,
         ngram_range: tuple[int, int],
         *,
@@ -131,7 +152,7 @@ class TFIDF(EnsembleProcessor):
             )
 
         if tensor.is_cuda:
-            return self._character_ngrams_cuda(tensor, ngram_range, lowercase)
+            return TFIDF._character_ngrams_cuda(tensor, ngram_range, lowercase)
 
         min_n, max_n = ngram_range
         whitespace = re.compile(r"\s\s+")
@@ -164,8 +185,8 @@ class TFIDF(EnsembleProcessor):
         offset = torch.tensor(offsets, dtype=torch.int64, device=tensor.device)
         return flat, offset
 
+    @staticmethod
     def _character_ngrams_cuda(
-        self,
         tensor: StringTensor,
         ngram_range: tuple[int, int],
         lowercase: bool = True,
@@ -239,7 +260,7 @@ class TFIDF(EnsembleProcessor):
         table: TableTensor,
     ) -> _TFIDFState:
         device = table.text.device
-        vocabularies: list[pa.Array] = []
+        vocabularies: list[StringTensor] = []
         idfs: list[Tensor] = []
 
         for column in range(table.text.size(-1)):
@@ -259,22 +280,24 @@ class TFIDF(EnsembleProcessor):
                 import cudf
 
                 values = flat.to_cudf()
-                vocabulary = values.drop_duplicates(
-                    ignore_index=True
-                ).to_arrow()
+                unique = values.drop_duplicates(ignore_index=True)
+                vocabulary = StringTensor.from_cudf(unique, device=device)
                 encoded = values.astype(
-                    cudf.CategoricalDtype(categories=vocabulary)
+                    cudf.CategoricalDtype(categories=unique)
                 )
                 codes = torch.from_dlpack(
                     encoded.cat.codes.astype("int64").to_dlpack()
                 ).to(device)
             else:
                 encoded = flat.to_arrow().dictionary_encode()
-                vocabulary = encoded.dictionary
+                vocabulary = StringTensor.from_arrow(
+                    encoded.dictionary,
+                    device=device,
+                )
                 codes = arrow_as_tensor(
                     encoded.indices, dtype=torch.int64, device=device
                 )  # [n_ngrams]
-            vocab_size = len(vocabulary)
+            vocab_size = vocabulary.numel()
             # Map each n-gram back to its document via the offsets.
             doc_ids = torch.repeat_interleave(
                 torch.arange(n_docs, device=device),
@@ -302,11 +325,11 @@ class TFIDF(EnsembleProcessor):
             # vocabulary order via a stable sort.
             if (
                 self.max_features is not None
-                and len(vocabulary) > self.max_features
+                and vocab_size > self.max_features
             ):
                 ranked = term_counts.argsort(descending=True, stable=True)
                 keep = ranked[: self.max_features].sort().values
-                vocabulary = vocabulary.take(pa.array(keep.tolist()))
+                vocabulary = cast(StringTensor, vocabulary[keep])
                 idf = idf[keep]
             vocabularies.append(vocabulary)
             idfs.append(idf)
@@ -382,16 +405,17 @@ class TFIDF(EnsembleProcessor):
         state: _TFIDFState,
     ) -> TableTensor:
         device = table.text.device
+        vocabularies = state.vocabularies
         dtype = (
             state.get_buffer("idf_0").dtype
-            if state.vocabularies
+            if vocabularies
             else torch.get_default_dtype()
         )
         text_names = table.text_columns
         leading_shape = table.text.shape[:-1]
         n_rows = math.prod(leading_shape)
 
-        vocab_sizes = [len(vocabulary) for vocabulary in state.vocabularies]
+        vocab_sizes = [vocabulary.numel() for vocabulary in vocabularies]
         column_offsets = [0, *accumulate(vocab_sizes)]
         total_width = column_offsets[-1]
         numerical = torch.zeros(
@@ -402,7 +426,7 @@ class TFIDF(EnsembleProcessor):
         flat_numerical = numerical.view(n_rows, total_width)
         names: list[str] = []
         for column in range(table.text.size(-1)):
-            vocabulary = state.vocabularies[column]
+            vocabulary = vocabularies[column]
             idf = getattr(state, f"idf_{column}")
             vocab_size = vocab_sizes[column]
             column_start = column_offsets[column]
@@ -415,48 +439,24 @@ class TFIDF(EnsembleProcessor):
                     StringTensor,
                     table.text[..., column].reshape(-1),
                 )
-                flat, offsets = self._character_ngrams(
-                    column_text,
-                    self.ngram_range,
-                    lowercase=self.lowercase,
+                # StringTensor does not handle this custom op. Pass its
+                # underlying tensors and layout without copying the strings.
+                text, text_layout = _flatten_strings((column_text,))
+                fitted, fitted_layout = _flatten_strings(
+                    (vocabulary.to(device),)
                 )
-                # Map n-grams to fitted vocab indices; unseen -> -1 (dropped).
-                if flat.is_cuda:
-                    import cudf
-
-                    encoded = (
-                        flat.to_cudf()
-                        .astype(cudf.CategoricalDtype(categories=vocabulary))
-                        .cat.codes
+                column_slice.copy_(
+                    _tfidf(
+                        text=text,
+                        text_layout=text_layout,
+                        vocabulary=fitted,
+                        vocabulary_layout=fitted_layout,
+                        idf=idf,
+                        min_n=self.ngram_range[0],
+                        max_n=self.ngram_range[1],
+                        lowercase=self.lowercase,
                     )
-                    codes = torch.from_dlpack(
-                        encoded.astype("int64").to_cupy(na_value=-1)
-                    ).to(device)
-                else:
-                    codes = arrow_as_tensor(
-                        pc.call_function(
-                            "index_in",
-                            [flat.to_arrow()],
-                            options=pc.SetLookupOptions(value_set=vocabulary),
-                        ).fill_null(-1),
-                        dtype=torch.int64,
-                        device=device,
-                    )  # [n_ngrams]
-                doc_ids = torch.repeat_interleave(
-                    torch.arange(n_rows, device=device),
-                    offsets.diff(),
-                )  # [n_ngrams]
-                mask = (codes >= 0) & (codes < vocab_size)
-                flat_index = doc_ids[mask] * vocab_size + codes[mask]
-                counts = column_slice.new_zeros(n_rows, vocab_size)
-                counts.view(-1).scatter_add_(
-                    0,
-                    flat_index,
-                    torch.ones_like(flat_index, dtype=dtype),
                 )
-                counts.mul_(idf)
-                norm = counts.norm(dim=1, keepdim=True).clamp_min_(1e-12)
-                column_slice.copy_(counts.div_(norm))
             names.extend(
                 f"{text_names[column]}_{i}" for i in range(vocab_size)
             )
@@ -478,3 +478,82 @@ class TFIDF(EnsembleProcessor):
             f"lowercase={self.lowercase}"
             ")"
         )
+
+
+@torch.library.custom_op("sdm::tfidf", mutates_args=())
+def _tfidf(
+    text: list[Tensor | None],
+    text_layout: list[int],
+    vocabulary: list[Tensor | None],
+    vocabulary_layout: list[int],
+    idf: Tensor,
+    min_n: int,
+    max_n: int,
+    lowercase: bool,
+) -> Tensor:
+    """Keep the dynamic number of n-grams inside a fixed-size encoding."""
+    (column_text,) = _unflatten_strings(text, text_layout)
+    if not column_text.is_contiguous():
+        # Calling Tensor.contiguous here fails during compiled execution.
+        column_text = cast(StringTensor, _contiguous(column_text))
+    (fitted,) = _unflatten_strings(vocabulary, vocabulary_layout)
+    device = column_text.device
+    n_rows = column_text.numel()
+    vocab_size = fitted.numel()
+
+    flat, offsets = TFIDF._character_ngrams(
+        column_text,
+        (min_n, max_n),
+        lowercase=lowercase,
+    )
+    # Map n-grams to fitted vocab indices; unseen -> -1 (dropped).
+    if flat.is_cuda:
+        import cudf
+
+        encoded = (
+            flat.to_cudf()
+            .astype(cudf.CategoricalDtype(categories=fitted.to_cudf()))
+            .cat.codes
+        )
+        codes = torch.from_dlpack(
+            encoded.astype("int64").to_cupy(na_value=-1)
+        ).to(device)
+    else:
+        codes = arrow_as_tensor(
+            pc.call_function(
+                "index_in",
+                [flat.to_arrow()],
+                options=pc.SetLookupOptions(value_set=fitted.to_arrow()),
+            ).fill_null(-1),
+            dtype=torch.int64,
+            device=device,
+        )  # [n_ngrams]
+    doc_ids = torch.repeat_interleave(
+        torch.arange(n_rows, device=device),
+        offsets.diff(),
+    )  # [n_ngrams]
+    mask = (codes >= 0) & (codes < vocab_size)
+    flat_index = doc_ids[mask] * vocab_size + codes[mask]
+    counts = idf.new_zeros(n_rows, vocab_size)
+    counts.view(-1).scatter_add_(
+        0,
+        flat_index,
+        torch.ones_like(flat_index, dtype=idf.dtype),
+    )
+    counts.mul_(idf)
+    norm = counts.norm(dim=1, keepdim=True).clamp_min_(1e-12)
+    return counts.div_(norm)
+
+
+@_tfidf.register_fake
+def _tfidf_fake(
+    text: list[Tensor | None],
+    text_layout: list[int],
+    vocabulary: list[Tensor | None],
+    vocabulary_layout: list[int],
+    idf: Tensor,
+    min_n: int,
+    max_n: int,
+    lowercase: bool,
+) -> Tensor:
+    return idf.new_empty((text_layout[0], idf.numel()))
