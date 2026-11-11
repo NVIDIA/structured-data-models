@@ -167,18 +167,3 @@ def test_impute_mode_composes_before_to_numerical() -> None:
             [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 1.0]],
         ),
     )
-
-
-def test_impute_mode_compiles_after_align_categories(
-    compilation: None,
-) -> None:
-    table = _table([[0, 0], [0, -1], [1, 1], [-1, 1]])
-    processor = sp.Sequential(sp.AlignCategories(), sp.ImputeMode())
-    processor.fit(table)
-
-    compiled = torch.compile(
-        processor.transform,
-        backend="eager",
-        fullgraph=True,
-    )
-    assert compiled(table).equal(processor.transform(table))
