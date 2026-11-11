@@ -473,13 +473,12 @@ class _KumoRelational(torch.nn.Module):
                 generator=generator,
             )
 
-        # Inter-Message Passing ###############################################
-        # Empty split views also retain the full table embedding storage.
-        if context is None:
+        if context is None:  # Release empty views:
             xs_context.clear()
         if query is None:
             xs_query.clear()
 
+        # Inter-Message Passing ###############################################
         gnn_cache = cache or Cache()
         if context is not None:
             x_context: Tensor = torch.cat(
