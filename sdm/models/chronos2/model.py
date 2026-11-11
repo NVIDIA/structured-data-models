@@ -255,7 +255,7 @@ class Chronos2(ICLModel):
         return TableTensor(
             columns={
                 Stype.numerical: [
-                    f"{name}__q{round(q * 100)}"
+                    f"{name}__q{round(q * 100):02d}"
                     for name in y_schema.columns[Stype.numerical]
                     for q in QUANTILES
                 ],

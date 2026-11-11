@@ -21,8 +21,8 @@
    :show-inheritance:
    :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, paper, source, release_date, parameter_count, code_license, weights_license, metadata
 
-Model Details
--------------
+Capabilities
+------------
 
 .. list-table::
 
@@ -30,20 +30,30 @@ Model Details
      - {% for stype in cls.supported_feature_stypes | sort(attribute="value") -%}
          ``{{ stype }}``{{ ", " if not loop.last }}
        {%- endfor %}
+{% if cls.supported_target_stypes is defined %}
    * - **Supported Target Semantic Types**
      - {% for stype in cls.supported_target_stypes | sort(attribute="value") -%}
          ``{{ stype }}``{{ ", " if not loop.last }}
        {%- endfor %}
+{% endif %}
+{% if cls.supported_tasks is defined %}
    * - **Supported Prediction Tasks**
      - {% for task in cls.supported_tasks | sort(attribute="value") -%}
          ``{{ task }}``{{ ", " if not loop.last }}
        {%- endfor %}
+{% endif %}
+{% if cls.supports_multi_target is defined %}
    * - **Multi-Target Support**
      - {{ "✅" if cls.supports_multi_target else "❌" }}
+{% endif %}
+{% if cls.supports_context_only_columns is defined %}
    * - **Context-only Column Support**
      - {{ "✅" if cls.supports_context_only_columns else "❌" }}
+{% endif %}
+{% if cls.supports_related_tables is defined %}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
+{% endif %}
 
 {% if cls.metadata %}
 Model Details
