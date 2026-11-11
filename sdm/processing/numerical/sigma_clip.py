@@ -7,7 +7,7 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite
@@ -49,12 +49,17 @@ class ClipSigma(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        lower, upper = EnsembleData.execute(
+            self._fit_bounds, table.numerical, batched=True
+        )
+        self.register_buffer("lower_bound", lower)
+        self.register_buffer("upper_bound", upper)
 
-        numerical = table.numerical
+    def _fit_bounds(self, numerical: Tensor) -> tuple[Tensor, Tensor]:
         assert not numerical.requires_grad
         finite = _isfinite(numerical)
         count_finite = finite.sum(dim=-2, keepdim=True)
@@ -91,22 +96,33 @@ class ClipSigma(Processor):
         mean = torch.where(has_kept, kept_mean, mean)
         std = torch.where(has_kept, kept_std, std)
 
-        self._set_buffer("lower_bound", mean - self.threshold * std)
-        self._set_buffer("upper_bound", mean + self.threshold * std)
+        return mean - self.threshold * std, mean + self.threshold * std
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        numerical = EnsembleData.execute(
+            self._transform_values,
+            table.numerical,
+            self.lower_bound,
+            self.upper_bound,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    def _transform_values(
+        self, numerical: Tensor, lower_bound: Tensor, upper_bound: Tensor
+    ) -> Tensor:
         if self.method == "hard":
-            return table.replace_blocks(
-                numerical=numerical.clamp(self.lower_bound, self.upper_bound)
-            )
+            return numerical.clamp(lower_bound, upper_bound)
         assert self.method == "log"
-        dtype = torch.promote_types(numerical.dtype, self.lower_bound.dtype)
+        dtype = EnsembleData.execute(
+            torch.promote_types, numerical.dtype, lower_bound.dtype
+        )
         if torch.is_grad_enabled():
             log_abs = numerical.abs().log1p().to(dtype)
-            clipped = torch.maximum(self.lower_bound - log_abs, numerical)
-            clipped = torch.minimum(log_abs + self.upper_bound, clipped)
-            return table.replace_blocks(numerical=clipped)
+            clipped = torch.maximum(lower_bound - log_abs, numerical)
+            return torch.minimum(log_abs + upper_bound, clipped)
 
         out = torch.empty_like(numerical, dtype=dtype)
         # Chunks of rows bound the temporary besides the output.
@@ -123,10 +139,10 @@ class ClipSigma(Processor):
             strict=True,
         ):
             log_abs = inp.abs().log1p_().to(dtype)
-            torch.sub(self.lower_bound, log_abs, out=clipped)
+            torch.sub(lower_bound, log_abs, out=clipped)
             torch.maximum(clipped, inp, out=clipped)
-            torch.minimum(log_abs.add_(self.upper_bound), clipped, out=clipped)
-        return table.replace_blocks(numerical=out)
+            torch.minimum(log_abs.add_(upper_bound), clipped, out=clipped)
+        return out
 
     def __repr__(self, *, indent: int = 0) -> str:
         extra = "" if self.method == "hard" else f", method={self.method!r}"

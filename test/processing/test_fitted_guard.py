@@ -10,6 +10,7 @@ import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
@@ -57,8 +58,10 @@ class StatelessProcessor(Processor):
     handles_stypes = (Stype.numerical,)
     requires_fit = False
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical + 1)
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return table.replace_blocks(numerical=table.numerical.add(1))
 
 
 class StatefulProcessor(Processor):
@@ -67,14 +70,16 @@ class StatefulProcessor(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         pass
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical + 1)
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return table.replace_blocks(numerical=table.numerical.add(1))
 
 
 def test_stateless_processor_runs_without_fit() -> None:

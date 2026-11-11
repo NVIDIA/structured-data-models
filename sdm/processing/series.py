@@ -4,10 +4,10 @@
 
 from torch import Tensor
 
-from sdm.processing import EnsembleProcessor
+from sdm.processing import Processor
 
 
-class SeriesEnsembleProcessor(EnsembleProcessor):
+class SeriesProcessor(Processor):
     r"""Base processor for consecutive, equally spaced time-series data."""
 
     _offset: Tensor | None

@@ -1,15 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import cast
 
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import EnsembleProcessor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm.processing import Processor
 
 
-class DropConstantColumns(EnsembleProcessor):
+class DropConstantColumns(Processor):
     """Remove non-informative numerical columns learned during fit.
 
     Columns are retained when they have more than ``threshold`` distinct
@@ -42,15 +41,7 @@ class DropConstantColumns(EnsembleProcessor):
         self.threshold = threshold
         # TODO: Consider recording the fitted column names if transforms should
         # verify that the numerical schema and order match fit.
-        self._kept_indices: tuple[tuple[int, ...], ...] = ()
-
-    def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
-        r""":meta private:"""  # noqa: D415
-        return self._kept_indices
-
-    def set_extra_state(self, state: object) -> None:
-        r""":meta private:"""  # noqa: D415
-        self._kept_indices = cast(tuple[tuple[int, ...], ...], state)
+        self.register_buffer("_kept_indices", None)
 
     def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
         # [N, C] or [..., N, C] -> [C] or [..., C].
@@ -74,13 +65,13 @@ class DropConstantColumns(EnsembleProcessor):
     @staticmethod
     def _select_columns(
         table: TableTensor,
-        kept_indices: tuple[int, ...],
+        kept_indices: torch.Tensor,
     ) -> TableTensor:
         numerical_columns = table.numerical_columns
-        if len(kept_indices) == len(numerical_columns):
+        if kept_indices.numel() == len(numerical_columns):
             return table
         kept_numerical_columns = tuple(
-            numerical_columns[index] for index in kept_indices
+            numerical_columns[index] for index in kept_indices.tolist()
         )
         columns = [
             column
@@ -95,143 +86,20 @@ class DropConstantColumns(EnsembleProcessor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        keep = self._keep_mask(table.numerical).tolist()
-        self._kept_indices = (
-            tuple(index for index, kept in enumerate(keep) if kept),
+        keep = EnsembleData.execute(
+            self._keep_mask, table.numerical, batched=True
         )
+        self.register_buffer("_kept_indices", keep.nonzero(as_tuple=True)[0])
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self._select_columns(table, self._kept_indices[0])
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        self._fit(table, generator=generator)
-        return self._transform(table)
-
-    def _fit_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        groups = tuple(ensemble_table._iter_groups())
-        if sum(group.size(0) for group in groups) == 1:
-            group = groups[0]
-            keep = self._keep_mask(group.numerical)[0].tolist()
-            kept_indices = tuple(
-                index for index, kept in enumerate(keep) if kept
-            )
-            self._kept_indices = (kept_indices,) * len(ensemble_table)
-            return
-
-        masks = ensemble_table.replace_groups(
-            [
-                TableTensor.from_tensor(
-                    tensor=self._keep_mask(group.numerical)
-                    .to(dtype=group.numerical.dtype)
-                    .unsqueeze(-2),
-                    columns=group.numerical_columns,
-                )
-                for group in groups
-            ]
-        )
-        masks_by_size_and_device: dict[
-            tuple[int, torch.device],
-            list[tuple[int, torch.Tensor]],
-        ] = {}
-        for member_id in range(len(masks)):
-            table = masks[member_id]
-            key = (table.numerical.size(-1), table.device)
-            masks_by_size_and_device.setdefault(key, []).append(
-                (member_id, table.numerical[0].bool())
-            )
-
-        kept_indices_by_member: list[tuple[int, ...]]
-        kept_indices_by_member = [()] * len(masks)
-        for member_masks in masks_by_size_and_device.values():
-            keep_by_member = torch.stack(
-                [keep for _, keep in member_masks]
-            ).tolist()
-            for (member_id, _), keep in zip(
-                member_masks,
-                keep_by_member,
-                strict=True,
-            ):
-                kept_indices_by_member[member_id] = tuple(
-                    index for index, kept in enumerate(keep) if kept
-                )
-        self._kept_indices = tuple(kept_indices_by_member)
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        if len(self._kept_indices) != len(ensemble_table):
-            raise RuntimeError(
-                "DropConstantColumns must be fitted with the same number of "
-                "ensemble members before transform."
-            )
-
-        member_ids_by_kept_indices: dict[tuple[int, ...], list[int]] = {}
-        for member_id, kept_indices in enumerate(self._kept_indices):
-            member_ids_by_kept_indices.setdefault(kept_indices, []).append(
-                member_id
-            )
-
-        if len(member_ids_by_kept_indices) == 1:
-            kept_indices = next(iter(member_ids_by_kept_indices))
-            return ensemble_table.replace_groups(
-                [
-                    self._select_columns(group, kept_indices)
-                    for group in ensemble_table._iter_groups()
-                ]
-            )
-
-        if sum(
-            group.size(0) for group in ensemble_table._iter_groups()
-        ) == len(ensemble_table):
-            tables = [
-                self._select_columns(
-                    ensemble_table[member_id],
-                    kept_indices,
-                )
-                for member_id, kept_indices in enumerate(self._kept_indices)
-            ]
-            return ensemble_table.replace_tables(
-                tables=tables,
-                member_table_ids=range(len(ensemble_table)),
-            )
-
-        outputs: dict[tuple[int, ...], EnsembleTable] = {}
-        for kept_indices, member_ids in member_ids_by_kept_indices.items():
-            selected = ensemble_table[member_ids]
-            outputs[kept_indices] = selected.replace_groups(
-                [
-                    self._select_columns(group, kept_indices)
-                    for group in selected._iter_groups()
-                ]
-            )
-
-        tables = []
-        member_ids = []
-        next_member_id_by_kept_indices: dict[tuple[int, ...], int] = {}
-        for kept_indices in self._kept_indices:
-            tables.append(outputs[kept_indices])
-            member_id = next_member_id_by_kept_indices.get(kept_indices, 0)
-            member_ids.append(member_id)
-            next_member_id_by_kept_indices[kept_indices] = member_id + 1
-
-        return ensemble_table.gather_members(
-            tables=tables,
-            member_ids=member_ids,
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(
+            self._select_columns, table, self._kept_indices
         )
 
     def __repr__(self, *, indent: int = 0) -> str:

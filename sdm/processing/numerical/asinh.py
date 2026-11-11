@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -11,8 +11,12 @@ class Asinh(Processor, InvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = False
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         return table.replace_blocks(numerical=table.numerical.asinh())
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         return table.replace_blocks(numerical=table.numerical.sinh())

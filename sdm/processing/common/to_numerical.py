@@ -5,7 +5,7 @@ from typing import cast
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import Processor
 
 
@@ -26,7 +26,12 @@ class ToNumerical(Processor):
     requires_fit = False
     handles_stypes = (Stype.numerical, Stype.categorical)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(self._convert, table, batched=True)
+
+    def _convert(self, table: TableTensor) -> TableTensor:
         """Return ``table`` with categorical columns moved to ``numerical``."""
         # Already numerical-only: nothing to move.
         if all(

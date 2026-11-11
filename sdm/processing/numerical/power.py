@@ -6,7 +6,7 @@ import math
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
@@ -253,15 +253,21 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         count: Tensor,
     ) -> Tensor:
-        return _optimize_lambdas(inp, constant_features, count=count)
+        return EnsembleData.execute(
+            _optimize_lambdas,
+            inp,
+            constant_features,
+            count=count,
+            batched=True,
+        )
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        finite = _isfinite(table.numerical)
+        finite = EnsembleData.execute(_isfinite, table.numerical)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
         count = finite.sum(dim=-2, keepdim=True).clamp_(min=1)
 
@@ -279,7 +285,9 @@ class PowerTransform(Processor, InvertibleMixin):
         # entirely missing column, whose max must be zero.
         self._set_buffer(
             name="max",
-            value=torch.where(finite, table.numerical, mean).amax(
+            value=EnsembleData.execute(
+                torch.where, finite, table.numerical, mean
+            ).amax(
                 dim=-2,
                 keepdim=True,
             ),
@@ -296,7 +304,12 @@ class PowerTransform(Processor, InvertibleMixin):
         )
 
         if self.standardize:
-            transformed = _yeojohnson_transform(finite_or_nan, self.lambdas)
+            transformed = EnsembleData.execute(
+                _yeojohnson_transform,
+                finite_or_nan,
+                self.lambdas,
+                batched=True,
+            )
             del finite_or_nan
             mean = transformed.nansum(dim=-2, keepdim=True).div_(count)
             var = transformed.sub_(mean).square_().nansum(-2, keepdim=True)
@@ -309,31 +322,61 @@ class PowerTransform(Processor, InvertibleMixin):
             self._set_buffer("mean", torch.zeros_like(self.lambdas))
             self._set_buffer("scale", torch.ones_like(self.lambdas))
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        transformed = _yeojohnson_transform(table.numerical, self.lambdas)
-        numerical = transformed.sub_(self.mean).div_(self.scale)
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        numerical = EnsembleData.execute(
+            self._transform_values,
+            table.numerical,
+            self.lambdas,
+            self.mean,
+            self.scale,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    @staticmethod
+    def _transform_values(
+        numerical: Tensor, lambdas: Tensor, mean: Tensor, scale: Tensor
+    ) -> Tensor:
+        transformed = _yeojohnson_transform(numerical, lambdas)
+        numerical = transformed.sub_(mean).div_(scale)
         # The fitted lambdas only keep the fitted range representable, so a
         # query far outside it can overflow.
         bound = torch.finfo(numerical.dtype).max
-        return table.replace_blocks(
-            numerical=numerical.clamp_(min=-bound, max=bound)
-        )
+        return numerical.clamp_(min=-bound, max=bound)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        unscaled = table.numerical * self.scale + self.mean
-        inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
+    def _inverse_transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        numerical = EnsembleData.execute(
+            self._inverse_values,
+            table.numerical,
+            self.lambdas,
+            self.mean,
+            self.scale,
+            self.max,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    @staticmethod
+    def _inverse_values(
+        numerical: Tensor,
+        lambdas: Tensor,
+        mean: Tensor,
+        scale: Tensor,
+        maximum: Tensor,
+    ) -> Tensor:
+        unscaled = numerical * scale + mean
+        inverse = _yeojohnson_inverse_transform(unscaled, lambdas)
 
         # Above the fitted upper bound the inverse diverges, either to
         # infinity or, past the asymptote, to NaN.
-        diverged = ~_isfinite(inverse) & ~unscaled.isnan()
-        return table.replace_blocks(
-            numerical=torch.where(
-                diverged,
-                torch.fmin(inverse, self.max),
-                inverse,
-            )
+        diverged = (
+            ~EnsembleData.execute(_isfinite, inverse) & ~unscaled.isnan()
         )
+        return torch.where(diverged, torch.fmin(inverse, maximum), inverse)
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.standardize:

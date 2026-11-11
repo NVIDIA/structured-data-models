@@ -12,11 +12,10 @@ from sdm import (
     Recipe,
     RelationalData,
     Relationship,
-    Stype,
     TableTensor,
     TaskLink,
 )
-from sdm.processing import Processor, TableDispatch
+from sdm.processing import Standardize, TableDispatch
 from sdm.processing.execution import RecipeExecution
 
 
@@ -208,23 +207,6 @@ def test_expanded_sampler(relational_data: RelationalData) -> None:
 def test_batched_recipe_execution(relational_data: RelationalData) -> None:
     pytest.importorskip("pyg_lib")
 
-    class ShapeLock(Processor):
-        handles_stypes = (Stype.numerical,)
-        requires_fit = True
-
-        def _fit(
-            self,
-            table: TableTensor,
-            *,
-            generator: torch.Generator | None = None,
-        ) -> None:
-            self.batch_size = table.size(0)
-
-        def _transform(self, table: TableTensor) -> TableTensor:
-            if table.size(0) != self.batch_size:
-                raise RuntimeError("group layout changed")
-            return table
-
     context = TableTensor(
         columns={"numerical": ("target",), "id": ("user_id",)},
         numerical=torch.randn(2, 2, 1),
@@ -245,7 +227,7 @@ def test_batched_recipe_execution(relational_data: RelationalData) -> None:
     query, related_query_tables = sampler(query, **kwargs)
 
     recipe_execution = RecipeExecution(
-        recipe=Recipe(features=TableDispatch(related=ShapeLock())),
+        recipe=Recipe(features=TableDispatch(related=Standardize())),
     )
     contexts = recipe_execution.fit_transform(
         x=context.drop_columns("target"),
@@ -258,3 +240,15 @@ def test_batched_recipe_execution(relational_data: RelationalData) -> None:
     )
     assert len(contexts) == 2
     assert len(queries) == 2
+    for member, (context_member, query_member) in enumerate(
+        zip(contexts, queries)
+    ):
+        assert context_member.related_tables is not None
+        assert query_member.related_tables is not None
+        for name, table in related_context_tables.tables.items():
+            fitted = Standardize().fit(table[member])
+            expected = fitted.transform(
+                related_query_tables.tables[name][member]
+            )
+            actual = query_member.related_tables.tables[name]
+            torch.testing.assert_close(actual.numerical, expected.numerical)

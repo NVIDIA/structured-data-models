@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -36,13 +36,15 @@ class ImputeMean(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
         mean = torch.nanmean(
-            numerical.masked_fill(~_isfinite(numerical), torch.nan),
+            numerical.masked_fill(
+                ~EnsembleData.execute(_isfinite, numerical), torch.nan
+            ),
             dim=-2,
             keepdim=True,
         )
@@ -51,10 +53,14 @@ class ImputeMean(Processor):
             value=torch.where(mean.isnan(), self.fill_value, mean),
         )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         """Replace NaNs with the fitted per-column means."""
         numerical = table.numerical
-        numerical = torch.where(numerical.isnan(), self._mean, numerical)
+        numerical = EnsembleData.execute(
+            torch.where, numerical.isnan(), self._mean, numerical
+        )
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:

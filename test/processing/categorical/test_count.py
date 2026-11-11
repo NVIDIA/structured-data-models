@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import cast
+
 import pytest
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.processing import AddCategoryCounts
 from sdm.testing import withCUDA
 
@@ -66,7 +68,8 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
     # Code 3 is part of the vocabulary but was never observed while fitting.
     query = _table([[2, 0], [0, 1], [-1, 0], [3, 1]], device=device)
 
-    output = AddCategoryCounts().fit(context).transform(query)
+    processor = AddCategoryCounts().fit(context)
+    output = processor.transform(query)
 
     torch.testing.assert_close(
         output.numerical,
@@ -75,6 +78,17 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
             device=device,
         ).log1p(),
     )
+    batched = cast(TableTensor, torch.stack((query, query[[3, 2, 1, 0]])))
+    ensemble = EnsembleTable(
+        groups=(batched,),
+        locations=((0, 0), (0, 1)),
+    )
+    result = processor.transform(ensemble)
+    for member in range(2):
+        torch.testing.assert_close(
+            result[member].numerical,
+            processor.transform(ensemble[member]).numerical,
+        )
 
 
 @withCUDA

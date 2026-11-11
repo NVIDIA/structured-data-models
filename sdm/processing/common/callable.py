@@ -3,7 +3,7 @@
 
 from collections.abc import Callable
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import Processor
 
 
@@ -17,8 +17,10 @@ class Callable(Processor):
         super().__init__()
         self.function = function
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self.function(table)
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(self.function, table)
 
     def __repr__(self, *, indent: int = 0) -> str:
         name = getattr(

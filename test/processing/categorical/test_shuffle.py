@@ -157,11 +157,11 @@ def test_shuffle_categories_random_matches_independent_processors() -> None:
     )
     processor = ShuffleCategories(method="random")
 
-    context_output = processor.fit_transform_ensemble(
+    context_output = processor.fit_transform(
         context,
         generator=torch.Generator().manual_seed(7),
     )
-    query_output = processor.transform_ensemble(query)
+    query_output = processor.transform(query)
 
     generator = torch.Generator().manual_seed(7)
     context_tables = (first_context, second_context)
@@ -177,23 +177,12 @@ def test_shuffle_categories_random_matches_independent_processors() -> None:
         assert query_output[member_id].equal(expected_query)
 
 
-def test_shuffle_categories_requires_fitted_member_count() -> None:
-    table = _table([[0], [1]], (("a", "b"),))
-    processor = ShuffleCategories(method="shift")
-    processor.fit_ensemble(EnsembleTable.from_table(table, num_members=2))
-
-    with pytest.raises(RuntimeError, match="same number"):
-        processor.transform_ensemble(
-            EnsembleTable.from_table(table, num_members=1)
-        )
-
-
 def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
     table = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
         (("a", "b", "c"), ("x", "y")),
     )
-    processor = ShuffleCategories(method="random").fit_ensemble(
+    processor = ShuffleCategories(method="random").fit(
         EnsembleTable.from_table(table, num_members=2),
         generator=torch.Generator().manual_seed(0),
     )
@@ -222,7 +211,7 @@ def test_shuffle_categories_shift_uses_each_offset_before_reuse(
         device=device,
     )
     ensemble = EnsembleTable.from_table(target, num_members=num_members)
-    output = ShuffleCategories(method="shift").fit_transform_ensemble(ensemble)
+    output = ShuffleCategories(method="shift").fit_transform(ensemble)
     shifts = torch.stack(
         [output[i].categorical.code[0] for i in range(num_members)]
     )

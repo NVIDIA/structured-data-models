@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import Processor
 
 
@@ -42,22 +42,29 @@ class ClipQuantiles(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        quantiles = numerical.new_tensor([self.q_low, self.q_high])
-        q_low, q_high = torch.quantile(
-            numerical,
-            quantiles,
-            dim=-2,
-            keepdim=True,
+        q_low, q_high = EnsembleData.execute(
+            self._bounds, table.numerical, batched=True
         )
         self._set_buffer("lower_bound", q_low)
         self._set_buffer("upper_bound", q_high)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _bounds(self, numerical: Tensor) -> tuple[Tensor, Tensor]:
+        if numerical.size(-1) == 0:
+            empty = numerical.new_empty((*numerical.shape[:-2], 1, 0))
+            return empty, empty
+        quantiles = numerical.new_tensor([self.q_low, self.q_high])
+        low, high = numerical.quantile(quantiles, dim=-2, keepdim=True).unbind(
+            0
+        )
+        return low, high
+
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         """Clamp ``table`` to the fitted lower and upper bounds."""
         numerical = table.numerical.clamp(
             min=self.lower_bound,

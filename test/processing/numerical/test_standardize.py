@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import TableTensor
+from sdm import EnsembleTable, TableTensor
 from sdm.processing import Standardize
 from sdm.testing import withCUDA
 
@@ -21,6 +21,14 @@ def test_standardize_with_state(device: torch.device) -> None:
     torch.testing.assert_close(processor.transform(table).numerical, expected)
     out = processor.fit_transform(table)
     torch.testing.assert_close(out.numerical, expected)
+    ensemble = EnsembleTable(groups=(table,), locations=((0, 0), (0, 1)))
+    transformed = processor.transform(ensemble)
+    restored = processor.inverse_transform(transformed)
+    for member in range(2):
+        torch.testing.assert_close(
+            transformed[member].numerical, expected[member]
+        )
+        torch.testing.assert_close(restored[member].numerical, data[member])
 
 
 @pytest.mark.skipif(

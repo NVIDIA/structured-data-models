@@ -196,7 +196,7 @@ def test_sequential_ensemble_matches_member_execution() -> None:
         _add_one,
     )
 
-    output = processor.fit_transform_ensemble(table)
+    output = processor.fit_transform(table)
 
     for member_id, source in enumerate((second, first, second)):
         expected = _add_one(
@@ -215,9 +215,9 @@ def test_empty_ensemble_pipeline_passes_through_members() -> None:
     processor = sp.Sequential()
 
     for output in (
-        processor.transform_ensemble(table),
-        processor.fit_transform_ensemble(table),
-        processor.inverse_transform_ensemble(table),
+        processor.transform(table),
+        processor.fit_transform(table),
+        processor.inverse_transform(table),
     ):
         for member_id in range(len(table)):
             assert output[member_id].equal(table[member_id])

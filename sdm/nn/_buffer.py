@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Any, Generic, Self, TypeVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTensor
+from sdm import EnsembleData, EnsembleTensor
 
 T = TypeVar("T", bound="Tensor | BufferList[Any]")
 
@@ -96,6 +97,25 @@ class BufferList(torch.nn.Module, Generic[T]):
 class _EnsembleTensorBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
     """Ensemble tensor registered as PyTorch module state."""
 
+    def __getattribute__(self, name: str) -> Any:
+        # State remains tensor-like even where nn.Module has methods such as
+        # to(), cpu() and type(). Parent module transfers still use _apply().
+        if (
+            not name.startswith("_")
+            and name in torch.nn.Module.__dict__
+            and callable(getattr(Tensor, name, None))
+        ):
+            return functools.partial(
+                EnsembleData.execute, getattr(Tensor, name), self
+            )
+        return super().__getattribute__(name)
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return EnsembleTensor.__getattr__(self, name)
+
     def __init__(
         self,
         groups: Sequence[Tensor],
@@ -137,6 +157,11 @@ class _EnsembleTensorBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
     ) -> None:
         if self._persistent:
             super()._save_to_state_dict(destination, prefix, keep_vars)
+            for name, group in self._buffers.items():
+                if isinstance(group, Tensor) and type(group) is not Tensor:
+                    destination[f"{prefix}{name}"] = (
+                        group if keep_vars else group.clone()
+                    )
 
     def _load_from_state_dict(
         self,
@@ -149,6 +174,7 @@ class _EnsembleTensorBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
         error_msgs: list[str],
     ) -> None:
         key = f"{prefix}_extra_state"
+        materialized = []
         if self._persistent and key in state_dict:
             num_groups, _ = state_dict[key]
             previous = self._buffers.copy()
@@ -158,10 +184,23 @@ class _EnsembleTensorBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
                 saved = state_dict.get(f"{prefix}{name}")
                 buffer = previous.get(name)
                 if isinstance(saved, Tensor):
-                    if buffer is None:
+                    if type(saved) is not Tensor:
+                        buffer = saved.to(
+                            buffer.device
+                            if buffer is not None
+                            else saved.device
+                        ).clone()
+                        materialized.append(f"{prefix}{name}")
+                        state_dict.pop(f"{prefix}{name}")
+                    elif buffer is None:
                         buffer = torch.empty_like(saved)
-                    elif buffer.shape != saved.shape:
-                        buffer = buffer.new_empty(saved.shape)
+                    elif (
+                        buffer.shape != saved.shape
+                        or buffer.dtype != saved.dtype
+                    ):
+                        buffer = buffer.new_empty(
+                            saved.shape, dtype=saved.dtype
+                        )
                 elif buffer is None:
                     buffer = torch.empty(0)
                 self.register_buffer(name, buffer)
@@ -176,6 +215,9 @@ class _EnsembleTensorBuffer(torch.nn.Module, EnsembleTensor[Tensor]):
         )
         if not self._persistent and key in missing_keys:
             missing_keys.remove(key)
+        for name in materialized:
+            if name in missing_keys:
+                missing_keys.remove(name)
         self._groups = tuple(
             cast(Tensor, group) for group in self._buffers.values()
         )

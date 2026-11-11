@@ -213,7 +213,7 @@ def test_align_categories_filters_per_ensemble_member(
         member_table_ids=(0, 1),
     )
 
-    output = AlignCategories(min_frequency=2).fit_transform_ensemble(context)
+    output = AlignCategories(min_frequency=2).fit_transform(context)
 
     assert output[0].categorical.categories[0].tolist() == ["red"]
     assert output[0].categorical.code.squeeze(-1).tolist() == [0, 0, -1]
@@ -486,11 +486,11 @@ def test_align_categories_ensemble_matches_member_fits(
         member_table_ids=member_table_ids,
     )
     combined = AlignCategories()
-    fitted = AlignCategories().fit_ensemble(context)
+    fitted = AlignCategories().fit(context)
 
-    context_output = combined.fit_transform_ensemble(context)
-    query_output = combined.transform_ensemble(query_ensemble)
-    fitted_query_output = fitted.transform_ensemble(query_ensemble)
+    context_output = combined.fit_transform(context)
+    query_output = combined.transform(query_ensemble)
+    fitted_query_output = fitted.transform(query_ensemble)
     references = [
         AlignCategories().fit(first_context),
         AlignCategories().fit(second_context),

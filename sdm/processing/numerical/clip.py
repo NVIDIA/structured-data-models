@@ -6,7 +6,7 @@ from typing import Literal
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -63,7 +63,9 @@ class Clip(Processor, InvertibleMixin):
         self.max_value = max_value
         self.method = method
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         numerical = table.numerical
         if self.method == "hard":
             return table.replace_blocks(
@@ -77,10 +79,14 @@ class Clip(Processor, InvertibleMixin):
         unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
         del root
         clipped = unit.mul_(bound).mul_(numerical.sign())
-        torch.where(numerical.isnan(), numerical, clipped, out=clipped)
+        EnsembleData.execute(
+            torch.where, numerical.isnan(), numerical, clipped, out=clipped
+        )
         return table.replace_blocks(numerical=clipped)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         return table
 
     def __repr__(self, *, indent: int = 0) -> str:

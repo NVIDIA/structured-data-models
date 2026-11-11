@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import pytest
 import torch
 
 import sdm.processing as sp
@@ -264,7 +263,7 @@ def test_sequence_splits_batched_query_for_separate_fit_states() -> None:
         assert query.related_tables.tables["x"].equal(expected)
 
 
-def test_sequence_rejects_split_state_in_multi_state_fit_group() -> None:
+def test_sequence_uses_member_states_when_a_fitted_position_splits() -> None:
     x = TableTensor.from_tensor(torch.zeros(2, 1))
     fitted_related = EnsembleTable(
         groups=(
@@ -305,18 +304,27 @@ def test_sequence_rejects_split_state_in_multi_state_fit_group() -> None:
         num_members=3,
     )
 
-    with pytest.raises(ValueError, match="Cannot align query tables"):
-        execution.transform(
-            x=x,
-            related_tables=RelatedTables(
-                tables={"x": query_related},
-                relationships=[],
-                task_links=[],
-            ),
+    queries = execution.transform(
+        x=x,
+        related_tables=RelatedTables(
+            tables={"x": query_related},
+            relationships=[],
+            task_links=[],
+        ),
+    )
+    for member, query in enumerate(queries):
+        assert query.related_tables is not None
+        expected = (
+            sp.Standardize()
+            .fit(fitted_related[member])
+            .transform(query_related[member])
+        )
+        torch.testing.assert_close(
+            query.related_tables.tables["x"].numerical, expected.numerical
         )
 
 
-def test_sequence_rejects_queries_that_cannot_form_fitted_batch() -> None:
+def test_sequence_supports_different_query_row_counts() -> None:
     x = TableTensor.from_tensor(torch.zeros(2, 1))
     fitted_related = EnsembleTable(
         groups=(
@@ -352,14 +360,23 @@ def test_sequence_rejects_queries_that_cannot_form_fitted_batch() -> None:
         num_members=2,
     )
 
-    with pytest.raises(ValueError, match="Cannot align query tables"):
-        execution.transform(
-            x=x,
-            related_tables=RelatedTables(
-                tables={"x": query_related},
-                relationships=[],
-                task_links=[],
-            ),
+    queries = execution.transform(
+        x=x,
+        related_tables=RelatedTables(
+            tables={"x": query_related},
+            relationships=[],
+            task_links=[],
+        ),
+    )
+    for member, query in enumerate(queries):
+        assert query.related_tables is not None
+        expected = (
+            sp.Standardize()
+            .fit(fitted_related[member])
+            .transform(query_related[member])
+        )
+        torch.testing.assert_close(
+            query.related_tables.tables["x"].numerical, expected.numerical
         )
 
 

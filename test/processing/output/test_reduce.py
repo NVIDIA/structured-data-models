@@ -74,7 +74,7 @@ def test_average_estimators_trimmed_reduces_members(
     )
     processor = AverageEstimators(trim_fraction=0.2)
 
-    output = processor.transform_ensemble(table)
+    output = processor.transform(table)
 
     assert len(output) == 1
     torch.testing.assert_close(
@@ -95,7 +95,7 @@ def test_average_estimators_trimmed_keeps_all_members_when_untrimmed(
     )
     processor = AverageEstimators(trim_fraction=0.2)
 
-    output = processor.transform_ensemble(table)
+    output = processor.transform(table)
 
     torch.testing.assert_close(
         output[0].numerical,
@@ -120,7 +120,7 @@ def test_average_estimators_reduces_across_storage_groups(
         member_table_ids=(0, 1, 1),
     )
 
-    output = AverageEstimators().transform_ensemble(table)
+    output = AverageEstimators().transform(table)
 
     assert output[0].columns == first.columns
     torch.testing.assert_close(
@@ -143,7 +143,7 @@ def test_average_estimators_composes_with_following_processor(
     output = sp.Sequential(
         sp.AverageEstimators(),
         sp.Softmax(),
-    ).transform_ensemble(table)
+    ).transform(table)
 
     assert len(output) == 1
     torch.testing.assert_close(

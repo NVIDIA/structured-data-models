@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, TableTensor
-from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
+from sdm.processing import QuantileTransform
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -208,7 +208,7 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("subsample", [None, 32])
-def test_quantile_transform_adapter_matches_grouped_tables(
+def test_quantile_transform_matches_grouped_tables(
     device: torch.device,
     subsample: int | None,
 ) -> None:
@@ -231,16 +231,14 @@ def test_quantile_transform_adapter_matches_grouped_tables(
         groups=(cast(TableTensor, torch.stack(queries)),),
         locations=tuple((0, table_id) for table_id in member_table_ids),
     )
-    processor = EnsembleProcessorAdapter(
-        QuantileTransform(n_quantiles=8, subsample=subsample)
-    )
+    processor = QuantileTransform(n_quantiles=8, subsample=subsample)
 
-    context_output = processor.fit_transform_ensemble(
+    context_output = processor.fit_transform(
         context,
         generator=torch.Generator(device=device).manual_seed(7),
     )
-    query_output = processor.transform_ensemble(query)
-    restored = processor.inverse_transform_ensemble(context_output)
+    query_output = processor.transform(query)
+    restored = processor.inverse_transform(context_output)
 
     expected_contexts = []
     expected_queries = []

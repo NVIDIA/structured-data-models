@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -29,12 +29,12 @@ class MinMaxScale(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         x = table.numerical
-        missing = ~_isfinite(x)
+        missing = ~EnsembleData.execute(_isfinite, x)
         minimum = x.masked_fill(missing, torch.inf).amin(-2, keepdim=True)
         minimum[minimum.isinf()] = torch.nan
         maximum = x.masked_fill(missing, -torch.inf).amax(-2, keepdim=True)
@@ -43,10 +43,14 @@ class MinMaxScale(Processor, InvertibleMixin):
         self._set_buffer("minimum", minimum)
         self._set_buffer("scale", scale)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         numerical = (table.numerical - self.minimum).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         numerical = (table.numerical * self.scale).add_(self.minimum)
         return table.replace_blocks(numerical=numerical)

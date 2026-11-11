@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import Processor
 
 
@@ -31,12 +30,11 @@ class Softmax(Processor):
             raise ValueError("temperature must be positive.")
         self.temperature = temperature
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         """Return ``softmax(table / temperature)`` over the last dimension."""
-        numerical = torch.softmax(
-            table.numerical / self.temperature,
-            dim=-1,
-        )
+        numerical = (table.numerical / self.temperature).softmax(dim=-1)
         return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:

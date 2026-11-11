@@ -82,11 +82,11 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
     )
     processor = DropConstantColumns()
 
-    context_output = processor.fit_transform_ensemble(context)
-    query_output = processor.transform_ensemble(
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(
         EnsembleTable.from_table(query, num_members=len(member_table_ids))
     )
-    separate_query_output = processor.transform_ensemble(
+    separate_query_output = processor.transform(
         EnsembleTable.from_tables(
             tables=(query,) * len(member_table_ids),
             member_table_ids=range(len(member_table_ids)),
@@ -105,18 +105,6 @@ def test_drop_constant_columns_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
         assert separate_query_output[member_id].equal(expected_query)
-
-
-def test_drop_constant_columns_requires_fitted_member_count() -> None:
-    table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    processor = DropConstantColumns().fit_ensemble(
-        EnsembleTable.from_table(table, num_members=2)
-    )
-
-    with pytest.raises(RuntimeError, match="same number"):
-        processor.transform_ensemble(
-            EnsembleTable.from_table(table, num_members=1)
-        )
 
 
 @withCUDA

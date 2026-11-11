@@ -1,18 +1,16 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from collections import defaultdict
-from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import torch
 
-from sdm import EnsembleTable, Stype, StypeLike, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm._warnings import warn_once
-from sdm.processing import EnsembleProcessor
+from sdm.processing import Processor
 
 
-class SelectColumns(EnsembleProcessor):
+class SelectColumns(Processor):
     r"""Select a subset of columns for each semantic type.
 
     Args:
@@ -39,17 +37,35 @@ class SelectColumns(EnsembleProcessor):
         self.max_columns = max_columns
         self.method = method
 
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        num_members = len(table) if isinstance(table, EnsembleTable) else 1
+        members = (
+            EnsembleData(
+                groups=tuple(range(num_members)),
+                locations=tuple((i, 0) for i in range(num_members)),
+            )
+            if isinstance(table, EnsembleTable)
+            and self.method == "round_robin"
+            else 0
+        )
+        return EnsembleData.execute(
+            self._select, table, members, num_members, batched=True
+        )
 
-        capacity = len(ensemble_table) * self.max_columns
-        widths: dict[str, int] = defaultdict(int)
-        for group in ensemble_table._iter_groups():
-            for stype, block in TableTensor.items(group):
-                widths[stype.value] = max(widths[stype.value], block.size(-1))
-        if max(widths.values(), default=0) > capacity:
+    def _select(
+        self, table: TableTensor, member: int, num_members: int
+    ) -> TableTensor:
+        if all(
+            block.size(-1) <= self.max_columns
+            for _, block in TableTensor.items(table)
+        ):
+            return table
+        if any(
+            block.size(-1) > num_members * self.max_columns
+            for _, block in TableTensor.items(table)
+        ):
             warn_once(
                 key="select-columns-coverage",
                 message=(
@@ -57,72 +73,29 @@ class SelectColumns(EnsembleProcessor):
                     "Increase the number of estimators for better coverage."
                 ),
             )
-
-        if all(
-            group.size(-1) <= self.max_columns
-            for group in ensemble_table._iter_groups()
-        ):
-            return ensemble_table
-
-        if self.method == "first":
-            groups = []
-            for group in ensemble_table._iter_groups():
-                columns: Mapping[StypeLike, Sequence[str]] = {
-                    stype.value: column_names[: self.max_columns]
-                    for stype, column_names in group.column_groups
-                }
-                blocks = {
-                    stype: block[..., : self.max_columns]
-                    for stype, block in TableTensor.items(group)
-                }
-                groups.append(group.__class__(columns=columns, **blocks))
-            return ensemble_table.replace_groups(groups)
-
-        assert self.method == "round_robin"
-        tables: list[TableTensor] = []
-        for member_id in range(len(ensemble_table)):
-            table = ensemble_table[member_id]
-            columns_by_type = dict(table.column_groups)
-            columns: dict[StypeLike, tuple[str, ...]] = {}
-            blocks = {}
-            for stype, block in TableTensor.items(table):
-                column_names = columns_by_type[stype]
-                num_columns = len(column_names)
-                # Empty blocks are passed through unchanged.
-                if num_columns == 0:
-                    columns[stype.value] = column_names
-                    blocks[stype] = block
-                    continue
-                chunk_size = min(self.max_columns, num_columns)
-                start = member_id * chunk_size % num_columns
-                first_count = min(chunk_size, num_columns - start)
-                wrap_count = chunk_size - first_count
-                # Consecutive chunk from ``start``, wrapping past the last
-                # column back to the first.
-                columns[stype.value] = (
-                    column_names[start : start + first_count]
-                    + column_names[:wrap_count]
-                )
-                if wrap_count == 0:
-                    blocks[stype] = block[..., start : start + first_count]
-                    continue
-                blocks[stype] = torch.cat(
-                    [
-                        block[..., start : start + first_count],
-                        block[..., :wrap_count],
-                    ],
+        columns = {}
+        blocks = {}
+        for stype, block in TableTensor.items(table):
+            names = table.columns[stype]
+            width = len(names)
+            count = min(self.max_columns, width)
+            start = (
+                member * count % width
+                if width and self.method == "round_robin"
+                else 0
+            )
+            first = min(count, width - start)
+            wrap = count - first
+            columns[stype.value] = names[start : start + first] + names[:wrap]
+            blocks[stype] = (
+                torch.cat(
+                    (block[..., start : start + first], block[..., :wrap]),
                     dim=-1,
                 )
-            tables.append(
-                table.__class__(
-                    columns=columns,
-                    **blocks,
-                )
+                if wrap
+                else block[..., start : start + first]
             )
-        return ensemble_table.replace_tables(
-            tables=tables,
-            member_table_ids=range(len(tables)),
-        )
+        return TableTensor(columns=columns, **blocks)
 
     def __repr__(self, *, indent: int = 0) -> str:
         arguments = [f"max_columns={self.max_columns!r}"]

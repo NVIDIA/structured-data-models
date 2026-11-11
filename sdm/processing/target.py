@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from sdm import EnsembleTable
-from sdm.processing import EnsembleProcessor
+from sdm.processing import Processor
 
 
-class TargetAwareEnsembleProcessor(EnsembleProcessor):
+class TargetAwareProcessor(Processor):
     r"""Base processor with access to unprocessed targets."""
 
     def __init__(self) -> None:

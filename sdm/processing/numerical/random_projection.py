@@ -5,11 +5,11 @@ from typing import Literal, cast
 
 import torch
 
-from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
-from sdm.processing import EnsembleProcessor
+from sdm import EnsembleData, EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm.processing import Processor
 
 
-class RandomProjection(EnsembleProcessor):
+class RandomProjection(Processor):
     r"""Randomly project numerical columns.
 
     Args:
@@ -35,63 +35,51 @@ class RandomProjection(EnsembleProcessor):
         self.init = init
         self.register_buffer("_weights", None)
 
-    def _fit_ensemble(
+    def _fit(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        weights = []
-        for i, group in enumerate(ensemble_table._iter_groups()):
-            num_members = ensemble_table.num_members_in_group(i)
-            weight = group.numerical.new_empty(
-                (
-                    num_members,
-                    *group.size()[1:-2],
-                    self.channels,
-                    group.numerical.size(-1),
-                )
-            )
-            assert self.init == "normal"
-            weight.normal_(std=self.channels**-0.5, generator=generator)
-            weights.append(weight)
-        positions = [0] * ensemble_table.num_groups
-        locations = []
-        for group_id, _ in ensemble_table._locations:
-            locations.append((group_id, positions[group_id]))
-            positions[group_id] += 1
-        self._set_buffer(
-            "_weights", EnsembleTensor(groups=weights, locations=locations)
+        weights = EnsembleData.execute(
+            self._draw_weights,
+            table.numerical,
+            generator=generator,
+            randomness="different",
+        )
+        self.register_buffer("_weights", weights)
+
+    def _draw_weights(
+        self, numerical: torch.Tensor, *, generator: torch.Generator | None
+    ) -> torch.Tensor:
+        weights = numerical.new_empty(
+            (*numerical.shape[:-2], self.channels, numerical.size(-1))
+        )
+        assert self.init == "normal"
+        return weights.normal_(std=self.channels**-0.5, generator=generator)
+
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(
+            self._project, table, self._weights, batched=True
         )
 
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        groups = []
-        for i, weight in enumerate(self._weights._iter_groups()):
-            group = ensemble_table.expanded_group(i)
-            projected = TableTensor(
-                columns={
-                    Stype.numerical: [f"rp_{i}" for i in range(self.channels)]
-                },
-                numerical=group.numerical @ weight.transpose(-1, -2),
-            )
-            group = cast(
-                TableTensor,
-                torch.cat(
-                    [group.drop_stypes(Stype.numerical), projected], dim=-1
-                ),
-            )
-            groups.append(group)
-
-        locations = []
-        group_position = [0] * ensemble_table.num_groups
-        for group_id, _ in ensemble_table._locations:
-            locations.append((group_id, group_position[group_id]))
-            group_position[group_id] += 1
-
-        return EnsembleTable(groups=groups, locations=locations)
+    def _project(
+        self, table: TableTensor, weights: torch.Tensor
+    ) -> TableTensor:
+        if table.numerical.size(-1) == 0:
+            return table
+        projected = TableTensor(
+            columns={
+                Stype.numerical: tuple(f"rp_{i}" for i in range(self.channels))
+            },
+            numerical=table.numerical @ weights.transpose(-1, -2),
+        )
+        return cast(
+            TableTensor,
+            torch.cat((table.drop_stypes(Stype.numerical), projected), dim=-1),
+        )
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from typing import TypeVar, cast
 
 import torch
 from torch import Tensor
+
+from sdm import EnsembleData, EnsembleTensor
+
+TensorT = TypeVar("TensorT", bound=Tensor | EnsembleTensor)
 
 
 def _ndtri(x: Tensor) -> Tensor:
@@ -14,9 +19,11 @@ def _ndtri(x: Tensor) -> Tensor:
     return torch.special.ndtri(x)
 
 
-def _isfinite(x: Tensor) -> Tensor:
+def _isfinite(x: TensorT) -> TensorT:
     # Equal to 'x.isfinite()', which allocates 'x.abs()' on the way.
-    return x.gt(-math.inf).logical_and_(x.lt(math.inf))
+    if isinstance(x, EnsembleTensor):
+        return EnsembleData.execute(_isfinite, x, batched=True)
+    return cast(TensorT, x.gt(-math.inf).logical_and_(x.lt(math.inf)))
 
 
 def _constant_feature_mask(
@@ -24,6 +31,10 @@ def _constant_feature_mask(
     mean: Tensor,
     num_samples: int | Tensor,
 ) -> Tensor:
+    if isinstance(var, EnsembleTensor):
+        return EnsembleData.execute(
+            _constant_feature_mask, var, mean, num_samples, batched=True
+        )
     eps = torch.finfo(var.dtype).eps
     upper_bound = num_samples * eps * var + (num_samples * mean * eps) ** 2
     return var <= upper_bound

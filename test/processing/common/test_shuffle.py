@@ -57,14 +57,14 @@ def test_random_ensemble_matches_independent_shuffles() -> None:
     ensemble = ShuffleColumns(method="random")
     ensemble_generator = torch.Generator().manual_seed(7)
 
-    context_output = ensemble.fit_transform_ensemble(
+    context_output = ensemble.fit_transform(
         EnsembleTable.from_table(context, num_members=8),
         generator=ensemble_generator,
     )
-    query_output = ensemble.transform_ensemble(
+    query_output = ensemble.transform(
         EnsembleTable.from_table(query, num_members=8)
     )
-    restored = ensemble.inverse_transform_ensemble(context_output)
+    restored = ensemble.inverse_transform(context_output)
 
     reference_generator = torch.Generator().manual_seed(7)
     references = [ShuffleColumns(method="random") for _ in range(8)]
@@ -94,7 +94,7 @@ def test_latin_ensemble_couples_member_permutations(
         ),
         member_table_ids=(0, 0, 0, 0, 1, 1, 1, 1),
     )
-    output = ShuffleColumns(method="latin").fit_transform_ensemble(ensemble)
+    output = ShuffleColumns(method="latin").fit_transform(ensemble)
     permutations = tuple(
         output[member_id].numerical_columns for member_id in range(len(output))
     )
@@ -127,23 +127,3 @@ def test_latin_ensemble_couples_member_permutations(
             strict=True,
         ):
             assert sorted(position) == expected_columns
-
-
-@pytest.mark.parametrize(
-    "method_name",
-    ["transform_ensemble", "inverse_transform_ensemble"],
-)
-def test_shuffle_columns_checks_num_members(method_name: str) -> None:
-    processor = ShuffleColumns(method="latin")
-    processor.fit_ensemble(
-        EnsembleTable.from_table(_table(), num_members=8),
-        generator=torch.Generator().manual_seed(9),
-    )
-
-    with pytest.raises(
-        RuntimeError,
-        match="was fitted with 8 ensemble members, but got 7",
-    ):
-        getattr(processor, method_name)(
-            EnsembleTable.from_table(_table(), num_members=7)
-        )

@@ -10,13 +10,13 @@ from torch import Tensor
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleData,
     EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.nn._buffer import BufferList
-from sdm.processing import EnsembleProcessor
+from sdm.processing import Processor
 from sdm.relational.join import join_index
 from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.var_len import _cat, _contiguous
@@ -24,7 +24,7 @@ from sdm.tensor.var_len import _cat, _contiguous
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
-class AlignCategories(EnsembleProcessor):
+class AlignCategories(Processor):
     """Align categorical columns to categories observed during fitting.
 
     A categorical column stores each value as an integer code indexing an
@@ -84,7 +84,7 @@ class AlignCategories(EnsembleProcessor):
             raise ValueError("min_frequency must be positive")
         self.sort_by = sort_by
         self.min_frequency = min_frequency
-        self._categories: BufferList[BufferList[Tensor]] = BufferList()
+        self.register_buffer("_categories", None)
 
     def _fit_column(
         self,
@@ -197,140 +197,65 @@ class AlignCategories(EnsembleProcessor):
         )
         return fitted_categories, aligned_codes
 
-    def _fit_and_align(
-        self,
-        table: TableTensor,
-    ) -> tuple[tuple[tuple[Tensor, ...], ...], tuple[TableTensor, ...]]:
-        single_table = table.categorical.code.dim() == 2
-        fitted_categories, aligned_codes = self._fit_columns(
-            table,
-            align_codes=True,
-        )
-        assert aligned_codes is not None
-        aligned_tables = tuple(
-            (table if single_table else table[batch_index]).replace_blocks(
-                categorical=CategoricalTensor(
-                    aligned_codes[batch_index],
-                    categories=batch_categories,
-                ),
-            )
-            for batch_index, batch_categories in enumerate(fitted_categories)
-        )
-        return fitted_categories, aligned_tables
-
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        fitted_categories, _ = self._fit_columns(
-            table,
-            align_codes=False,
+        categories, _ = EnsembleData.execute(
+            self._learn_categories, table, align_codes=False
         )
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
-        )
+        self.register_buffer("_categories", categories)
 
     def _fit_transform(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        fitted_categories, aligned_tables = self._fit_and_align(table)
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
+    ) -> TableTensor | EnsembleTable:
+        categories, aligned = EnsembleData.execute(
+            self._learn_categories, table, align_codes=True
         )
-        return aligned_tables[0]
+        self.register_buffer("_categories", categories)
+        return aligned
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self._align_to_categories(
-            table,
-            cast(Sequence[Sequence[Tensor]], self._categories),
-        )[0]
-
-    @staticmethod
-    def _member_table_ids(
-        ensemble_table: EnsembleTable,
-    ) -> tuple[int, ...]:
-        group_offsets = []
-        offset = 0
-        for group in ensemble_table._iter_groups():
-            group_offsets.append(offset)
-            offset += group.size(0)
-
-        # TODO: Replace this private access with a public EnsembleTable
-        # operation returning flattened tables and member table IDs.
-        return tuple(
-            group_offsets[group_index] + position
-            for group_index, position in ensemble_table._locations
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(
+            self._transform_table, table, self._categories
         )
 
-    def _fit_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        fitted_categories = []
-        for group in ensemble_table._iter_groups():
-            group_categories, _ = self._fit_columns(
-                group,
-                align_codes=False,
+    def _learn_categories(
+        self, table: TableTensor, *, align_codes: bool
+    ) -> tuple[CategoricalTensor, TableTensor | None]:
+        if table.dim() != 2:
+            raise ValueError(
+                "Fit independent category vocabularies with EnsembleTable"
             )
-            fitted_categories.extend(group_categories)
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
+        categories, codes = self._fit_columns(table, align_codes=align_codes)
+        state = CategoricalTensor(
+            table.categorical.code.new_empty((0, len(categories[0]))),
+            categories=categories[0],
         )
-
-    def _fit_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        fitted_categories = []
-        aligned_tables = []
-        for group in ensemble_table._iter_groups():
-            group_categories, group_tables = self._fit_and_align(group)
-            fitted_categories.extend(group_categories)
-            aligned_tables.extend(group_tables)
-
-        member_table_ids = self._member_table_ids(ensemble_table)
-        output = ensemble_table.replace_tables(
-            tables=aligned_tables,
-            member_table_ids=member_table_ids,
-        )
-        self._categories = BufferList(
-            BufferList(categories) for categories in fitted_categories
-        )
-        return output
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        table_ids = self._member_table_ids(ensemble_table)
-        aligned_tables = []
-        offset = 0
-        for group in ensemble_table._iter_groups():
-            end = offset + group.size(0)
-            aligned_tables.extend(
-                self._align_to_categories(
-                    group,
-                    tuple(
-                        cast(Sequence[Tensor], self._categories[index])
-                        for index in range(offset, end)
-                    ),
+        aligned = (
+            None
+            if codes is None
+            else table.replace_blocks(
+                categorical=CategoricalTensor(
+                    codes[0], categories=categories[0]
                 )
             )
-            offset = end
-
-        return ensemble_table.replace_tables(
-            tables=aligned_tables,
-            member_table_ids=table_ids,
         )
+        return state, aligned
+
+    def _transform_table(
+        self, table: TableTensor, state: CategoricalTensor
+    ) -> TableTensor:
+        return self._align_to_categories(
+            table, (tuple(_iter_categories(state)),)
+        )[0]
 
     @staticmethod
     def _string_category_lookups(

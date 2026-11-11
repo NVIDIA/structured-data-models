@@ -3,8 +3,13 @@
 
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
-from sdm.nn._buffer import BufferList
+from sdm import (
+    CategoricalTensor,
+    EnsembleData,
+    EnsembleTable,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import Processor
 from sdm.processing.categorical._categorical import (
     _check_categorical_codes,
@@ -35,7 +40,7 @@ class ImputeMode(Processor):
         super().__init__()
         # TODO: Add a separate processor that encodes missing values as their
         # own category instead of imputing an observed one.
-        self._categories: BufferList[torch.Tensor] = BufferList()
+        self.register_buffer("_categories", None)
         self.register_buffer(
             "_fill_values",
             torch.empty(0, dtype=torch.long),
@@ -43,10 +48,17 @@ class ImputeMode(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        fill, categories = EnsembleData.execute(self._fit_values, table)
+        self.register_buffer("_fill_values", fill)
+        self.register_buffer("_categories", categories)
+
+    def _fit_values(
+        self, table: TableTensor
+    ) -> tuple[torch.Tensor, CategoricalTensor]:
         data = table.categorical
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []
@@ -74,32 +86,38 @@ class ImputeMode(Processor):
             )
             fill_values.append(counts.argmax(dim=-1, keepdim=True))
 
-        self._set_buffer(
-            name="_fill_values",
-            value=torch.stack(fill_values, dim=-1)
+        fill = (
+            torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
-            else torch.empty(0, dtype=torch.long, device=data.device),
+            else torch.empty(0, dtype=torch.long, device=data.device)
         )
-        self._categories = BufferList(table.categorical.categories)
+        categories = CategoricalTensor(
+            data.code.new_empty((0, data.size(-1))), categories=data.categories
+        )
+        return fill, categories
 
-    def _fit_transform(
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(
+            self._replace_missing,
+            table,
+            self._fill_values,
+            self._categories,
+            batched=True,
+        )
+
+    def _replace_missing(
         self,
         table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
+        fill: torch.Tensor,
+        categories: CategoricalTensor,
     ) -> TableTensor:
-        self._fit(table, generator=generator)
-        return self._replace_missing(table)
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        _check_categories(table, self._categories)
+        _check_categories(table, tuple(_iter_categories(categories)))
         _check_categorical_codes(table)
-        return self._replace_missing(table)
-
-    def _replace_missing(self, table: TableTensor) -> TableTensor:
         code = table.categorical.where(
             table.categorical.isfinite(),
-            self._fill_values.to(
+            fill.to(
                 dtype=table.categorical.dtype,
                 device=table.categorical.device,
             ),

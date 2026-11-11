@@ -6,26 +6,18 @@ from typing import cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import EnsembleTable, Stype
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
+    InvertibleMixin,
     Processor,
 )
 
 
-class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
+class StypeDispatch(Processor, InvertibleMixin):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
 
-    For each configured route, matching columns from a
-    :class:`~sdm.tensor.TableTensor` or
-    :class:`~sdm.EnsembleTable` are passed to that processor. Ordinary
-    processors learn separate state for each compatible ensemble group, while
-    ensemble-aware processors operate on all groups directly. Compatible
-    members are processed together and route outputs are concatenated in
-    semantic type order while preserving logical member order. A route may
-    change column values, names, count, or order. With the default passthrough
-    behavior, unconfigured semantic types follow in input order.
+    Matching columns are passed to each configured route. Route outputs are
+    concatenated in semantic type order; unconfigured types pass through.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible, and routes must not share an output
@@ -51,7 +43,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         text: object = None,
     ) -> None:
         super().__init__()
-        self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
+        self.processors: ModuleDict[Processor] = ModuleDict()
         for stype, processor in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
@@ -61,7 +53,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         ):
             if processor is None:
                 continue
-            processor = EnsembleProcessor.as_processor(processor)
+            processor = Processor.as_processor(processor)
             self.processors[str(stype)] = processor
 
         self.handles_stypes = tuple(Stype(stype) for stype in self.processors)
@@ -82,100 +74,100 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def _find_active_routes(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableTensor | EnsembleTable,
     ) -> tuple[str, ...]:
-        active_stypes = tuple(
-            stype.value
-            for group in ensemble_table._iter_groups()
-            for stype, columns in group.column_groups
-            if columns
+        active_stypes = (
+            tuple(stype.value for stype in table.active_stypes)
+            if isinstance(table, EnsembleTable)
+            else tuple(
+                stype.value
+                for stype, columns in table.column_groups
+                if columns
+            )
         )
         return tuple(
             stype for stype in self.processors if stype in active_stypes
         )
 
-    def _fit_ensemble(
+    def _fit(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._active_routes = self._find_active_routes(ensemble_table)
+        self._active_routes = self._find_active_routes(table)
         for stype in self._active_routes:
-            self.processors[stype].fit_ensemble(
-                ensemble_table.select_stypes(stype),
+            self.processors[stype].fit(
+                table.select_stypes(stype),
                 generator=generator,
             )
 
-    def _fit_transform_ensemble(
+    def _fit_transform(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        self._active_routes = self._find_active_routes(ensemble_table)
+    ) -> TableTensor | EnsembleTable:
+        self._active_routes = self._find_active_routes(table)
         outputs = [
-            self.processors[stype].fit_transform_ensemble(
-                ensemble_table.select_stypes(stype),
+            self.processors[stype].fit_transform(
+                table.select_stypes(stype),
                 generator=generator,
             )
             for stype in self._active_routes
         ]
-        outputs.append(self._remainder_ensemble(ensemble_table))
-        if len(outputs) == 0:
-            return ensemble_table.select_stypes(())
-        return EnsembleTable.concatenate_columns(outputs)
+        outputs.append(self._remainder(table))
+        nonempty = [output for output in outputs if output.active_stypes]
+        if len(nonempty) == 1:
+            return nonempty[0]
+        return EnsembleData.execute(torch.cat, nonempty or outputs, dim=-1)
 
-    def _transform_ensemble(
+    def _transform(
         self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
+        table: TableTensor | EnsembleTable,
+    ) -> TableTensor | EnsembleTable:
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
-            active_routes = self._find_active_routes(ensemble_table)
+            active_routes = self._find_active_routes(table)
             self._active_routes = active_routes
         outputs = [
-            self.processors[stype].transform_ensemble(
-                ensemble_table.select_stypes(stype)
-            )
+            self.processors[stype].transform(table.select_stypes(stype))
             for stype in active_routes
         ]
-        outputs.append(self._remainder_ensemble(ensemble_table))
-        if len(outputs) == 0:
-            return ensemble_table.select_stypes(())
-        return EnsembleTable.concatenate_columns(outputs)
+        outputs.append(self._remainder(table))
+        nonempty = [output for output in outputs if output.active_stypes]
+        if len(nonempty) == 1:
+            return nonempty[0]
+        return EnsembleData.execute(torch.cat, nonempty or outputs, dim=-1)
 
-    def _inverse_transform_ensemble(
+    def _inverse_transform(
         self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
+        table: TableTensor | EnsembleTable,
+    ) -> TableTensor | EnsembleTable:
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
-            active_routes = self._find_active_routes(ensemble_table)
+            active_routes = self._find_active_routes(table)
             self._active_routes = active_routes
 
         outputs = []
         for stype in active_routes:
             processor = self.processors[stype]
-            if not isinstance(processor, EnsembleInvertibleMixin):
-                raise TypeError(
-                    f"{processor.__class__.__name__!r} is not invertible."
-                )
             # TODO This is wrong. A processor may not map to same stype back!
             outputs.append(
-                processor.inverse_transform_ensemble(
-                    ensemble_table.select_stypes(stype)
-                )
+                processor.inverse_transform(table.select_stypes(stype))
             )
 
-        outputs.append(self._remainder_ensemble(ensemble_table))
-        return EnsembleTable.concatenate_columns(outputs)
+        outputs.append(self._remainder(table))
+        nonempty = [output for output in outputs if output.active_stypes]
+        if len(nonempty) == 1:
+            return nonempty[0]
+        return EnsembleData.execute(torch.cat, nonempty or outputs, dim=-1)
 
-    def _remainder_ensemble(
+    def _remainder(
         self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        return ensemble_table.select_stypes(
+        table: TableTensor | EnsembleTable,
+    ) -> TableTensor | EnsembleTable:
+        return table.select_stypes(
             tuple(
                 stype
                 for stype in Stype.all()

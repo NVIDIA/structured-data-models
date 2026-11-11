@@ -6,7 +6,7 @@ from typing import cast
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
 from sdm.processing import Processor
 
 
@@ -31,30 +31,44 @@ class PCA(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        mean, components = EnsembleData.execute(
+            self._components, table.numerical, batched=True
+        )
+        self.register_buffer("mean", mean)
+        self.register_buffer("components", components)
 
-        if table.numerical.size(-1) <= self.num_components:
-            return
+    def _components(self, numerical: Tensor) -> tuple[Tensor, Tensor]:
 
-        self._set_buffer("mean", table.numerical.mean(dim=-2, keepdim=True))
+        if numerical.size(-1) <= self.num_components:
+            empty = numerical.new_empty((*numerical.shape[:-2], 0))
+            return empty, empty
+
+        mean = numerical.mean(dim=-2, keepdim=True)
         _, _, vh = torch.linalg.svd(
-            table.numerical - self.mean,
+            numerical - mean,
             full_matrices=False,
         )
-        num_components = min(self.num_components, table.numerical.size(-2))
-        self._set_buffer(
-            name="components",
-            value=vh[..., :num_components, :].transpose(-2, -1),
+        num_components = min(self.num_components, numerical.size(-2))
+        return mean, vh[..., :num_components, :].transpose(-2, -1)
+
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return EnsembleData.execute(
+            self._project, table, self.mean, self.components, batched=True
         )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _project(
+        self, table: TableTensor, mean: Tensor, components: Tensor
+    ) -> TableTensor:
         if table.numerical.size(-1) <= self.num_components:
             return table
 
-        x = (table.numerical - self.mean) @ self.components
+        x = (table.numerical - mean) @ components
         out = TableTensor(
             columns={Stype.numerical: [f"pca_{i}" for i in range(x.size(-1))]},
             numerical=x,

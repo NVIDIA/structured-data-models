@@ -7,10 +7,10 @@ import torch
 from torch.nn import ModuleDict
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import EnsembleProcessor, Processor
+from sdm.processing import Processor
 
 
-class TaskDispatch(EnsembleProcessor):
+class TaskDispatch(Processor):
     """Apply separate processors based on the semantic type of the target.
 
     :class:`TaskDispatch` is resolved only during model execution.
@@ -27,14 +27,14 @@ class TaskDispatch(EnsembleProcessor):
         regression: object = None,
     ) -> None:
         super().__init__()
-        self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
+        self.processors: ModuleDict[Processor] = ModuleDict()
         for task, processor in (
             ("classification", classification),
             ("regression", regression),
         ):
             if processor is None:
                 continue
-            processor = EnsembleProcessor.as_processor(processor)
+            processor = Processor.as_processor(processor)
             self.processors[task] = processor
 
         self.requires_fit = any(
@@ -51,7 +51,7 @@ class TaskDispatch(EnsembleProcessor):
             return ()
         return self.processors[self._task].handles_stypes
 
-    def _processor(self) -> EnsembleProcessor:
+    def _processor(self) -> Processor:
         if self._task is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved task; use it "
@@ -61,7 +61,7 @@ class TaskDispatch(EnsembleProcessor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -69,39 +69,16 @@ class TaskDispatch(EnsembleProcessor):
 
     def _fit_transform(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:
+    ) -> TableTensor | EnsembleTable:
         return self._processor().fit_transform(table, generator=generator)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         return self._processor().transform(table)
-
-    def _fit_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        self._processor().fit_ensemble(ensemble_table, generator=generator)
-
-    def _fit_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        return self._processor().fit_transform_ensemble(
-            ensemble_table,
-            generator=generator,
-        )
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        return self._processor().transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

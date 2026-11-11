@@ -286,7 +286,7 @@ def test_tfidf_keeps_vocabulary_per_member_table() -> None:
         member_table_ids=(0, 1, 0, 1),
     )
 
-    output = processor.fit_transform_ensemble(context)
+    output = processor.fit_transform(context)
 
     assert output[0].numerical.shape == (1, 2)
     assert output[1].numerical.shape == (1, 4)
@@ -300,16 +300,11 @@ def test_tfidf_keeps_vocabulary_per_member_table() -> None:
     )
 
     query = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
-    query_output = processor.transform_ensemble(
+    query_output = processor.transform(
         EnsembleTable.from_table(query, num_members=4)
     )
     assert query_output[0].numerical.shape == (1, 2)
     assert query_output[1].numerical.shape == (1, 4)
-
-    with pytest.raises(RuntimeError, match="same number"):
-        processor.transform_ensemble(
-            EnsembleTable.from_table(query, num_members=3)
-        )
 
 
 def test_tfidf_refit_clears_ensemble_state() -> None:
@@ -318,7 +313,7 @@ def test_tfidf_refit_clears_ensemble_state() -> None:
     processor = TFIDF(ngram_range=(2, 2))
     expected = TFIDF(ngram_range=(2, 2)).fit_transform(table)
 
-    processor.fit_transform_ensemble(ensemble_table)
+    processor.fit_transform(ensemble_table)
     output = processor.fit_transform(table)
 
     assert output.equal(expected)
@@ -331,8 +326,8 @@ def test_tfidf_failed_refit_preserves_ensemble_state(
     table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
     ensemble_table = EnsembleTable.from_table(table, num_members=4)
     processor = TFIDF(ngram_range=(2, 2))
-    processor.fit_ensemble(ensemble_table)
-    expected = processor.transform_ensemble(ensemble_table)
+    processor.fit(ensemble_table)
+    expected = processor.transform(ensemble_table)
 
     def fail_bincount(*_: object, **__: object) -> None:
         raise RuntimeError("refit failed")
@@ -341,6 +336,6 @@ def test_tfidf_failed_refit_preserves_ensemble_state(
     with pytest.raises(RuntimeError, match="refit failed"):
         processor.fit(table)
 
-    output = processor.transform_ensemble(ensemble_table)
+    output = processor.transform(ensemble_table)
     for member_id in range(len(ensemble_table)):
         assert output[member_id].equal(expected[member_id])
