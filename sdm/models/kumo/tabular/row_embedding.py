@@ -3,6 +3,7 @@
 
 # ruff: noqa: D101, D102
 
+import math
 from typing import Any, cast
 
 import torch
@@ -230,3 +231,28 @@ class RowEmbedding(torch.nn.Module):
                 )
 
         return self.norm(buffer if buffer is not None else x).flatten(-2)
+
+    def max_query_rows(self, cache: Cache, device: torch.device) -> int:
+        # The query rows `forward` embeds without splitting an attention
+        # batch, as limited by the blocks that split.
+        key = cast(KVCacheEntry, cache["row_embedding.col_block0"]).key
+        *B, C, M = key.size()[:-2]  # [..., C, M, H, D]
+        K = self.readout_token.size(-2)
+        element_size = (
+            torch.get_autocast_dtype(device.type)
+            if torch.is_autocast_enabled(device.type)
+            else self.readout_token.dtype
+        ).itemsize
+
+        # Row attention runs every row of every estimator as one batch.
+        row_block = cast(KumoTabularTransformerBlock, self.row_blocks[0])
+        limit = row_block.auto_batch_size_limit(device, element_size, K + C)
+        num_rows = limit // math.prod(B)
+
+        # Column attention runs every column of every estimator as one
+        # batch, whose limit shrinks with the rows.
+        col_block = cast(InducedTransformerBlock, self.col_blocks[0])
+        limit = col_block.output_block.auto_batch_size_limit(
+            device, element_size, num_rows, M
+        )
+        return num_rows if math.prod(B) * C <= limit else 0

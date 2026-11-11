@@ -16,6 +16,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base.compile import DynamicShapes
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -170,6 +171,20 @@ class KumoTabular(ICLModel):
             coverage possible.
         """  # noqa: D212
         return default_recipe()
+
+    def _dynamic_shapes(
+        self,
+        cache: Cache,
+        device: torch.device,
+    ) -> DynamicShapes:
+        regression = cache["classes"] is None
+        task = Task.regression if regression else Task.classification
+        row_embedding = cast(_KumoTabular, self.models[task]).row_embedding
+        # ECOC nests the model cache when classes exceed its capacity.
+        cache = cast(Cache, cache.get("ecoc_model", cache))
+        return DynamicShapes(
+            query_rows=row_embedding.max_query_rows(cache, device),
+        )
 
     def _load_from_pretrained(
         self,
