@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Generic, Self, TypeVar, cast, overload
+from typing import Generic, Self, cast, overload
 
 import torch
 from torch import Tensor
+from typing_extensions import TypeVar
 
 from sdm import Stype, StypeLike
 from sdm.tensor import TableTensor
@@ -16,7 +17,7 @@ from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
 T = TypeVar("T")
-TensorT = TypeVar("TensorT", bound=Tensor)
+TensorT = TypeVar("TensorT", bound=Tensor, default=Tensor)
 
 
 class EnsembleData(abc.ABC, Generic[T]):
