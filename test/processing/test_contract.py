@@ -258,7 +258,14 @@ def test_save_and_load_preserves_fitted_processor_behavior(
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize(
     "case",
-    PROCESSOR_CASES,
+    [
+        *PROCESSOR_CASES,
+        # A processor whose input is created inside the compiled function.
+        ProcessorCase(
+            sp.Sequential(sp.AlignCategories(), sp.ImputeMode()),
+            _make_align_categories_table,
+        ),
+    ],
     ids=lambda case: type(case.processor).__name__,
 )
 def test_transform_compiles(case: ProcessorCase) -> None:
