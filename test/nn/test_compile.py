@@ -171,6 +171,19 @@ def test_sdpa_compile_dynamic_shapes(
             torch.testing.assert_close(out, expected)
 
 
+def test_sdpa_compile_dynamic_batch() -> None:
+    module = SDPA(num_query_heads=2).eval()
+    query = torch.randn(3, 4, 2, 8)
+    key = torch.randn(3, 5, 2, 8)
+    value = torch.randn_like(key)
+    for tensor in (query, key, value):
+        torch._dynamo.mark_dynamic(tensor, 0, min=2, max=65_535)
+    with torch.inference_mode():
+        expected = module(query=query, key=key, value=value)
+        out = fullgraph(module)(query=query, key=key, value=value)
+    torch.testing.assert_close(out, expected)
+
+
 @withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "self_attn"),

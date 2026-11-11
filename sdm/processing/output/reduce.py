@@ -59,7 +59,7 @@ class AverageEstimators(EnsembleProcessor):
 
         return EnsembleTable.from_table(
             table=TableTensor(
-                columns={Stype.numerical: table.numerical_columns},
+                columns={Stype.numerical.value: table.numerical_columns},
                 numerical=out,
             ),
             num_members=1,

@@ -47,12 +47,12 @@ class ToOneHot(Processor):
             indices = torch.where(known, codes + offsets, num_numerical)
             out.scatter_add_(-1, indices, known.to(numerical.dtype))
             numerical = out
+        # String keys: compiled code cannot run with `Stype` keys.
+        schema = {stype.value: names for stype, names in table.columns.items()}
+        schema[Stype.numerical.value] = (*table.numerical_columns, *columns)
+        schema[Stype.categorical.value] = ()
         return TableTensor(
-            columns={
-                **table.columns,
-                Stype.numerical: (*table.numerical_columns, *columns),
-                Stype.categorical: (),
-            },
+            columns=schema,
             numerical=numerical,
             **{
                 stype.value: getattr(table, stype.value)
