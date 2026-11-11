@@ -37,9 +37,12 @@ def test_forward(cross_learning: bool) -> None:
     )
     assert out.size() == (2, 3, 3 * 21)
     assert out.numerical.isfinite().all()
+    assert "y1__q01" in out.numerical_columns
+    assert "y2__q05" in out.numerical_columns
     assert "y1__q10" in out.numerical_columns
     assert "y2__q50" in out.numerical_columns
     assert "y3__q90" in out.numerical_columns
+    assert "y3__q99" in out.numerical_columns
 
     model.fit(
         x=x_context,
