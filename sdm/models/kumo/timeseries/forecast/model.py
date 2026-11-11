@@ -100,7 +100,7 @@ class KumoForecast(ICLModel):
     )
     metadata: ClassVar[Mapping[str, str]] = {
         "Output": "Point predictions per target and time step",
-        "Missing Values": "Handled natively",
+        "Missing Values": "Zero-imputed before standardization",
         "Pretraining Scope": "Up to 512 rows",
     }
 
