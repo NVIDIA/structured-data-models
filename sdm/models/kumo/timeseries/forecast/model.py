@@ -43,10 +43,6 @@ class KumoForecast(ICLModel):
     up to 72-step horizon directly from a 512-step history.
     Forecast horizons beyond 72 steps are extended autoregressively.
 
-    Missing values are replaced with zero before preprocessing, matching the
-    original Kumo-TS SDK. Histories shorter than 512 steps are left-padded
-    with zeros before preprocessing.
-
     For longer observation histories, Domain-Aware Representation and
     Retrieval (DARR) can augment the direct forecast with patterns retrieved
     from historical data. Set ``alpha < 1`` to retrieve similar historical
