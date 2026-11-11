@@ -4,7 +4,12 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    EnsembleTensor,
+    Stype,
+    TableLike,
+)
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -30,7 +35,7 @@ class FlipSign(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -51,9 +56,7 @@ class FlipSign(Processor, InvertibleMixin):
         signs.bernoulli_(self.probability, generator=generator)
         return signs.mul_(-2).add_(1)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._multiply, table.numerical, self._signs, batched=True
         )
@@ -66,9 +69,7 @@ class FlipSign(Processor, InvertibleMixin):
         numerical = numerical.unflatten(-1, (signs.size(-2), -1))
         return (numerical * signs).flatten(-2)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         return self._transform(table)
 
     def __repr__(self, *, indent: int = 0) -> str:

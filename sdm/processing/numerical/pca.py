@@ -6,7 +6,7 @@ from typing import cast
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 
 
@@ -14,7 +14,9 @@ class PCA(Processor):
     r"""Project numerical columns onto their principal components.
 
     Args:
-        num_components: Number of principal components to keep.
+        num_components: Maximum number of principal components, capped by the
+            fitted row count. Tables with no more than this many numerical
+            columns are returned unchanged.
     """
 
     handles_stypes = (Stype.numerical,)
@@ -31,7 +33,7 @@ class PCA(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -55,9 +57,7 @@ class PCA(Processor):
         num_components = min(self.num_components, numerical.size(-2))
         return mean, vh[..., :num_components, :].transpose(-2, -1)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._project, table, self.mean, self.components, batched=True
         )

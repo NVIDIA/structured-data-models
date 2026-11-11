@@ -7,7 +7,7 @@ import functools
 import math
 import operator
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Generic, Literal, Self, cast, overload
+from typing import Any, Generic, Literal, Self, TypeAlias, cast, overload
 
 import torch
 from torch import Tensor
@@ -1294,3 +1294,6 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
             f"{' ' * indent}{self.__class__.__name__}("
             f"num_members={len(self)}, num_groups={self.num_groups})"
         )
+
+
+TableLike: TypeAlias = TableTensor | EnsembleTable

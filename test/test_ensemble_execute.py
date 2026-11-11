@@ -9,10 +9,13 @@ import torch
 
 from sdm import EnsembleData, EnsembleTable, EnsembleTensor, TableTensor
 from sdm.processing import Standardize
+from sdm.testing import onlyCUDA, withCUDA
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-def test_tensor_operations_use_logical_dimensions(device: str) -> None:
+@withCUDA
+def test_tensor_operations_use_logical_dimensions(
+    device: torch.device,
+) -> None:
     data = torch.randn(4, 7, 3, device=device)
     ensemble = EnsembleTensor(
         groups=(data,), locations=tuple((0, i) for i in range(4))
@@ -145,8 +148,10 @@ def test_shared_inplace_updates_cannot_overwrite_distinct_results() -> None:
     torch.testing.assert_close(data, torch.zeros_like(data))
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-def test_scalar_broadcasting_preserves_tensor_promotion(device: str) -> None:
+@withCUDA
+def test_scalar_broadcasting_preserves_tensor_promotion(
+    device: torch.device,
+) -> None:
     data = torch.randn(3, 4, 2, device=device)
     values = EnsembleTensor(groups=(data,), locations=((0, 0), (0, 1), (0, 2)))
     scalars = EnsembleTensor(
@@ -162,6 +167,7 @@ def test_scalar_broadcasting_preserves_tensor_promotion(device: str) -> None:
             torch.testing.assert_close(result[member], expected)
 
 
+@onlyCUDA
 def test_cpu_checkpoint_loads_into_cuda_processor() -> None:
     data = torch.randn(3, 8, 2)
     table = EnsembleTable(

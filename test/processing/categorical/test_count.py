@@ -93,9 +93,11 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize("min_cardinality", [0, 3])
+@pytest.mark.parametrize("ensemble", [False, True])
 def test_add_category_counts_fits_leading_batches_independently(
     device: torch.device,
     min_cardinality: int,
+    ensemble: bool,
 ) -> None:
     batched = _table(
         [
@@ -105,15 +107,26 @@ def test_add_category_counts_fits_leading_batches_independently(
         device=device,
     )
 
-    output = AddCategoryCounts(min_cardinality=min_cardinality).fit_transform(
-        batched,
+    context = (
+        EnsembleTable(groups=(batched,), locations=((0, 0), (0, 1)))
+        if ensemble
+        else batched
     )
+    processor = AddCategoryCounts(min_cardinality=min_cardinality).fit(context)
+    query = batched[..., :2, :]
+    if ensemble:
+        query = EnsembleTable.from_tables(
+            tables=(query[1], query[0]), member_table_ids=(1, 0)
+        )
+    output = processor.transform(query)
+    if isinstance(output, EnsembleTable):
+        output = output.as_tensor()
 
-    assert output.size() == (2, 4, 4 if min_cardinality == 0 else 3)
+    assert output.size() == (2, 2, 4 if min_cardinality == 0 else 3)
     torch.testing.assert_close(
         output.numerical[..., 0],
         torch.tensor(
-            [[2.0, 2.0, 1.0, 1.0], [1.0, 2.0, 2.0, 1.0]],
+            [[2.0, 2.0], [1.0, 2.0]],
             device=device,
         ).log1p(),
     )

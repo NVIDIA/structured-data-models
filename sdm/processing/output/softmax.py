@@ -2,15 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableLike
 from sdm.processing import Processor
 
 
 class Softmax(Processor):
-    """Apply softmax to logits after temperature scaling.
-
-    Softmax acts on the final class dimension and preserves all leading
-    dimensions, so it supports both stacked and reduced estimator outputs.
+    """Apply temperature-scaled softmax over the final class dimension.
 
     Args:
         temperature: Positive divisor applied to logits before softmax;
@@ -30,10 +27,7 @@ class Softmax(Processor):
             raise ValueError("temperature must be positive.")
         self.temperature = temperature
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
-        """Return ``softmax(table / temperature)`` over the last dimension."""
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = (table.numerical / self.temperature).softmax(dim=-1)
         return table.replace_blocks(numerical=numerical)
 

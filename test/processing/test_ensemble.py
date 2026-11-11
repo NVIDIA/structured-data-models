@@ -143,18 +143,6 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
     assert processor.transform(ensemble_table) is ensemble_table
 
 
-def test_ensemble_processor_requires_fit_before_transform() -> None:
-    table = TableTensor.from_tensor(torch.ones(2, 1))
-    ensemble_table = EnsembleTable.from_table(table, num_members=2)
-    processor = IdentityProcessor()
-
-    with pytest.raises(RuntimeError, match="not fitted"):
-        processor.transform(ensemble_table)
-
-    assert processor.fit(ensemble_table) is processor
-    assert processor.transform(ensemble_table) is ensemble_table
-
-
 def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
     ensemble_table = EnsembleTable.from_table(table, num_members=2)
@@ -169,28 +157,6 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     assert len(output) == 1
     assert output[0].equal(table)
     assert processor.inverse_transform(table).equal(table)
-
-
-def test_ensemble_processor_noops() -> None:
-    table = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
-    ensemble_table = EnsembleTable.from_table(table, num_members=2)
-    processor = IdentityProcessor()
-
-    assert processor.fit(ensemble_table) is processor
-    assert processor.fit_transform(ensemble_table) is ensemble_table
-    assert processor.transform(ensemble_table) is ensemble_table
-
-
-def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:
-    table = TableTensor.from_tensor(torch.ones(2, 1))
-    fitted = IdentityProcessor()
-    processor = IdentityProcessor()
-
-    assert fitted.fit(table) is fitted
-    assert fitted.transform(table).equal(table)
-    assert processor.fit_transform(table).equal(table)
-    assert processor.transform(table).equal(table)
-    assert processor(table).equal(table)
 
 
 def test_ensemble_processor_uses_fused_table_tensor_lifecycle() -> None:

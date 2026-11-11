@@ -6,7 +6,7 @@ from typing import cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableLike
 from sdm.processing import (
     InvertibleMixin,
     Processor,
@@ -74,7 +74,7 @@ class StypeDispatch(Processor, InvertibleMixin):
 
     def _find_active_routes(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
     ) -> tuple[str, ...]:
         active_stypes = (
             tuple(stype.value for stype in table.active_stypes)
@@ -91,7 +91,7 @@ class StypeDispatch(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -104,10 +104,10 @@ class StypeDispatch(Processor, InvertibleMixin):
 
     def _fit_transform(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor | EnsembleTable:
+    ) -> TableLike:
         self._active_routes = self._find_active_routes(table)
         outputs = [
             self.processors[stype].fit_transform(
@@ -124,8 +124,8 @@ class StypeDispatch(Processor, InvertibleMixin):
 
     def _transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
             active_routes = self._find_active_routes(table)
@@ -142,8 +142,8 @@ class StypeDispatch(Processor, InvertibleMixin):
 
     def _inverse_transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         active_routes = self._active_routes
         if not self.requires_fit or active_routes is None:
             active_routes = self._find_active_routes(table)
@@ -165,8 +165,8 @@ class StypeDispatch(Processor, InvertibleMixin):
 
     def _remainder(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         return table.select_stypes(
             tuple(
                 stype

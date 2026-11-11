@@ -6,7 +6,7 @@ from typing import Self
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
@@ -17,9 +17,8 @@ from sdm.processing.numerical._stats import (
 class Standardize(Processor, InvertibleMixin):
     """Center and scale each numerical column.
 
-    Constant columns use a unit scale to keep the transform finite and
-    invertible. NaN and infinite values are ignored when fitting statistics
-    and preserved during the transform.
+    With ``eps=0``, constant columns use a unit scale. NaN and infinite values
+    are ignored when fitting statistics and preserved during the transform.
 
     Args:
         eps: Value added to each fitted standard deviation.
@@ -55,7 +54,7 @@ class Standardize(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -80,17 +79,13 @@ class Standardize(Processor, InvertibleMixin):
         else:
             self.scale.add_(self.eps)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         mean = self.mean.to(table.device)
         scale = self.scale.to(table.device)
         numerical = (table.numerical - mean).div_(scale)
         return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._invert,
             table.numerical,

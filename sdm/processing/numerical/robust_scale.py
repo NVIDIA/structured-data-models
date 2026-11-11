@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _isfinite
@@ -45,7 +45,7 @@ class RobustScale(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -87,15 +87,11 @@ class RobustScale(Processor, InvertibleMixin):
             dtype=numerical.dtype
         )
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = (table.numerical - self.median).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         numerical = (table.numerical * self.scale).add_(self.median)
         return table.replace_blocks(numerical=numerical)
 

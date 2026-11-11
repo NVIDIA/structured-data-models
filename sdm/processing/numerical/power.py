@@ -6,7 +6,7 @@ import math
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
@@ -246,28 +246,13 @@ class PowerTransform(Processor, InvertibleMixin):
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
-    def _optimize_lambdas(
-        self,
-        inp: Tensor,
-        constant_features: Tensor,
-        *,
-        count: Tensor,
-    ) -> Tensor:
-        return EnsembleData.execute(
-            _optimize_lambdas,
-            inp,
-            constant_features,
-            count=count,
-            batched=True,
-        )
-
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        finite = EnsembleData.execute(_isfinite, table.numerical)
+        finite = EnsembleData.execute(_isfinite, table.numerical, batched=True)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
         count = finite.sum(dim=-2, keepdim=True).clamp_(min=1)
 
@@ -285,9 +270,7 @@ class PowerTransform(Processor, InvertibleMixin):
         # entirely missing column, whose max must be zero.
         self._set_buffer(
             name="max",
-            value=EnsembleData.execute(
-                torch.where, finite, table.numerical, mean
-            ).amax(
+            value=table.numerical.where(finite, mean).amax(
                 dim=-2,
                 keepdim=True,
             ),
@@ -296,10 +279,12 @@ class PowerTransform(Processor, InvertibleMixin):
 
         self._set_buffer(
             name="lambdas",
-            value=self._optimize_lambdas(
-                inp=finite_or_nan,
-                constant_features=constant_features,
+            value=EnsembleData.execute(
+                _optimize_lambdas,
+                finite_or_nan,
+                constant_features,
                 count=count,
+                batched=True,
             ),
         )
 
@@ -322,9 +307,7 @@ class PowerTransform(Processor, InvertibleMixin):
             self._set_buffer("mean", torch.zeros_like(self.lambdas))
             self._set_buffer("scale", torch.ones_like(self.lambdas))
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._transform_values,
             table.numerical,
@@ -346,9 +329,7 @@ class PowerTransform(Processor, InvertibleMixin):
         bound = torch.finfo(numerical.dtype).max
         return numerical.clamp_(min=-bound, max=bound)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._inverse_values,
             table.numerical,
@@ -373,9 +354,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
         # Above the fitted upper bound the inverse diverges, either to
         # infinity or, past the asymptote, to NaN.
-        diverged = (
-            ~EnsembleData.execute(_isfinite, inverse) & ~unscaled.isnan()
-        )
+        diverged = ~_isfinite(inverse) & ~unscaled.isnan()
         return torch.where(diverged, torch.fmin(inverse, maximum), inverse)
 
     def __repr__(self, *, indent: int = 0) -> str:

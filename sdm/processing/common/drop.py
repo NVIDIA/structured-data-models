@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from sdm import EnsembleTable, Stype, StypeLike, TableTensor
+from sdm import Stype, StypeLike, TableLike
 from sdm.processing.base import Processor
 
 
@@ -22,9 +22,7 @@ class DropStypes(Processor):
             dict.fromkeys(Stype(stype) for stype in stypes)
         )
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return table.drop_stypes(self.handles_stypes)
 
     def __repr__(self, *, indent: int = 0) -> str:

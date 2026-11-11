@@ -4,7 +4,7 @@
 
 import torch
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 
 
@@ -86,7 +86,7 @@ class DropConstantColumns(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -95,9 +95,7 @@ class DropConstantColumns(Processor):
         )
         self.register_buffer("_kept_indices", keep.nonzero(as_tuple=True)[0])
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._select_columns, table, self._kept_indices
         )

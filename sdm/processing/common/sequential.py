@@ -6,7 +6,7 @@ from typing import Self, cast
 
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableLike
 from sdm.processing import (
     InvertibleMixin,
     Processor,
@@ -82,9 +82,7 @@ class Sequential(Processor, InvertibleMixin):
             self.append(processor)
         return self
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         out = table
         for child in self:
             out = child.transform(out)
@@ -92,7 +90,7 @@ class Sequential(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -105,10 +103,10 @@ class Sequential(Processor, InvertibleMixin):
 
     def _fit_transform(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor | EnsembleTable:
+    ) -> TableLike:
         out = table
         for child in self:
             out = child.fit_transform(out, generator=generator)
@@ -116,8 +114,8 @@ class Sequential(Processor, InvertibleMixin):
 
     def _inverse_transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         out = table
         for child in reversed(list(self.children())):
             if not isinstance(child, InvertibleMixin):
@@ -135,14 +133,13 @@ class Sequential(Processor, InvertibleMixin):
         return len(self._modules)
 
     def __iadd__(self, other: object) -> Self:
-        self.append(Processor.as_processor(other))
-        return self
+        return self.append(other)
 
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self) == 0:
             return super().__repr__(indent=indent)
         reprs = "".join(
-            [f"{child.__repr__(indent=indent + 2)},\n" for child in self]
+            f"{child.__repr__(indent=indent + 2)},\n" for child in self
         )
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n{reprs}{' ' * indent})"

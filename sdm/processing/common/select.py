@@ -5,7 +5,7 @@ from typing import Literal
 
 import torch
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, EnsembleTable, Stype, TableLike, TableTensor
 from sdm._warnings import warn_once
 from sdm.processing import Processor
 
@@ -37,9 +37,7 @@ class SelectColumns(Processor):
         self.max_columns = max_columns
         self.method = method
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         num_members = len(table) if isinstance(table, EnsembleTable) else 1
         members = (
             EnsembleData(

@@ -7,7 +7,7 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleList
 
-from sdm import EnsembleTable, TableTensor
+from sdm import EnsembleTable, TableLike, TableTensor
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -50,16 +50,15 @@ class Choice(Processor, InvertibleMixin):
 
     def _draw_option_ids(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> tuple[int, ...]:
+        num_members = len(table) if isinstance(table, EnsembleTable) else 1
         if self.method == "round_robin":
             return tuple(
                 member_id % len(self.options)
-                for member_id in range(
-                    len(table) if isinstance(table, EnsembleTable) else 1
-                )
+                for member_id in range(num_members)
             )
 
         assert self.method == "random"
@@ -67,7 +66,7 @@ class Choice(Processor, InvertibleMixin):
         return tuple(
             torch.randint(
                 len(self.options),
-                (len(table) if isinstance(table, EnsembleTable) else 1,),
+                (num_members,),
                 generator=generator,
                 device=device,
             ).tolist()
@@ -75,8 +74,8 @@ class Choice(Processor, InvertibleMixin):
 
     def _tables_by_option(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> Iterator[tuple[int, TableTensor | EnsembleTable]]:
+        table: TableLike,
+    ) -> Iterator[tuple[int, TableLike]]:
         if isinstance(table, TableTensor):
             yield self._option_ids[0], table
             return
@@ -89,9 +88,9 @@ class Choice(Processor, InvertibleMixin):
 
     def _gather_outputs(
         self,
-        table: TableTensor | EnsembleTable,
-        outputs: dict[int, TableTensor | EnsembleTable],
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+        outputs: dict[int, TableLike],
+    ) -> TableLike:
         if isinstance(table, TableTensor):
             return outputs[self._option_ids[0]]
         tables = []
@@ -107,19 +106,18 @@ class Choice(Processor, InvertibleMixin):
             member_ids=member_ids,
         )
 
-    def _check_num_members(self, table: TableTensor | EnsembleTable) -> None:
-        if len(self._option_ids) != (
-            len(table) if isinstance(table, EnsembleTable) else 1
-        ):
+    def _check_num_members(self, table: TableLike) -> None:
+        num_members = len(table) if isinstance(table, EnsembleTable) else 1
+        if len(self._option_ids) != num_members:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} was fitted with "
                 f"{len(self._option_ids)} ensemble members, but got "
-                f"{len(table)}."
+                f"{num_members}."
             )
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -132,10 +130,10 @@ class Choice(Processor, InvertibleMixin):
 
     def _fit_transform(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor | EnsembleTable:
+    ) -> TableLike:
         self._option_ids = self._draw_option_ids(
             table,
             generator=generator,
@@ -151,8 +149,8 @@ class Choice(Processor, InvertibleMixin):
 
     def _transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         self._check_num_members(table)
         outputs = {
             option_id: self.options[option_id].transform(selected_table)
@@ -162,8 +160,8 @@ class Choice(Processor, InvertibleMixin):
 
     def _inverse_transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         self._check_num_members(table)
         outputs = {}
         for option_id, selected_table in self._tables_by_option(table):

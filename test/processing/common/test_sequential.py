@@ -36,12 +36,28 @@ def _add_one(table: TableTensor) -> TableTensor:
     return table.replace_blocks(numerical=table.numerical + 1)
 
 
-def test_empty_pipeline_returns_input_table() -> None:
-    table = _table()
-
-    assert sp.Sequential().transform(table).equal(table)
-    assert sp.Sequential().fit_transform(table).equal(table)
-    assert sp.Sequential().inverse_transform(table).equal(table)
+@pytest.mark.parametrize("ensemble", [False, True])
+def test_empty_pipeline_returns_input_table(ensemble: bool) -> None:
+    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+    second = _table(torch.tensor([[5.0, 6.0], [7.0, 8.0]]))
+    table = (
+        EnsembleTable.from_tables(
+            tables=(first, second), member_table_ids=(1, 0, 1)
+        )
+        if ensemble
+        else first
+    )
+    processor = sp.Sequential()
+    expected = table if isinstance(table, EnsembleTable) else (table,)
+    for output in (
+        processor.transform(table),
+        processor.fit_transform(table),
+        processor.inverse_transform(table),
+    ):
+        actual = output if isinstance(output, EnsembleTable) else (output,)
+        assert len(actual) == len(expected)
+        for actual_member, expected_member in zip(actual, expected):
+            assert actual_member.equal(expected_member)
 
 
 def test_pipeline_transforms_numerical() -> None:
@@ -203,21 +219,3 @@ def test_sequential_ensemble_matches_member_execution() -> None:
             source.replace_blocks(numerical=source.numerical.square())
         )
         assert output[member_id].equal(expected)
-
-
-def test_empty_ensemble_pipeline_passes_through_members() -> None:
-    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
-    second = _table(torch.tensor([[5.0, 6.0], [7.0, 8.0]]))
-    table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(1, 0, 1),
-    )
-    processor = sp.Sequential()
-
-    for output in (
-        processor.transform(table),
-        processor.fit_transform(table),
-        processor.inverse_transform(table),
-    ):
-        for member_id in range(len(table)):
-            assert output[member_id].equal(table[member_id])

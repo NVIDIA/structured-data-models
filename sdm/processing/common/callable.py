@@ -3,12 +3,16 @@
 
 from collections.abc import Callable
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 
 
 class Callable(Processor):
-    """Adapt a stateless callable to the :class:`Processor` interface."""
+    """Adapt a stateless callable to the :class:`Processor` interface.
+
+    Args:
+        function: Function mapping a table to its transformed table.
+    """
 
     handles_stypes = tuple(Stype)
     requires_fit = False
@@ -17,9 +21,7 @@ class Callable(Processor):
         super().__init__()
         self.function = function
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(self.function, table)
 
     def __repr__(self, *, indent: int = 0) -> str:

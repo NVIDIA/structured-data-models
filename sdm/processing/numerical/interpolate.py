@@ -5,7 +5,12 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    EnsembleTensor,
+    Stype,
+    TableLike,
+)
 from sdm.processing import InvertibleMixin, SeriesProcessor
 
 
@@ -38,7 +43,7 @@ class Interpolate(SeriesProcessor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -53,9 +58,7 @@ class Interpolate(SeriesProcessor, InvertibleMixin):
         )
         self.register_buffer("_last_indices", last_index)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         if self._offset is None:
             raise RuntimeError(
                 "Use this processor in a Recipe with a resolved time offset"
@@ -117,8 +120,8 @@ class Interpolate(SeriesProcessor, InvertibleMixin):
 
     def _inverse_transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         return table
 
     def __repr__(self, *, indent: int = 0) -> str:

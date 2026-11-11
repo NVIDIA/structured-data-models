@@ -10,13 +10,13 @@ from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm import EnsembleTable, EnsembleTensor, Stype, TableLike
 from sdm.nn._buffer import _EnsembleTensorBuffer
 
 if TYPE_CHECKING:
     from sdm.processing import Sequential
 
-TableT = TypeVar("TableT", bound=TableTensor | EnsembleTable)
+TableT = TypeVar("TableT", bound=TableLike)
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -30,9 +30,6 @@ class Processor(torch.nn.Module, abc.ABC):
     the transformation via :meth:`transform`. Implementations preserve batch
     dimensions, and preserve rows unless documented otherwise. Batch
     dimensions are processed independently.
-
-    Ensemble members have independent fitted state. Shared inputs reuse
-    computations; physical groups may change between fitting and transforming.
 
     :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
     stypes outside of :attr:`handles_stypes`.
@@ -286,29 +283,27 @@ class Processor(torch.nn.Module, abc.ABC):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         pass
 
     def _fit_transform(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor | EnsembleTable:
+    ) -> TableLike:
         if self.requires_fit:
             self._fit(table, generator=generator)
         return self._transform(table)
 
-    def _handles_table(self, table: TableTensor | EnsembleTable) -> bool:
+    def _handles_table(self, table: TableLike) -> bool:
         if isinstance(table, EnsembleTable):
             return any(
                 stype in table.active_stypes for stype in self.handles_stypes
@@ -322,7 +317,7 @@ class Processor(torch.nn.Module, abc.ABC):
 
     def fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> Self:
@@ -383,19 +378,17 @@ class Processor(torch.nn.Module, abc.ABC):
         from sdm.processing import Sequential  # noqa: PLC0415
 
         try:
-            other = Processor.as_processor(other)
+            return Sequential(self, other)
         except TypeError:
             return NotImplemented
-        return Sequential(self, other)
 
     def __radd__(self, other: object) -> Sequential:
         from sdm.processing import Sequential  # noqa: PLC0415
 
         try:
-            other = Processor.as_processor(other)
+            return Sequential(other, self)
         except TypeError:
             return NotImplemented
-        return Sequential(other, self)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"
@@ -405,9 +398,7 @@ class InvertibleMixin(abc.ABC):
     r"""Extend a :class:`Processor` by an inverse transformation."""
 
     @abc.abstractmethod
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable: ...
+    def _inverse_transform(self, table: TableLike) -> TableLike: ...
 
     def inverse_transform(self, table: TableT) -> TableT:
         r"""Apply the inverse transformation to ``table``.
@@ -428,6 +419,4 @@ class InvertibleMixin(abc.ABC):
         # Provided at runtime by `Processor` via the MRO.
         def _check_is_fitted(self) -> None: ...
 
-        def _handles_table(
-            self, table: TableTensor | EnsembleTable
-        ) -> bool: ...
+        def _handles_table(self, table: TableLike) -> bool: ...

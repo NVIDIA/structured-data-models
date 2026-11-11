@@ -9,8 +9,8 @@ from torch import Tensor
 from sdm import (
     CategoricalTensor,
     EnsembleData,
-    EnsembleTable,
     Stype,
+    TableLike,
     TableTensor,
 )
 from sdm.processing import Processor
@@ -56,12 +56,12 @@ class AddCategoryCounts(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         counts, sizes, categories = EnsembleData.execute(
-            self._fit_counts, table
+            self._fit_counts, table, batched=True
         )
         self.register_buffer("_log_counts", counts)
         self.register_buffer("_num_categories", sizes)
@@ -94,7 +94,7 @@ class AddCategoryCounts(Processor):
             dtype=torch.long,
             device=codes.device,
         )
-        counts.scatter_add_(-1, slots, torch.ones_like(slots))
+        counts.scatter_add_(-1, slots, slots.new_ones(()).expand_as(slots))
 
         dtype = table.numerical.dtype
         count_dtype = (
@@ -104,14 +104,15 @@ class AddCategoryCounts(Processor):
         )
         log_counts = counts.to(count_dtype).log1p().to(dtype)
         categories = CategoricalTensor(
-            table.categorical.code.new_empty((0, table.categorical.size(-1))),
+            table.categorical.code.new_empty(
+                (*codes.shape[:-2], 0, table.categorical.size(-1))
+            ),
             categories=table.categorical.categories,
         )
+        num_categories = num_categories.expand(*codes.shape[:-2], len(sizes))
         return log_counts, num_categories, categories
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._add_counts,
             table,

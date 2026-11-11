@@ -10,8 +10,8 @@ from torch import Tensor
 from sdm import (
     CategoricalTensor,
     EnsembleData,
-    EnsembleTable,
     Stype,
+    TableLike,
     TableTensor,
 )
 from sdm.processing import Processor
@@ -21,12 +21,8 @@ from sdm.tensor.categorical import _iter_categories
 class ShuffleCategories(Processor):
     """Permute the integer codes of categorical columns.
 
-    One permutation per categorical column is drawn when the processor is
-    fitted. Codes and their corresponding category vectors are permuted
-    together so decoded values remain unchanged. Negative codes represent
-    missing values and are preserved unchanged. Only categorical columns
-    are supported; use :class:`~sdm.processing.StypeDispatch` to apply this
-    processor to the categorical block of a mixed table.
+    Codes and vocabularies are permuted together so decoded values remain
+    unchanged. Negative codes representing missing values are preserved.
 
     Args:
         method: Permutation strategy. ``"random"`` remaps codes
@@ -51,7 +47,7 @@ class ShuffleCategories(Processor):
         *,
         unused_offsets: dict[tuple[str, int], Tensor],
         generator: torch.Generator | None = None,
-    ) -> list[Tensor]:
+    ) -> CategoricalTensor:
         device = table.categorical.device
         permutations: list[Tensor] = []
         for column_index, category in enumerate(table.categorical.categories):
@@ -81,17 +77,20 @@ class ShuffleCategories(Processor):
                     device=device,
                 )
             permutations.append(permutation)
-        return permutations
+        return CategoricalTensor(
+            table.categorical.code.new_empty((0, len(permutations))),
+            categories=permutations,
+        )
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         unused_offsets: dict[tuple[str, int], Tensor] = {}
         draw = functools.partial(
-            self._draw_state,
+            self._draw_permutations,
             unused_offsets=unused_offsets,
             generator=generator,
         )
@@ -100,24 +99,7 @@ class ShuffleCategories(Processor):
         )
         self.register_buffer("_permutations", permutations)
 
-    def _draw_state(
-        self,
-        table: TableTensor,
-        *,
-        unused_offsets: dict[tuple[str, int], Tensor],
-        generator: torch.Generator | None,
-    ) -> CategoricalTensor:
-        permutations = self._draw_permutations(
-            table, unused_offsets=unused_offsets, generator=generator
-        )
-        return CategoricalTensor(
-            table.categorical.code.new_empty((0, len(permutations))),
-            categories=permutations,
-        )
-
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._permute, table, self._permutations, batched=True
         )

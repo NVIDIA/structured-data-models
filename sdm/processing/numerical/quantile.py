@@ -6,30 +6,12 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _ndtri
 
 BOUNDS_THRESH = 1e-7
 _MAX_NUM_COLS = 32
-
-
-def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
-    n = xp.numel()
-    if n == 1:
-        return fp.select(0, 0).expand_as(x)
-
-    idx = torch.searchsorted(xp, x, right=True).clamp(1, n - 1)
-
-    x0, x1 = xp.take(idx - 1), xp.take(idx)
-    y0, y1 = fp.take(idx - 1), fp.take(idx)
-
-    denom = x1 - x0
-    weight = torch.where(denom != 0, (x - x0) / denom, 0.0)
-    result = torch.lerp(y0, y1, weight)
-
-    result = torch.where(x <= xp.select(0, 0), fp.select(0, 0), result)
-    return torch.where(x >= xp.select(0, -1), fp.select(0, -1), result)
 
 
 def _batched_interp(
@@ -127,20 +109,9 @@ class QuantileTransform(Processor, InvertibleMixin):
             torch.empty(0),
         )
 
-    def _subsample_indices(
-        self,
-        inp: Tensor,
-        generator: torch.Generator | None,
-    ) -> Tensor:
-        return torch.randperm(
-            inp.size(-2),
-            generator=generator,
-            device=inp.device,
-        )[: self.subsample]
-
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -180,7 +151,9 @@ class QuantileTransform(Processor, InvertibleMixin):
         )
 
         if self.subsample is not None and self.subsample < n_samples:
-            indices = self._subsample_indices(numerical, generator)
+            indices = torch.randperm(
+                n_samples, generator=generator, device=numerical.device
+            )[: self.subsample]
             input_sample = numerical.index_select(-2, indices)
         else:
             input_sample = numerical
@@ -205,9 +178,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         )
         return quantiles, references.expand(*numerical.shape[:-2], n_quantiles)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._transform_values,
             table.numerical,
@@ -288,9 +259,7 @@ class QuantileTransform(Processor, InvertibleMixin):
             n_samples,
         ).movedim(-1, -2)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._inverse_transform_values,
             table.numerical,

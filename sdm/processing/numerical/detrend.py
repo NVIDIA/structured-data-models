@@ -4,7 +4,12 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    EnsembleTensor,
+    Stype,
+    TableLike,
+)
 from sdm.processing import InvertibleMixin, SeriesProcessor
 from sdm.processing.numerical._stats import _isfinite
 
@@ -32,7 +37,7 @@ class Detrend(SeriesProcessor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -42,7 +47,7 @@ class Detrend(SeriesProcessor, InvertibleMixin):
         )
         time = time.view(-1, 1)  # [R, 1]
 
-        valid = EnsembleData.execute(_isfinite, x)
+        valid = EnsembleData.execute(_isfinite, x, batched=True)
         count = valid.sum(dim=-2, keepdim=True, dtype=x.dtype).clamp(min=1)
 
         mean = x.where(valid, 0.0).sum(dim=-2, keepdim=True) / count
@@ -67,9 +72,7 @@ class Detrend(SeriesProcessor, InvertibleMixin):
         self.register_buffer("_slopes", slope)
         self.register_buffer("_intercepts", mean - slope * time_mean)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         if self._offset is None:
             raise RuntimeError(
                 "Use this processor in a Recipe with a resolved time offset"
@@ -83,9 +86,7 @@ class Detrend(SeriesProcessor, InvertibleMixin):
         trend = self._intercepts + self._slopes * (time + self._offset)
         return table.replace_blocks(numerical=table.numerical - trend)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         if self._offset is None:
             raise RuntimeError(
                 "Use this processor in a Recipe with a resolved time offset"

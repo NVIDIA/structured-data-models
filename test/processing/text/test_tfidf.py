@@ -262,11 +262,14 @@ def test_failed_refit_preserves_previous_state(
     assert torch.equal(output.numerical, expected.numerical)
 
 
-def test_refit_replaces_previous_state() -> None:
+@pytest.mark.parametrize("ensemble", [False, True])
+def test_refit_replaces_previous_state(ensemble: bool) -> None:
     wide = TableTensor.from_tensor(
         StringTensor.from_list([["hello world", "cat dog"]])
     )
     narrow = TableTensor.from_tensor(StringTensor.from_list([["hello world"]]))
+    if ensemble:
+        wide = EnsembleTable.from_table(wide, num_members=4)
     encoder = TFIDF(ngram_range=(2, 2))
     encoder.fit(wide)
     expected = TFIDF(ngram_range=(2, 2)).fit_transform(narrow)
@@ -305,37 +308,3 @@ def test_tfidf_keeps_vocabulary_per_member_table() -> None:
     )
     assert query_output[0].numerical.shape == (1, 2)
     assert query_output[1].numerical.shape == (1, 4)
-
-
-def test_tfidf_refit_clears_ensemble_state() -> None:
-    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
-    ensemble_table = EnsembleTable.from_table(table, num_members=4)
-    processor = TFIDF(ngram_range=(2, 2))
-    expected = TFIDF(ngram_range=(2, 2)).fit_transform(table)
-
-    processor.fit_transform(ensemble_table)
-    output = processor.fit_transform(table)
-
-    assert output.equal(expected)
-    assert processor.transform(table).equal(expected)
-
-
-def test_tfidf_failed_refit_preserves_ensemble_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
-    ensemble_table = EnsembleTable.from_table(table, num_members=4)
-    processor = TFIDF(ngram_range=(2, 2))
-    processor.fit(ensemble_table)
-    expected = processor.transform(ensemble_table)
-
-    def fail_bincount(*_: object, **__: object) -> None:
-        raise RuntimeError("refit failed")
-
-    monkeypatch.setattr(torch, "bincount", fail_bincount)
-    with pytest.raises(RuntimeError, match="refit failed"):
-        processor.fit(table)
-
-    output = processor.transform(ensemble_table)
-    for member_id in range(len(ensemble_table)):
-        assert output[member_id].equal(expected[member_id])

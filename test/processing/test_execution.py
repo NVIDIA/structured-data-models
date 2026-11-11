@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 import sdm.processing as sp
@@ -380,7 +381,8 @@ def test_sequence_supports_different_query_row_counts() -> None:
         )
 
 
-def test_member_context_exposes_input_stypes() -> None:
+@pytest.mark.parametrize("num_members", [None, 1, 2])
+def test_member_context_exposes_input_stypes(num_members: int | None) -> None:
     x = TableTensor(
         columns={Stype.numerical: ("n",), Stype.categorical: ("c",)},
         numerical=torch.randn(3, 1),
@@ -389,11 +391,14 @@ def test_member_context_exposes_input_stypes() -> None:
     y = torch.zeros(3, 1)
     recipe = Recipe(features=sp.ToNumerical())
 
-    (context,) = RecipeExecution(recipe).fit_transform(
+    contexts = RecipeExecution(recipe).fit_transform(
         x=x,
         y=y,
         related_tables=None,
+        num_members=num_members,
     )
 
-    assert context.input_stypes == x.stypes
-    assert context.x.numerical_columns == ("n", "c")
+    assert len(contexts) == (num_members or 1)
+    for context in contexts:
+        assert context.input_stypes == x.stypes
+        assert context.x.numerical_columns == ("n", "c")

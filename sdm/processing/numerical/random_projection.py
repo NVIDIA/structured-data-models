@@ -5,7 +5,13 @@ from typing import Literal, cast
 
 import torch
 
-from sdm import EnsembleData, EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    EnsembleTensor,
+    Stype,
+    TableLike,
+    TableTensor,
+)
 from sdm.processing import Processor
 
 
@@ -37,7 +43,7 @@ class RandomProjection(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -58,9 +64,7 @@ class RandomProjection(Processor):
         assert self.init == "normal"
         return weights.normal_(std=self.channels**-0.5, generator=generator)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._project, table, self._weights, batched=True
         )

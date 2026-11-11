@@ -6,7 +6,7 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableLike
 from sdm.processing import Processor
 
 
@@ -45,7 +45,7 @@ class TableDispatch(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -62,10 +62,10 @@ class TableDispatch(Processor):
 
     def _fit_transform(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor | EnsembleTable:
+    ) -> TableLike:
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "
@@ -80,8 +80,8 @@ class TableDispatch(Processor):
 
     def _transform(
         self,
-        table: TableTensor | EnsembleTable,
-    ) -> TableTensor | EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "

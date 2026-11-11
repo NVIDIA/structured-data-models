@@ -6,8 +6,8 @@ import torch
 from sdm import (
     CategoricalTensor,
     EnsembleData,
-    EnsembleTable,
     Stype,
+    TableLike,
     TableTensor,
 )
 from sdm.processing import Processor
@@ -21,10 +21,7 @@ from sdm.tensor.categorical import _iter_categories
 class ImputeMode(Processor):
     """Replace missing categorical values with fitted per-column modes.
 
-    Negative category codes are missing values. The fitted fill value is
-    the most frequent observed category code learned independently for every
-    categorical column and applied without changing its category vocabulary.
-    Ties select the lowest category code.
+    Negative codes represent missing values. Ties select the lowest code.
 
     Transform inputs must use the fitted per-column category vocabularies.
     Use :class:`~sdm.processing.AlignCategories` before this processor when
@@ -48,11 +45,13 @@ class ImputeMode(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        fill, categories = EnsembleData.execute(self._fit_values, table)
+        fill, categories = EnsembleData.execute(
+            self._fit_values, table, batched=True
+        )
         self.register_buffer("_fill_values", fill)
         self.register_buffer("_categories", categories)
 
@@ -89,16 +88,17 @@ class ImputeMode(Processor):
         fill = (
             torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
-            else torch.empty(0, dtype=torch.long, device=data.device)
+            else data.code.new_empty(
+                (*data.shape[:-2], 1, 0), dtype=torch.long
+            )
         )
         categories = CategoricalTensor(
-            data.code.new_empty((0, data.size(-1))), categories=data.categories
+            data.code.new_empty((*data.shape[:-2], 0, data.size(-1))),
+            categories=data.categories,
         )
         return fill, categories
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._replace_missing,
             table,

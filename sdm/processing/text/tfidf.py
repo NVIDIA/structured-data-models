@@ -12,7 +12,13 @@ import torch
 from torch import Tensor
 from torch.utils.dlpack import from_dlpack
 
-from sdm import EnsembleData, EnsembleTable, StringTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    StringTensor,
+    Stype,
+    TableLike,
+    TableTensor,
+)
 from sdm.processing import Processor
 from sdm.tensor.io import arrow_as_tensor
 
@@ -267,7 +273,7 @@ class TFIDF(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -276,9 +282,7 @@ class TFIDF(Processor):
         self.register_buffer("_idf", idf)
         self.register_buffer("_offsets", offsets)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(
             self._encode, table, self._vocabulary, self._idf, self._offsets
         )

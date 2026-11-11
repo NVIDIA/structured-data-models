@@ -3,7 +3,7 @@
 
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableLike
 from sdm.processing import TargetAwareProcessor
 
 
@@ -13,14 +13,17 @@ class ClipNonnegative(TargetAwareProcessor):
     handles_stypes = (Stype.numerical,)
     requires_fit = False
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         if self._target is None:
             raise RuntimeError(
-                "Use this processor in a Recipe with resolved context targets"
+                f"{self.__class__.__name__!r} has no context targets; "
+                "use it in a 'Recipe' through model execution"
             )
-        target = self._target.numerical.as_tensor()
+        target = (
+            self._target.numerical.as_tensor()
+            if isinstance(self._target, EnsembleTable)
+            else self._target.numerical.unsqueeze(0)
+        )
         mask = ~(target < 0).any(dim=-2).any(dim=0)
         mask &= (~target.isnan()).any(dim=-2).any(dim=0)
         mask = mask.unsqueeze(-2).unsqueeze(-1)

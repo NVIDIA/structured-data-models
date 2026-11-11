@@ -13,7 +13,13 @@ import pyarrow.compute as pc
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, StringTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    StringTensor,
+    Stype,
+    TableLike,
+    TableTensor,
+)
 from sdm._warnings import warn_once
 from sdm.processing import Processor
 
@@ -427,9 +433,7 @@ class SentenceTransformer(Processor):
         self._embedding_dim = embedding_dim
         self._model = _Encoder(model, batch_size, embedding_dim)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return EnsembleData.execute(self._transform_table, table, batched=True)
 
     def _transform_table(self, table: TableTensor) -> TableTensor:

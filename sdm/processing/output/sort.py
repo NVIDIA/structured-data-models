@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableLike
 from sdm.processing import Processor
 
 
@@ -21,9 +21,7 @@ class SortQuantiles(Processor):
         super().__init__()
         self.num_quantiles = num_quantiles
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = table.numerical
         if self.num_quantiles is not None:
             numerical = numerical.unflatten(-1, (-1, self.num_quantiles))

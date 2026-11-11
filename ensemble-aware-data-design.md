@@ -21,7 +21,7 @@ Expose numerical and other semantic blocks on `EnsembleTable` as ensemble-aware 
 
 ## Processor and recipe migration
 
-Move the existing enhanced buffer implementation to the common Processor lifecycle. Keep `register_buffer`, ordinary attribute assignment, device transfers, persistence, serialization, and `BufferList` where required. Do not introduce a new `State`, `Parameter`, or `Buffer` abstraction.
+Move the existing enhanced buffer implementation to the common Processor lifecycle. Keep `register_buffer`, ordinary attribute assignment, device transfers, persistence, and serialization. Do not introduce a new `State`, `Parameter`, or `Buffer` abstraction.
 
 Use a single fit/transform implementation on plain or ensemble table values. Stochastic tensor callbacks request independent draws explicitly, retaining the original generator draw order. `EnsembleProcessor`, `EnsembleProcessorAdapter` and their ensemble lifecycle methods are deleted. Physical storage iteration and reconstruction belong in containers, not processors. Existing numerical routines that preserve leading batch dimensions run through `execute(..., batched=True)`; native elementwise operations use Torch tags and other logical-axis operations use `vmap`.
 

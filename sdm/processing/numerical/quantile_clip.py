@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm.processing import Processor
 
 
@@ -42,7 +42,7 @@ class ClipQuantiles(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -62,10 +62,7 @@ class ClipQuantiles(Processor):
         )
         return low, high
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
-        """Clamp ``table`` to the fitted lower and upper bounds."""
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = table.numerical.clamp(
             min=self.lower_bound,
             max=self.upper_bound,

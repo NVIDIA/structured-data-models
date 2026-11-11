@@ -6,15 +6,19 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, EnsembleTensor, Stype, TableTensor
+from sdm import (
+    EnsembleData,
+    EnsembleTable,
+    EnsembleTensor,
+    Stype,
+    TableLike,
+    TableTensor,
+)
 from sdm.processing import InvertibleMixin, Processor
 
 
 class ShuffleColumns(Processor, InvertibleMixin):
     """Permute numerical columns and their names.
-
-    Convert non-numerical stypes before this step, for example with
-    :class:`~sdm.processing.ToNumerical`.
 
     Args:
         method: Permutation strategy. ``"random"`` draws independent
@@ -46,7 +50,7 @@ class ShuffleColumns(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -109,19 +113,13 @@ class ShuffleColumns(Processor, InvertibleMixin):
             rows = rows[rows < width]
         return base[(member % width - rows) % width]
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return self._permute(table, inverse=False)
 
-    def _inverse_transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         return self._permute(table, inverse=True)
 
-    def _permute(
-        self, table: TableTensor | EnsembleTable, *, inverse: bool
-    ) -> TableTensor | EnsembleTable:
+    def _permute(self, table: TableLike, *, inverse: bool) -> TableLike:
         host_permutations = (
             EnsembleData(
                 groups=self._host_permutations,
@@ -151,7 +149,7 @@ class ShuffleColumns(Processor, InvertibleMixin):
             numerical=numerical,
         )
         return cast(
-            TableTensor | EnsembleTable,
+            TableLike,
             EnsembleData.execute(
                 torch.cat,
                 (table.drop_stypes(Stype.numerical), shuffled),

@@ -6,7 +6,7 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableLike
 from sdm.processing import Processor
 
 
@@ -61,7 +61,7 @@ class TaskDispatch(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -69,15 +69,13 @@ class TaskDispatch(Processor):
 
     def _fit_transform(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor | EnsembleTable:
+    ) -> TableLike:
         return self._processor().fit_transform(table, generator=generator)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         return self._processor().transform(table)
 
     def get_extra_state(self) -> str | None:

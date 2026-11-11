@@ -7,7 +7,7 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite
@@ -49,7 +49,7 @@ class ClipSigma(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -98,9 +98,7 @@ class ClipSigma(Processor):
 
         return mean - self.threshold * std, mean + self.threshold * std
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._transform_values,
             table.numerical,
@@ -116,9 +114,7 @@ class ClipSigma(Processor):
         if self.method == "hard":
             return numerical.clamp(lower_bound, upper_bound)
         assert self.method == "log"
-        dtype = EnsembleData.execute(
-            torch.promote_types, numerical.dtype, lower_bound.dtype
-        )
+        dtype = torch.promote_types(numerical.dtype, lower_bound.dtype)
         if torch.is_grad_enabled():
             log_abs = numerical.abs().log1p().to(dtype)
             clipped = torch.maximum(lower_bound - log_abs, numerical)

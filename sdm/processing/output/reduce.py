@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import EnsembleTable, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 
 
@@ -31,9 +31,7 @@ class AverageEstimators(Processor):
             raise ValueError("'trim_fraction' must be in [0, 0.5)")
         self.trim_fraction = trim_fraction
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         ensemble = isinstance(table, EnsembleTable)
         if ensemble:
             table = table.as_tensor()

@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleData, EnsembleTable, Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite, _ndtri
@@ -48,7 +48,7 @@ class RankGaussian(Processor):
 
     def _fit(
         self,
-        table: TableTensor | EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -143,9 +143,7 @@ class RankGaussian(Processor):
         values, probabilities = zip(*knots, strict=True)
         return torch.cat(values, dim=-2), torch.cat(probabilities, dim=-2)
 
-    def _transform(
-        self, table: TableTensor | EnsembleTable
-    ) -> TableTensor | EnsembleTable:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = EnsembleData.execute(
             self._gaussian,
             table.numerical,
