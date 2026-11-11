@@ -175,11 +175,17 @@ class KumoForecast(ICLModel):
             numerical = table.numerical
             numerical = numerical.masked_fill(numerical.isnan(), 0)
             if table.size(-2) < self.model.context_size:
-                numerical = torch.nn.functional.pad(
-                    numerical,
-                    pad=(0, 0, self.model.context_size - table.size(-2), 0),
-                    value=0,
+                padded = numerical.new_zeros(
+                    (
+                        *numerical.size()[:-2],
+                        self.model.context_size,
+                        numerical.size(-1),
+                    ),
                 )
+                padded[..., self.model.context_size - table.size(-2) :, :] = (
+                    numerical
+                )
+                numerical = padded
             context_tables[i] = TableTensor(
                 columns={
                     str(stype): names for stype, names in table.columns.items()
