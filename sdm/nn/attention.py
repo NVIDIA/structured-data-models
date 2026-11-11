@@ -192,8 +192,20 @@ class SDPA(torch.nn.Module):
         # CUDA attention kernels accept at most 65,535 batch entries per call.
         # Slicing a dynamic batch that provably fits would add a size guard.
         queries = _split_tensor(query, 65_535, dim=0)
-        outs = [
-            F.scaled_dot_product_attention(
+        masks = (
+            (None,) * len(queries)
+            if attn_mask is None
+            else _split_tensor(attn_mask, 65_535, dim=0)
+        )
+        outs = []
+        for chunk_query, chunk_key, chunk_value, chunk_mask in zip(
+            queries,
+            _split_tensor(key, 65_535, dim=0),
+            _split_tensor(value, 65_535, dim=0),
+            masks,
+            strict=True,
+        ):
+            out = F.scaled_dot_product_attention(
                 query=chunk_query,
                 key=chunk_key,
                 value=chunk_value,
@@ -202,17 +214,8 @@ class SDPA(torch.nn.Module):
                 enable_gqa=enable_gqa,
                 is_causal=is_causal,
                 scale=self.scale,
-            ).transpose(-3, -2)  # [B, Q, Hq, C]
-            for chunk_query, chunk_key, chunk_value, chunk_mask in zip(
-                queries,
-                _split_tensor(key, 65_535, dim=0),
-                _split_tensor(value, 65_535, dim=0),
-                (None,) * len(queries)
-                if attn_mask is None
-                else _split_tensor(attn_mask, 65_535, dim=0),
-                strict=True,
             )
-        ]
+            outs.append(out.transpose(-3, -2))  # [B, Q, Hq, C]
         out = outs[0] if len(outs) == 1 else torch.cat(outs)
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
