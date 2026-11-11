@@ -17,7 +17,7 @@ def warn_once(
 ) -> None:
     r"""Issue a warning once per process.
 
-    The warning is not issued from compiled code, which cannot trace it.
+    The warning is not issued from compiled code.
     """
     if torch.compiler.is_compiling():
         return
