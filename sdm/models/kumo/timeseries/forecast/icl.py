@@ -73,7 +73,6 @@ class ICLBlock(torch.nn.Module):
     def forward(
         self,
         x: Tensor,  # [..., N, D]
-        patch_mask: Tensor | None = None,  # [..., N]
         *,
         batch_size_limit: int | Literal["auto"] | None = "auto",
     ) -> Tensor:  # [..., N, D]
@@ -82,7 +81,6 @@ class ICLBlock(torch.nn.Module):
             x = layer(
                 query=x,
                 attn_mask=bias,
-                key_padding_mask=patch_mask,
                 batch_size_limit=batch_size_limit,
                 out=None if torch.is_grad_enabled() else x,
             )

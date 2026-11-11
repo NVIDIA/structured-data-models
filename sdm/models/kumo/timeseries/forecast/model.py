@@ -42,6 +42,10 @@ class KumoForecast(ICLModel):
     up to 72-step horizon directly from a 512-step history.
     Forecast horizons beyond 72 steps are extended autoregressively.
 
+    Missing values are replaced with zero before preprocessing, matching the
+    original Kumo-TS SDK. Histories shorter than 512 steps are left-padded
+    with zeros before preprocessing.
+
     For longer observation histories, Domain-Aware Representation and
     Retrieval (DARR) can augment the direct forecast with patterns retrieved
     from historical data. Set ``alpha < 1`` to retrieve similar historical
@@ -135,6 +139,8 @@ class KumoForecast(ICLModel):
         r""":meta private:"""  # noqa: D415
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
+        if not isinstance(y_context, TableTensor):
+            y_context = TableTensor.from_tensor(y_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
         if x_query.size(-1) > 0:
@@ -147,8 +153,27 @@ class KumoForecast(ICLModel):
             )
             x_query = x_query[..., :0]
 
+        x_context = self._prepare_history(x_context)
+        y_context = self._prepare_history(y_context)
         kwargs.update(alpha=alpha, k=k, temperature=temperature)
         return super().forward(x_context, y_context, x_query, *args, **kwargs)
+
+    def _prepare_history(self, table: TableTensor) -> TableTensor:
+        numerical = table.numerical
+        numerical = numerical.masked_fill(numerical.isnan(), 0)
+        if table.size(-2) < self.model.context_size:
+            numerical = torch.nn.functional.pad(
+                numerical,
+                pad=(0, 0, self.model.context_size - table.size(-2), 0),
+                value=0,
+            )
+            return TableTensor(
+                columns={
+                    str(stype): names for stype, names in table.columns.items()
+                },
+                numerical=numerical,
+            )
+        return table.replace_blocks(numerical=numerical)
 
     def fit(self, *args: Any, **kwargs: Any) -> None:
         r""":meta private:"""  # noqa: D415
@@ -205,12 +230,6 @@ class KumoForecast(ICLModel):
 
         # Forecast:
         last_x = x[..., -self.model.context_size :]
-        if last_x.size(-1) < context_size:
-            last_x = torch.nn.functional.pad(
-                last_x,
-                pad=(context_size - last_x.size(-1), 0),
-                value=float("nan"),
-            )
         encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
         out = self.model.decode(encoded, mean, scale)
 
@@ -357,20 +376,12 @@ class _KumoForecast(torch.nn.Module):
         x: Tensor,  # [..., C, R]
     ) -> tuple[Tensor, Tensor, Tensor]:
         mean, scale = self.revin.stats(x, correction=0)
-
-        # Mask leading patches with missing steps, unless all are missing:
-        patch_mask = x.isnan().unflatten(-1, (-1, self.patch_size)).any(-1)
-        patch_mask = patch_mask.int().cumprod(dim=-1).bool()  # [..., C, N]
-        patch_mask &= ~patch_mask.all(dim=-1, keepdim=True)
-        if not patch_mask.any():  # Pay for device sync here:
-            patch_mask = None
-
         x = self.revin(x, mean, scale)
         x = x.nan_to_num(nan=0, posinf=0, neginf=0)
         x = x.unflatten(-1, (-1, self.patch_size))  # [..., C, N, P]
         x = self.pe(self.lin(x))  # [..., C, N, D]
 
-        x = self.icl(x, patch_mask=patch_mask)  # [..., C, N, D]
+        x = self.icl(x)  # [..., C, N, D]
         if self.cross_channel is not None:
             x = self.cross_channel(x)  # [..., C, N, D]
 

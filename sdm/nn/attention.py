@@ -547,7 +547,6 @@ class TransformerBlock(torch.nn.Module):
         query_pos: Tensor | None = None,
         key_pos: Tensor | None = None,
         *,
-        key_padding_mask: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -564,7 +563,6 @@ class TransformerBlock(torch.nn.Module):
         query_pos: Tensor | None = None,
         key_pos: Tensor | None = None,
         *,
-        key_padding_mask: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: Literal[True],
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -581,7 +579,6 @@ class TransformerBlock(torch.nn.Module):
         query_pos: Tensor | None = None,
         key_pos: Tensor | None = None,
         *,
-        key_padding_mask: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -597,7 +594,6 @@ class TransformerBlock(torch.nn.Module):
         query_pos: Tensor | None = None,
         key_pos: Tensor | None = None,
         *,
-        key_padding_mask: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool = False,
         batch_size_limit: int | Literal["auto"] | None = None,
@@ -624,9 +620,6 @@ class TransformerBlock(torch.nn.Module):
                 ``query_transform``.
             key_pos: Key positions with shape ``[..., KV]`` passed to
                 ``key_transform``.
-            key_padding_mask: Boolean mask with shape ``[..., KV]``. Keys
-                marked ``True`` are excluded. Combined with ``attn_mask``
-                within each batch chunk.
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
@@ -659,7 +652,6 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
-                key_padding_mask=key_padding_mask,
                 query_pos=query_pos,
                 key_pos=key_pos,
                 is_causal=is_causal,
@@ -674,13 +666,6 @@ class TransformerBlock(torch.nn.Module):
             elif isinstance(key_value, KVCacheEntry):
                 key_value_length = key_value.key.size(-3)
 
-            extra_bytes = 0
-            if key_padding_mask is not None and attn_mask is not None:
-                mask_elements = math.prod(attn_mask.size()[-3:-1]) * max(
-                    attn_mask.size(-1), key_padding_mask.size(-1)
-                )
-                # Budget the sliced mask and its masked copy.
-                extra_bytes = 2 * mask_elements * attn_mask.element_size()
             batch_size_limit = self.auto_batch_size_limit(
                 device=query.device,
                 element_size=torch.get_autocast_dtype(
@@ -690,7 +675,6 @@ class TransformerBlock(torch.nn.Module):
                 else query.element_size(),
                 query_length=query.size(-2),
                 key_value_length=key_value_length,
-                extra_bytes_per_example=extra_bytes,
             )
 
         batch_size_limit = min(batch_size_limit or 65_535, 65_535)
@@ -700,7 +684,6 @@ class TransformerBlock(torch.nn.Module):
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
-            key_padding_mask=key_padding_mask,
             query_pos=query_pos,
             key_pos=key_pos,
         )
@@ -724,7 +707,6 @@ class TransformerBlock(torch.nn.Module):
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
                 attn_mask=attn_mask,
-                key_padding_mask=key_padding_mask,
                 query_pos=query_pos,
                 key_pos=key_pos,
                 is_causal=is_causal,
@@ -753,9 +735,6 @@ class TransformerBlock(torch.nn.Module):
                     end=end,
                 ),
                 attn_mask=_chunk(attn_mask, batch_shape, 3, start, end),
-                key_padding_mask=_chunk(
-                    key_padding_mask, batch_shape, 1, start, end
-                ),
                 query_pos=_chunk(query_pos, batch_shape, 1, start, end),
                 key_pos=_chunk(key_pos, batch_shape, 1, start, end),
                 is_causal=is_causal,
@@ -820,20 +799,10 @@ class TransformerBlock(torch.nn.Module):
         query_pos: Tensor | None = None,
         key_pos: Tensor | None = None,
         *,
-        key_padding_mask: Tensor | None = None,
         is_causal: bool = False,
         return_key_value: bool = False,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
-
-        if key_padding_mask is not None:
-            mask = key_padding_mask[..., None, None, :]
-            if attn_mask is None:
-                attn_mask = ~mask
-            elif attn_mask.dtype == torch.bool:
-                attn_mask = attn_mask & ~mask
-            else:
-                attn_mask = attn_mask.masked_fill(mask, -math.inf)
 
         if key_value is None and key_pos is None:
             key_pos = query_pos
@@ -893,7 +862,6 @@ class TransformerBlock(torch.nn.Module):
         element_size: int,
         query_length: int,
         key_value_length: int | None = None,
-        extra_bytes_per_example: int = 0,
     ) -> int:
         r""":meta private:"""  # noqa: D415
         if device.type != "cuda":
@@ -903,7 +871,6 @@ class TransformerBlock(torch.nn.Module):
             query_length=query_length,
             key_value_length=key_value_length,
         )
-        bytes_per_example += extra_bytes_per_example
         limit = chunk_memory_limit(device) // max(bytes_per_example, 1)
         return min(max(limit, 1), 65_535)
 
@@ -913,7 +880,6 @@ def _batch_shape(
     key_value: Tensor | KVCacheEntry | None,
     seqused_key_value: Tensor | None,
     attn_mask: Tensor | None,
-    key_padding_mask: Tensor | None,
     query_pos: Tensor | None,
     key_pos: Tensor | None,
 ) -> torch.Size:
@@ -926,8 +892,6 @@ def _batch_shape(
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
         shapes.append(attn_mask.size()[:-3])
-    if key_padding_mask is not None:
-        shapes.append(key_padding_mask.size()[:-1])
     for pos in (query_pos, key_pos):
         if pos is not None:
             shapes.append(pos.size()[:-1])
