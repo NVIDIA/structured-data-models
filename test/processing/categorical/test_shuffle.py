@@ -12,7 +12,7 @@ from sdm import (
     StringTensor,
     TableTensor,
 )
-from sdm.processing import ShuffleCategories
+from sdm.processing import AlignCategories, Sequential, ShuffleCategories
 from sdm.testing import withCUDA
 
 
@@ -230,3 +230,26 @@ def test_shuffle_categories_shift_uses_each_offset_before_reuse(
     for cycle in shifts.split(num_classes):
         for column in range(shifts.size(1)):
             assert cycle[:, column].unique().numel() == cycle.size(0)
+
+
+# One member permutes its own table; four members share three permutations.
+@pytest.mark.parametrize("num_members", [1, 4])
+def test_shuffle_categories_compiles_after_align_categories(
+    num_members: int,
+    compilation: None,
+) -> None:
+    table = _table([[0], [1], [2], [-1]], (("a", "bb", "ccc"),))
+    ensemble = EnsembleTable.from_table(table, num_members=num_members)
+    processor = Sequential(AlignCategories(), ShuffleCategories("shift"))
+    processor.fit_ensemble(ensemble)
+
+    compiled = torch.compile(
+        processor.transform_ensemble,
+        backend="eager",
+        fullgraph=True,
+    )
+    output = compiled(ensemble)
+    for member_id in range(num_members):
+        assert output[member_id].categorical.tolist() == (
+            table.categorical.tolist()
+        )

@@ -1,12 +1,19 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal, cast
+from collections.abc import Sequence
+from typing import Any, Literal, cast
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    Stype,
+    TableTensor,
+    VarLenTensor,
+)
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleProcessor
 from sdm.tensor.categorical import _iter_categories
@@ -39,6 +46,12 @@ class ShuffleCategories(EnsembleProcessor):
         self.method = method
         self._permutations: BufferList[BufferList[Tensor]] = BufferList()
         self._permutation_ids: tuple[int, ...] = ()
+        # (permutation ID, column) -> string vocabularies seen during fitting,
+        # with their permuted versions. Compiled code cannot permute strings,
+        # so it looks the permuted version up by identity.
+        self._permuted_categories: dict[
+            tuple[int, int], list[tuple[Tensor, Tensor]]
+        ] = {}
 
     def get_extra_state(self) -> tuple[int, ...]:
         r""":meta private:"""  # noqa: D415
@@ -47,6 +60,11 @@ class ShuffleCategories(EnsembleProcessor):
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
         self._permutation_ids = cast(tuple[int, ...], state)
+
+    def _load_from_state_dict(self, *args: Any, **kwargs: Any) -> None:
+        # Loading overwrites the permutations in place.
+        self._permuted_categories = {}
+        super()._load_from_state_dict(*args, **kwargs)
 
     def _draw_permutations(
         self,
@@ -96,12 +114,16 @@ class ShuffleCategories(EnsembleProcessor):
         permutations_by_id = []
         permutation_ids = []
         permutation_id_by_key: dict[tuple[tuple[int, ...], ...], int] = {}
+        permuted_categories: dict[
+            tuple[int, int], list[tuple[Tensor, Tensor]]
+        ] = {}
 
         # (column name, n_classes) -> unused cyclic offsets for that column.
         unused_offsets: dict[tuple[str, int], Tensor] = {}
         for member_id in range(len(ensemble_table)):
+            table = ensemble_table[member_id]
             permutations = self._draw_permutations(
-                ensemble_table[member_id],
+                table,
                 unused_offsets=unused_offsets,
                 generator=generator,
             )
@@ -115,10 +137,23 @@ class ShuffleCategories(EnsembleProcessor):
                 permutations_by_id.append(permutations)
             permutation_ids.append(permutation_id)
 
+            for index, category in enumerate(
+                _iter_categories(table.categorical)
+            ):
+                if not isinstance(category, VarLenTensor):
+                    continue
+                fitted = permuted_categories.setdefault(
+                    (permutation_id, index), []
+                )
+                if all(category is not vocabulary for vocabulary, _ in fitted):
+                    order = permutations[index].argsort()
+                    fitted.append((category, category[order]))
+
         self._permutations = BufferList(
             BufferList(permutations) for permutations in permutations_by_id
         )
         self._permutation_ids = tuple(permutation_ids)
+        self._permuted_categories = permuted_categories
 
     def _transform_ensemble(
         self,
@@ -139,12 +174,8 @@ class ShuffleCategories(EnsembleProcessor):
         if len(member_ids_by_permutation) == len(ensemble_table):
             member_tables: list[TableTensor] = []
             for member_id, permutation_id in enumerate(self._permutation_ids):
-                permutations = self._permutations[permutation_id]
                 member_tables.append(
-                    self._permute(
-                        ensemble_table[member_id],
-                        permutations,
-                    )
+                    self._permute(ensemble_table[member_id], permutation_id)
                 )
             return EnsembleTable.from_tables(
                 tables=member_tables,
@@ -154,10 +185,9 @@ class ShuffleCategories(EnsembleProcessor):
         outputs: dict[int, EnsembleTable] = {}
         for permutation_id, member_ids in member_ids_by_permutation.items():
             selected = ensemble_table[member_ids]
-            permutations = self._permutations[permutation_id]
             outputs[permutation_id] = selected.replace_groups(
                 [
-                    self._permute(group, permutations)
+                    self._permute(group, permutation_id)
                     for group in selected._iter_groups()
                 ]
             )
@@ -176,11 +206,8 @@ class ShuffleCategories(EnsembleProcessor):
             member_ids=member_ids,
         )
 
-    @staticmethod
-    def _permute(
-        table: TableTensor,
-        permutations: BufferList[Tensor],
-    ) -> TableTensor:
+    def _permute(self, table: TableTensor, permutation_id: int) -> TableTensor:
+        permutations = self._permutations[permutation_id]
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
@@ -197,7 +224,17 @@ class ShuffleCategories(EnsembleProcessor):
                 code[..., index] = torch.where(
                     valid, mapped.to(codes.dtype), codes
                 )
-            categories.append(category[permutation.argsort()])
+            fitted: Sequence[tuple[Tensor, Tensor]] = ()
+            if torch.compiler.is_compiling():
+                fitted = self._permuted_categories.get(
+                    (permutation_id, index), ()
+                )
+            for vocabulary, permuted in fitted:
+                if category is vocabulary:
+                    categories.append(permuted)
+                    break
+            else:
+                categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(
             code=code,
