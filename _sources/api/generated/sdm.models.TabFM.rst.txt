@@ -3,10 +3,51 @@
 
 .. currentmodule:: sdm.models
 
+
+
+.. list-table::
+   :header-rows: 1
+
+   * - Release Date
+     - Parameter Count
+     - Code License
+     - Weights License
+   * - 2026-06-30
+     - 1.64B-1.65B
+     - `Apache-2.0 <https://github.com/google-research/tabfm/blob/main/LICENSE>`__
+     - `TabFM Non-Commercial v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE>`__
+
 .. autoclass:: TabFM
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, release_date, parameter_count, code_license, weights_license, metadata
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, paper, source, release_date, parameter_count, code_license, weights_license, metadata
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Semantic Types**
+     - ``numerical``
+
+   * - **Supported Target Semantic Types**
+     - ``categorical``, ``numerical``
+
+
+   * - **Supported Prediction Tasks**
+     - ``classification``, ``regression``
+
+
+   * - **Multi-Target Support**
+     - ❌
+
+
+   * - **Context-only Column Support**
+     - ❌
+
+
+   * - **Related Table Support**
+     - ❌
 
 
 
@@ -15,26 +56,6 @@ Model Details
 
 .. list-table::
 
-   * - **Release Date**
-     - 2026-06-30
-   * - **Parameter Count**
-     - 1.64B-1.65B
-   * - **Code License**
-     - `Apache-2.0 <https://github.com/google-research/tabfm/blob/main/LICENSE>`__
-   * - **Weights License**
-     - `TabFM Non-Commercial v1.0 <https://huggingface.co/google/tabfm-1.0.0-pytorch/blob/main/LICENSE>`__
-   * - **Supported Input Semantic Types**
-     - ``numerical``
-   * - **Supported Target Semantic Types**
-     - ``categorical``, ``numerical``
-   * - **Supported Prediction Tasks**
-     - ``classification``, ``regression``
-   * - **Multi-Target Support**
-     - ❌
-   * - **Context-only Column Support**
-     - ❌
-   * - **Related Table Support**
-     - ❌
 
    * - **Classification Output**
      - Class probabilities; up to 10 classes
@@ -47,6 +68,7 @@ Model Details
 
    * - **Pretraining Scope**
      - Unknown
+
 
 
 Default Recipe

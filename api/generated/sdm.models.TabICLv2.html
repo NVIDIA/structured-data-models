@@ -207,6 +207,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.TabICLv2"><code class="docutils literal notranslate"><span class="pre">TabICLv2</span></code></a></li>
+<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
 <li><a class="reference internal" href="#model-details">Model Details</a></li>
 <li><a class="reference internal" href="#default-recipe">Default Recipe</a></li>
 </ul>
@@ -245,6 +246,24 @@ data-aria-dark="Switch to auto color mode">
   <article class="yue" role="main">
           <section id="tabiclv2">
 <h1>TabICLv2<a class="headerlink" href="#tabiclv2" title="Link to this heading">#</a></h1>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Release Date</p></th>
+<th class="head"><p>Parameter Count</p></th>
+<th class="head"><p>Code License</p></th>
+<th class="head"><p>Weights License</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>2026-02-12</p></td>
+<td><p>27.55M-28.54M</p></td>
+<td><p><a class="reference external" href="https://github.com/soda-inria/tabicl/blob/main/LICENSE">BSD-3-Clause</a></p></td>
+<td><p><a class="reference external" href="https://huggingface.co/jingang/TabICL">BSD-3-Clause</a></p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.models.TabICLv2">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.models.</span></span><span class="sig-name descname"><span class="pre">TabICLv2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.15)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Task.html#sdm.Task" title="sdm.task.Task"><span class="pre">Task</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.15)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.models.TabICLv2" title="Link to this definition">#</a></dt>
@@ -339,23 +358,11 @@ model are initialized.</p></li>
 </dl>
 </dd></dl>
 
-<section id="model-details">
-<h2>Model Details<a class="headerlink" href="#model-details" title="Link to this heading">#</a></h2>
+<section id="capabilities">
+<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
 <div class="table-wrapper docutils container">
 <table class="docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><strong>Release Date</strong></p></td>
-<td><p>2026-02-12</p></td>
-</tr>
-<tr class="row-even"><td><p><strong>Parameter Count</strong></p></td>
-<td><p>27.55M-28.54M</p></td>
-</tr>
-<tr class="row-odd"><td><p><strong>Code License</strong></p></td>
-<td><p><a class="reference external" href="https://github.com/soda-inria/tabicl/blob/main/LICENSE">BSD-3-Clause</a></p></td>
-</tr>
-<tr class="row-even"><td><p><strong>Weights License</strong></p></td>
-<td><p><a class="reference external" href="https://huggingface.co/jingang/TabICL">BSD-3-Clause</a></p></td>
-</tr>
 <tr class="row-odd"><td><p><strong>Supported Input Semantic Types</strong></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">numerical</span></code></p></td>
 </tr>
@@ -374,6 +381,15 @@ model are initialized.</p></li>
 <tr class="row-even"><td><p><strong>Related Table Support</strong></p></td>
 <td><p>❌</p></td>
 </tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="model-details">
+<h2>Model Details<a class="headerlink" href="#model-details" title="Link to this heading">#</a></h2>
+<div class="table-wrapper docutils container">
+<table class="docutils align-default">
+<tbody>
 <tr class="row-odd"><td><p><strong>Classification Output</strong></p></td>
 <td><p>Class probabilities; hierarchical classification for more than 10 classes</p></td>
 </tr>
@@ -464,7 +480,7 @@ model are initialized.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=8004da31"></script>
+      <script src="../../_static/documentation_options.js?v=4f2fd290"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

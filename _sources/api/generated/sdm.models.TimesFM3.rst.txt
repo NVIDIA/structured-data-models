@@ -3,10 +3,51 @@
 
 .. currentmodule:: sdm.models
 
+
+
+.. list-table::
+   :header-rows: 1
+
+   * - Release Date
+     - Parameter Count
+     - Code License
+     - Weights License
+   * - 2026-08-31
+     - 330.71M
+     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
+     - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
+
 .. autoclass:: TimesFM3
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, release_date, parameter_count, code_license, weights_license, metadata
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, paper, source, release_date, parameter_count, code_license, weights_license, metadata
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Semantic Types**
+     - ``numerical``
+
+   * - **Supported Target Semantic Types**
+     - ``numerical``
+
+
+   * - **Supported Prediction Tasks**
+     - ``regression``
+
+
+   * - **Multi-Target Support**
+     - ✅
+
+
+   * - **Context-only Column Support**
+     - ✅
+
+
+   * - **Related Table Support**
+     - ❌
 
 
 
@@ -15,26 +56,6 @@ Model Details
 
 .. list-table::
 
-   * - **Release Date**
-     - 2026-08-31
-   * - **Parameter Count**
-     - 330.71M
-   * - **Code License**
-     - `Apache-2.0 <https://github.com/google-research/timesfm/blob/master/LICENSE>`__
-   * - **Weights License**
-     - `TimesFM Non-Commercial v1.0 <https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE>`__
-   * - **Supported Input Semantic Types**
-     - ``numerical``
-   * - **Supported Target Semantic Types**
-     - ``numerical``
-   * - **Supported Prediction Tasks**
-     - ``regression``
-   * - **Multi-Target Support**
-     - ✅
-   * - **Context-only Column Support**
-     - ✅
-   * - **Related Table Support**
-     - ❌
 
    * - **Output**
      - 9 quantiles per target and time step named ``"{target}__q10"`` through ``"{target}__q90"``
@@ -44,6 +65,7 @@ Model Details
 
    * - **Pretraining Scope**
      - Up to 15,360 rows and 32 columns
+
 
 
 Default Recipe

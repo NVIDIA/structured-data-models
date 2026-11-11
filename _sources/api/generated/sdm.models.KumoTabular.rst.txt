@@ -3,10 +3,51 @@
 
 .. currentmodule:: sdm.models
 
+
+
+.. list-table::
+   :header-rows: 1
+
+   * - Release Date
+     - Parameter Count
+     - Code License
+     - Weights License
+   * - 2026-09-28
+     - 27.46M-215.68M
+     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
+     - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE>`__
+
 .. autoclass:: KumoTabular
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, release_date, parameter_count, code_license, weights_license, metadata
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, paper, source, release_date, parameter_count, code_license, weights_license, metadata
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Semantic Types**
+     - ``numerical``
+
+   * - **Supported Target Semantic Types**
+     - ``categorical``, ``numerical``
+
+
+   * - **Supported Prediction Tasks**
+     - ``classification``, ``regression``
+
+
+   * - **Multi-Target Support**
+     - ❌
+
+
+   * - **Context-only Column Support**
+     - ❌
+
+
+   * - **Related Table Support**
+     - ❌
 
 
 
@@ -15,26 +56,6 @@ Model Details
 
 .. list-table::
 
-   * - **Release Date**
-     - 2026-09-28
-   * - **Parameter Count**
-     - 27.46M-215.68M
-   * - **Code License**
-     - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
-   * - **Weights License**
-     - `OpenMDW-1.1 <https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE>`__
-   * - **Supported Input Semantic Types**
-     - ``numerical``
-   * - **Supported Target Semantic Types**
-     - ``categorical``, ``numerical``
-   * - **Supported Prediction Tasks**
-     - ``classification``, ``regression``
-   * - **Multi-Target Support**
-     - ❌
-   * - **Context-only Column Support**
-     - ❌
-   * - **Related Table Support**
-     - ❌
 
    * - **Classification Output**
      - Class probabilities; ECOC for more than 10 classes
@@ -47,6 +68,7 @@ Model Details
 
    * - **Pretraining Scope**
      - Up to 60,000 rows and 100 columns
+
 
 
 Default Recipe
