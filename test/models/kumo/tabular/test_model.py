@@ -5,9 +5,10 @@ from typing import Literal
 
 import pytest
 import torch
+from torch._dynamo.testing import CompileCounter
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import KumoTabular
 from sdm.testing import onlyMPS
 
@@ -355,6 +356,55 @@ def test_estimator_batching_many_classes(
     actual = model.predict(x_query)
     assert actual.columns == expected.columns
     torch.testing.assert_close(actual.numerical, expected.numerical)
+
+
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_compile_predict_static_shapes(
+    task: Literal["classification", "regression"],
+) -> None:
+    model = _build(task, "small")
+    code = torch.arange(48, dtype=torch.int32).remainder(3).unsqueeze(-1)
+    x = torch.cat(
+        [
+            TableTensor.from_tensor(torch.randn(48, 4)),
+            TableTensor(
+                columns={Stype.categorical: ("categorical",)},
+                categorical=CategoricalTensor(
+                    code=code,
+                    categories=(StringTensor.from_list(["a", "b", "c"]),),
+                ),
+            ),
+            TableTensor.from_tensor(
+                StringTensor.from_list([["a" * (i % 5)] for i in range(48)]),
+                columns=["text"],
+            ),
+        ],
+        dim=-1,
+    )
+    y = torch.randn(40, 1)
+    if task == "classification":
+        y = TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor.from_tensor(code[:40]),
+        )
+    model.fit(x[:40], y, num_estimators=4)
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        dynamic=False,
+    )
+    # Queries of the same size reuse one graph.
+    for _ in range(2):
+        torch.testing.assert_close(
+            actual=predict(x[40:]).numerical,
+            expected=model.predict(x[40:]).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
 
 
 @onlyMPS
