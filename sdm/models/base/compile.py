@@ -11,6 +11,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
+from sdm.cache import Cache
 from sdm.models.base.callback import Callback
 
 if TYPE_CHECKING:
@@ -40,12 +41,12 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     With ``dynamic=False``, mark the query dimensions the model declares.
-    Chunk guards determine when queries must be split without recompiling.
-    Rejected batches are halved; only batches of at most two rows may
-    compile, including after a refit. Empty queries and queries with related
-    tables or callbacks run eagerly. Singleton rows are repeated to avoid
-    PyTorch's zero/one specialization; outputs are sliced back. Predictions
-    must be independent across query rows.
+    The graph is captured on two rows after every fit, so its chunk guards
+    hold the rows that fit one chunk. Queries the graph rejects run eagerly,
+    with the chunking of the model; nothing recompiles. Empty queries and
+    queries with related tables or callbacks run eagerly. Singleton rows are
+    repeated to avoid PyTorch's zero/one specialization; outputs are sliced
+    back.
 
     Args:
         model: The model.
@@ -59,41 +60,26 @@ def compile_predict(
     if kwargs.get("dynamic") is not False or not shapes.query:
         return compiled
 
+    captured: Cache | None = None
+
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
         *,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:  # Recipe-defined output shape.
+        nonlocal captured
         rows = x.size(-2)
         if rows == 0 or callbacks is not None or related_tables is not None:
             return model.predict(x, related_tables, callbacks=callbacks)
-        # Python chunk loops capture fixed iteration counts. Crossing their
-        # guards needs another graph, so larger queries must split outside it.
-        # The guards alone decide the size; no row capacity is configured.
-        outputs = []
-        start, size = 0, rows
-        while start < rows:
-            query = _prepare_query(
-                x=x[..., start : start + size, :], dims=shapes.query
-            )
-            try:
-                with torch.compiler.set_stance("fail_on_recompile"):
-                    out = compiled(query, related_tables, callbacks=callbacks)
-            except RuntimeError as error:
-                if not _is_guard_miss(error):
-                    raise
-                if size > 2:
-                    size = (size + 1) // 2
-                    continue
-                out = compiled(query, related_tables, callbacks=callbacks)
-                if size < rows - start:
-                    size = rows - start
-                    continue
-            outputs.append(out[..., :size, :])
-            start += size
-            size = min(size, rows - start)
-        return torch.cat(outputs, dim=-2) if len(outputs) > 1 else outputs[0]
+        if captured is not model._cache:
+            # Two rows capture the same graph whatever the first query is.
+            compiled(_prepare_query(x[..., :2, :], shapes.query))
+            captured = model._cache
+        x = _prepare_query(x, shapes.query)
+        # A query that misses the chunk guards of the graph runs eagerly.
+        with torch.compiler.set_stance("eager_on_recompile"):
+            return compiled(x)[..., :rows, :]
 
     return predict
 
@@ -108,10 +94,3 @@ def _prepare_query(x: Tensor, dims: tuple[int, ...]) -> Tensor:
     for dim in dims:
         torch._dynamo.mark_dynamic(x, dim % x.dim())
     return x
-
-
-def _is_guard_miss(error: RuntimeError) -> bool:
-    # PyTorch 2.14.1 eval_frame.fail_callback raises an untyped RuntimeError.
-    return str(error).startswith(
-        "Detected recompile when torch.compile stance is 'fail_on_recompile'."
-    )
