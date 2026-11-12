@@ -66,15 +66,15 @@ def _dynamic_shapes(body: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, out: Tensor | None = None, **kwargs: Any) -> Any:
         args = tuple(_mark_dynamic(arg) for arg in args)
         kwargs = {key: _mark_dynamic(arg) for key, arg in kwargs.items()}
+        result = body(*args, **kwargs)
         if out is None:
-            return body(*args, **kwargs)
+            return result
         # PyTorch 2.14.1 cannot compile a write to an input that shares its
-        # memory with another input of dynamic size, so the graph writes to a
-        # temporary.
-        tmp = _mark_dynamic(torch.empty_like(out))
-        result = body(*args, out=tmp, **kwargs)
-        out.copy_(tmp)
-        return (out, *result[1:]) if isinstance(result, tuple) else out
+        # memory with another input of dynamic size, so the result is written
+        # to ``out`` here.
+        if isinstance(result, tuple):
+            return out.copy_(result[0]), *result[1:]
+        return out.copy_(result)
 
     return wrapper
 
