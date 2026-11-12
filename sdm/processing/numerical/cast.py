@@ -27,7 +27,11 @@ class Cast(Processor):
         dtype = self.dtype
         if table.device.type == "mps" and dtype == torch.float64:
             dtype = torch.float32  # MPS does not support float64.
-        return table.replace_blocks(numerical=table.numerical.to(dtype))
+        numerical = table.numerical
+        current_dtype = numerical.dtype
+        if isinstance(current_dtype, torch.dtype) and current_dtype == dtype:
+            return table
+        return table.replace_blocks(numerical=numerical.to(dtype))
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}({self.dtype})"
