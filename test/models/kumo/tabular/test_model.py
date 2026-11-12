@@ -407,11 +407,11 @@ def test_compile_predict(
     predict(x[40:48])
     frame_count = counter.frame_count
     assert frame_count > 0
-    # Other query sizes and chunk counts reuse the compiled bodies.
-    for rows in (3, 24):
+    # Other query sizes and chunk counts compile nothing.
+    for rows in (3, 24, 1, 0):
         torch.testing.assert_close(
-            actual=predict(x[-rows:]).numerical,
-            expected=model.predict(x[-rows:]).numerical,
+            actual=predict(x[40 : 40 + rows]).numerical,
+            expected=model.predict(x[40 : 40 + rows]).numerical,
             atol=1e-4,
             rtol=1e-4,
         )

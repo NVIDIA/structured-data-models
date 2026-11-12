@@ -482,7 +482,8 @@ class ICLModel(Model):
         r"""Compile the chunk bodies of :meth:`predict`.
 
         The bodies are compiled using :func:`torch.compile`. The chunk loops
-        stay in Python, so a query of any size runs the compiled bodies.
+        stay in Python, so a query of any size runs the compiled bodies, except
+        for a query of fewer than two rows, which runs :meth:`predict` itself.
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`.
@@ -494,7 +495,15 @@ class ICLModel(Model):
             :meth:`predict` itself is not compiled.
         """
         kwargs = {"isolate_recompiles": True} | kwargs
-        return compile_chunk_bodies(self.predict, **kwargs)
+        predict = compile_chunk_bodies(self.predict, **kwargs)
+
+        def wrapper(x: Tensor | TableTensor, *args: Any, **kwargs: Any) -> Any:
+            # PyTorch specializes graphs on sizes of zero and one, so a query
+            # of fewer than two rows runs in Python.
+            fn = predict if x.size(-2) > 1 else self.predict
+            return fn(x, *args, **kwargs)
+
+        return wrapper
 
     # Abstract Methods ########################################################
 
