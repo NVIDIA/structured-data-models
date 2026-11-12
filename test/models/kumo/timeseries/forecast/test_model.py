@@ -16,7 +16,7 @@ from sdm.testing import withCUDA
 @withCUDA
 @pytest.mark.parametrize(
     ("context_size", "horizon"),
-    [(1, 120), (37, 600), (1200, 600)],
+    [(1, 120), (37, 600), (511, 120), (512, 120), (513, 600), (1200, 600)],
 )
 @pytest.mark.parametrize("cross_channel", [False, True])
 @pytest.mark.parametrize("alpha", [0.0, 0.5, 1.0])
@@ -54,6 +54,14 @@ def test_forward(
         torch.randn(context_size, 3, device=device),
         columns=["y1", "y2", "y3"],
     )
+
+    if context_size < 512:
+        with pytest.raises(
+            ValueError,
+            match="Expected at least 512 context rows",
+        ):
+            model(x_context, y_context, x_query, alpha=alpha)
+        return
 
     with (
         nullcontext()

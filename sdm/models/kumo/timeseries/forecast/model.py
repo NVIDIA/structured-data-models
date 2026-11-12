@@ -156,8 +156,6 @@ class KumoForecast(ICLModel):
         r""":meta private:"""  # noqa: D415
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
-        if not isinstance(y_context, TableTensor):
-            y_context = TableTensor.from_tensor(y_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
         if x_query.size(-1) > 0:
@@ -170,28 +168,6 @@ class KumoForecast(ICLModel):
             )
             x_query = x_query[..., :0]
 
-        context_tables = [x_context, y_context]
-        for i, table in enumerate(context_tables):
-            numerical = table.numerical
-            if table.size(-2) < self.model.context_size:
-                padded = numerical.new_zeros(
-                    (
-                        *numerical.size()[:-2],
-                        self.model.context_size,
-                        numerical.size(-1),
-                    ),
-                )
-                padded[..., self.model.context_size - table.size(-2) :, :] = (
-                    numerical
-                )
-                numerical = padded
-            context_tables[i] = TableTensor(
-                columns={
-                    str(stype): names for stype, names in table.columns.items()
-                },
-                numerical=numerical,
-            )
-        x_context, y_context = context_tables
         kwargs.update(alpha=alpha, k=k, temperature=temperature)
         return super().forward(x_context, y_context, x_query, *args, **kwargs)
 
@@ -223,6 +199,12 @@ class KumoForecast(ICLModel):
         if not 0 <= alpha <= 1:
             raise ValueError(
                 f"Expected 'alpha' between zero and one (got {alpha})"
+            )
+
+        if y_context.size(-2) < self.model.context_size:
+            raise ValueError(
+                f"Expected at least {self.model.context_size} context rows "
+                f"(got {y_context.size(-2)})"
             )
 
         horizon = x_query.size(-2)
