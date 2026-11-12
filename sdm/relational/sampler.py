@@ -7,7 +7,7 @@ from typing import Generic, Literal, NamedTuple, Self, TypeVar, cast
 import torch
 from torch import Tensor
 
-from sdm import ColumnarTensor, EnsembleTable, Stype, TableTensor
+from sdm import ColumnarTensor, EnsembleTable, Stype, TableLike, TableTensor
 from sdm.relational import (
     RelatedTables,
     RelationalData,
@@ -20,7 +20,7 @@ from sdm.relational.backend import (
 )
 from sdm.tensor.mixin import DeviceMixin
 
-T = TypeVar("T", bound=TableTensor | EnsembleTable)
+T = TypeVar("T", bound=TableLike)
 
 EXAMPLE_ID = "__example__"
 
@@ -175,7 +175,7 @@ class RelationalSampler:
             temporal_strategy=temporal_strategy,
         )
 
-        tables: dict[str, TableTensor | EnsembleTable] = {}
+        tables: dict[str, TableLike] = {}
         for table_name, (example, index) in nodes.items():
             table = torch.cat(
                 [
