@@ -49,10 +49,14 @@ def compile_chunk_bodies(
         A function that is called like ``fn``.
     """
     bodies: dict[Callable[..., Any], Callable[..., Any]] = {}
+    options = kwargs.pop("options", None)
 
     def compile_body(body: Callable[..., Any]) -> Callable[..., Any]:
         if body not in bodies:
-            bodies[body] = _dynamic_shapes(torch.compile(body, **kwargs))
+            # PyTorch removes entries from the options that it is given.
+            copy = options and dict(options)
+            compiled = torch.compile(body, options=copy, **kwargs)
+            bodies[body] = _dynamic_shapes(compiled)
         return bodies[body]
 
     @functools.wraps(fn)
