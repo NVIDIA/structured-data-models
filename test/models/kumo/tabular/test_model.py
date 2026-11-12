@@ -10,7 +10,6 @@ from torch._dynamo.testing import CompileCounter
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import KumoTabular
-from sdm.models.kumo.tabular.row_embedding import RowEmbedding
 from sdm.testing import onlyMPS, withCUDA
 
 
@@ -414,14 +413,13 @@ def test_compile_predict_static_shapes(
 @pytest.mark.parametrize("num_classes", [0, 11])
 def test_compile_predict_query_rows(
     device: torch.device,
-    num_classes: int,
     monkeypatch: pytest.MonkeyPatch,
+    num_classes: int,
 ) -> None:
-    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_: 8)
     task = "classification" if num_classes > 0 else "regression"
     model = _build(task, "small").to(device)
     # The size of the text storage differs from query to query.
-    text = StringTensor.from_list([["a" * i] for i in range(49)])
+    text = StringTensor.from_list([["a" * (i % 12)] for i in range(49)])
     x = torch.cat(
         [
             TableTensor.from_tensor(torch.randn(49, 4)),
@@ -442,15 +440,21 @@ def test_compile_predict_query_rows(
     # Four estimators run every numerical transform of the default recipe.
     model.fit(x[:40], y, num_estimators=4)
 
+    # Exercise guarded chunking on CPU, including an oversized first query.
+    monkeypatch.setattr(
+        "sdm.nn.attention.TransformerBlock.auto_batch_size_limit",
+        staticmethod(lambda **kwargs: 64),
+    )
     counter = CompileCounter()
     predict = model._compile_predict(
         backend=counter,
         fullgraph=True,
         dynamic=False,
     )
-    for size in (3, 1, 9):
-        actual = predict(x[-size:])
-        expected = model.predict(x[-size:])
+    for size in (33, 3, 1, 0):
+        query = x[-size:] if size else x[:0]
+        actual = predict(query)
+        expected = model.predict(query)
         torch.testing.assert_close(
             actual=actual.numerical,
             expected=expected.numerical,

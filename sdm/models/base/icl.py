@@ -491,18 +491,7 @@ class ICLModel(Model):
         """
         return compile_predict(self, **kwargs)
 
-    def _dynamic_shapes(
-        self,
-        cache: Cache,
-        device: torch.device,
-    ) -> DynamicShapes:
-        r"""The sizes a compiled :meth:`predict` keeps dynamic.
-
-        Args:
-            cache: The fitted cache of one batch of estimators.
-            device: The device of the query.
-        """
-        return DynamicShapes()
+    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes()
 
     # Abstract Methods ########################################################
 

@@ -1144,6 +1144,13 @@ class TableTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def _mark_dynamic(self, dims: tuple[int, ...]) -> None:
+        for dim in dims:
+            dim %= self.dim()
+            torch._dynamo.mark_dynamic(self, dim)
+            if dim < self.dim() - 1:
+                self.text._mark_dynamic((dim,))
+
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["numerical", "categorical", "datetime", "text", "id"]
         # Let torch.compile track backing fields and their public properties.

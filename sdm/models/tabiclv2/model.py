@@ -180,17 +180,7 @@ class TabICLv2(ICLModel):
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
-    def _dynamic_shapes(
-        self,
-        cache: Cache,
-        device: torch.device,
-    ) -> DynamicShapes:
-        regression = cache["classes"] is None
-        task = Task.regression if regression else Task.classification
-        row_embedding = cast(_TabICLv2, self.models[task]).row_embedding
-        return DynamicShapes(
-            query_rows=row_embedding.max_query_rows(cache, device),
-        )
+    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes(query=(-2,))
 
     def _load_from_pretrained(
         self,

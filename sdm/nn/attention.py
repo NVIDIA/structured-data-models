@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm._memory import _split_tensor, chunk_memory_limit, fits
+from sdm._memory import _split_tensor, chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
 
@@ -190,7 +190,7 @@ class SDPA(torch.nn.Module):
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
         # CUDA attention kernels accept at most 65,535 batch entries per call.
-        # A dynamic batch is not sliced, so its caller keeps it within them.
+        # Slicing a dynamic batch that provably fits would add a size guard.
         queries = _split_tensor(query, 65_535, dim=0)
         masks = (
             (None,) * len(queries)
@@ -697,7 +697,7 @@ class TransformerBlock(torch.nn.Module):
         batch_size = math.prod(batch_shape)
 
         disable_chunking = False
-        if fits(batch_size, batch_size_limit) or query.size(-2) == 0:
+        if batch_size <= batch_size_limit or query.size(-2) == 0:
             disable_chunking = True
         if return_key_value:
             assert not isinstance(key_value, KVCacheEntry)

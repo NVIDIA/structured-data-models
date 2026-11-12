@@ -298,10 +298,9 @@ def test_tabiclv2_many_classes_forward_and_cache(
 @pytest.mark.parametrize("num_classes", [0, 11])
 def test_compile_predict_query_rows(
     device: torch.device,
-    num_classes: int,
     monkeypatch: pytest.MonkeyPatch,
+    num_classes: int,
 ) -> None:
-    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_: 8)
     model = TabICLv2(pretrained=False, device=device)
     x = torch.randn(49, 6, device=device)
     y = torch.randn(40, 1, device=device)
@@ -310,15 +309,21 @@ def test_compile_predict_query_rows(
         y = y.unsqueeze(-1)
     model.fit(x[:40], y, num_estimators=4)
 
+    # Exercise guarded chunking on CPU, including an oversized first query.
+    monkeypatch.setattr(
+        "sdm.nn.attention.TransformerBlock.auto_batch_size_limit",
+        staticmethod(lambda **kwargs: 64),
+    )
     counter = CompileCounter()
     predict = model._compile_predict(
         backend=counter,
         fullgraph=True,
         dynamic=False,
     )
-    for size in (3, 1, 9):
-        actual = predict(x[-size:])
-        expected = model.predict(x[-size:])
+    for size in (33, 3, 1, 0):
+        query = x[-size:] if size else x[:0]
+        actual = predict(query)
+        expected = model.predict(query)
         torch.testing.assert_close(
             actual=actual.numerical,
             expected=expected.numerical,
@@ -326,6 +331,29 @@ def test_compile_predict_query_rows(
             rtol=1e-4,
         )
     assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
+def test_compile_predict_refit() -> None:
+    model = TabICLv2(pretrained=False)
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        dynamic=False,
+    )
+    for graphs, (rows, columns) in enumerate(((60, 6), (90, 6), (90, 9)), 1):
+        x = torch.randn(rows + 40, columns)
+        model.fit(x[:rows], torch.randn(rows, 1), num_estimators=4)
+        for size in (5, 1, 40):
+            query = x[-size:]
+            torch.testing.assert_close(
+                actual=predict(query).numerical,
+                expected=model.predict(query).numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
+        assert counter.frame_count == graphs
 
 
 @onlyCUDA
