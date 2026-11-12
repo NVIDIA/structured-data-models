@@ -84,11 +84,10 @@ class ImputeConstant(Processor, InvertibleMixin):
         self.fill_value = fill_value
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        numerical = table.numerical
         return table.replace_blocks(
-            numerical=table.numerical.nan_to_num(
-                nan=self.fill_value,
-                posinf=torch.inf,
-                neginf=-torch.inf,
+            numerical=numerical.masked_fill(
+                numerical.isnan(), self.fill_value
             ),
         )
 
