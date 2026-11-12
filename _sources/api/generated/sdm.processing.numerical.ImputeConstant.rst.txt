@@ -1,0 +1,20 @@
+﻿ImputeConstant
+==============
+
+.. currentmodule:: sdm.processing.numerical
+
+.. autoclass:: ImputeConstant
+   :members:
+   :show-inheritance:
+   :exclude-members: handles_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Handled Semantic Types**
+     - ``numerical``
+   * - **Requires Fitting**
+     - ❌

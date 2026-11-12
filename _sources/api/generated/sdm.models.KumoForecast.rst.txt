@@ -61,7 +61,7 @@ Model Details
      - Point predictions per target and time step
 
    * - **Missing Values**
-     - Handled natively
+     - Zero imputation in the default recipe
 
    * - **Pretraining Scope**
      - Up to 512 rows
@@ -77,7 +77,13 @@ Default Recipe
 .. code-block:: python
 
    Recipe(
-     features=Standardize(),
-     target=Standardize(),
+     features=Sequential(
+       ImputeConstant(fill_value=0.0),
+       Standardize(),
+     ),
+     target=Sequential(
+       ImputeConstant(fill_value=0.0),
+       Standardize(),
+     ),
      output=AverageEstimators(),
    )
