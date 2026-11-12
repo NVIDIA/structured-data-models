@@ -174,7 +174,7 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
         )
     )
 
-    output = processor.transform_ensemble(table)
+    output = processor.transform(table)
 
     for member_id, source in enumerate((second, first, second)):
         result = output[member_id]
@@ -198,9 +198,9 @@ def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
     processor = sp.StypeDispatch(numerical=sp.Standardize())
     combined = sp.StypeDispatch(numerical=sp.Standardize())
 
-    processor.fit_ensemble(table)
-    transformed = processor.transform_ensemble(table)
-    expected = combined.fit_transform_ensemble(table)
+    processor.fit(table)
+    transformed = processor.transform(table)
+    expected = combined.fit_transform(table)
 
     for member_id in range(len(table)):
         result = transformed[member_id]

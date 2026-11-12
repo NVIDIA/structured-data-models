@@ -79,7 +79,7 @@ def test_task_dispatch_routes_ensemble_members() -> None:
     dispatch = sp.TaskDispatch(classification=sp.Softmax())
     dispatch._task = "classification"
 
-    output = dispatch.transform_ensemble(ensemble_table)
+    output = dispatch.transform(ensemble_table)
 
     for member_id, source in enumerate((second, first, second)):
         result = output[member_id]

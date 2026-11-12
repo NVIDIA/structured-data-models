@@ -1,16 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import cast
 
-import torch
-from torch import Tensor
-
-from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import EnsembleProcessor
+from sdm import EnsembleTable, Stype, TableLike, TableTensor
+from sdm.processing import Processor
 
 
-class AverageEstimators(EnsembleProcessor):
+class AverageEstimators(Processor):
     """Reduce the leading ensemble dimension of model outputs.
 
     Inputs must be a numerical output table with shape ``[E, ...]``, where
@@ -35,47 +31,24 @@ class AverageEstimators(EnsembleProcessor):
             raise ValueError("'trim_fraction' must be in [0, 0.5)")
         self.trim_fraction = trim_fraction
 
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-
-        if len(ensemble_table) == 1:
-            return ensemble_table
-
-        groups: list[Tensor] = [
-            ensemble_table.expanded_group(group_id)
-            for group_id in range(ensemble_table.num_groups)
-        ]
-        table = torch.cat(groups, dim=0) if len(groups) > 1 else groups[0]
-        table = cast(TableTensor, table)
-
-        out = table.numerical
-        cut = int(self.trim_fraction * table.size(0))
-        if cut > 0:
-            out = out.sort(dim=0).values
-            out = out[cut : out.size(0) - cut]
-        out = out.mean(dim=0)
-
-        return EnsembleTable.from_table(
-            table=TableTensor(
-                columns={Stype.numerical.value: table.numerical_columns},
-                numerical=out,
-            ),
-            num_members=1,
+    def _transform(self, table: TableLike) -> TableLike:
+        ensemble = isinstance(table, EnsembleTable)
+        if ensemble:
+            table = table.as_tensor()
+        elif table.dim() < 3:
+            raise ValueError("Expected a leading ensemble dimension")
+        numerical = table.numerical
+        cut = int(self.trim_fraction * numerical.size(0))
+        if cut:
+            numerical = numerical.sort(dim=0).values
+            numerical = numerical[cut : numerical.size(0) - cut]
+        out = TableTensor(
+            columns={Stype.numerical: table.numerical_columns},
+            numerical=numerical.mean(dim=0),
         )
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        if table.dim() < 3:
-            raise ValueError(
-                f"Expected a leading ensemble dimension (got {table.dim()}D)"
-            )
-
-        ensemble_table = EnsembleTable(
-            groups=(table,),
-            locations=tuple((0, i) for i in range(table.size(0))),
+        return (
+            EnsembleTable.from_table(out, num_members=1) if ensemble else out
         )
-        return self._transform_ensemble(ensemble_table)[0]
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.trim_fraction == 0:

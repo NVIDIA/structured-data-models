@@ -6,14 +6,14 @@ from typing import Self, cast
 
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableLike
 from sdm.processing import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
+    InvertibleMixin,
+    Processor,
 )
 
 
-class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
+class Sequential(Processor, InvertibleMixin):
     r"""Apply processors and callables to a table in sequence.
 
     Args:
@@ -38,7 +38,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         Args:
             processor: The processor to append.
         """
-        processor = EnsembleProcessor.as_processor(processor)
+        processor = Processor.as_processor(processor)
         if isinstance(processor, Sequential):
             for child in processor.children():
                 self.add_module(str(len(self)), child)
@@ -55,7 +55,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         Args:
             processor: The processor to prepend.
         """
-        processor = EnsembleProcessor.as_processor(processor)
+        processor = Processor.as_processor(processor)
 
         if isinstance(processor, Sequential):
             processors = tuple(processor.children())
@@ -82,74 +82,64 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.append(processor)
         return self
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(self, table: TableLike) -> TableLike:
         out = table
         for child in self:
             out = child.transform(out)
         return out
 
-    def _fit_ensemble(
+    def _fit(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        out = ensemble_table
+        out = table
         for i, child in enumerate(self):
             if i < len(self) - 1:
-                out = child.fit_transform_ensemble(out, generator=generator)
+                out = child.fit_transform(out, generator=generator)
             else:
-                child.fit_ensemble(out, generator=generator)
+                child.fit(out, generator=generator)
 
-    def _fit_transform_ensemble(
+    def _fit_transform(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        out = ensemble_table
+    ) -> TableLike:
+        out = table
         for child in self:
-            out = child.fit_transform_ensemble(out, generator=generator)
+            out = child.fit_transform(out, generator=generator)
         return out
 
-    def _transform_ensemble(
+    def _inverse_transform(
         self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        out = ensemble_table
-        for child in self:
-            out = child.transform_ensemble(out)
-        return out
-
-    def _inverse_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        out = ensemble_table
+        table: TableLike,
+    ) -> TableLike:
+        out = table
         for child in reversed(list(self.children())):
-            if not isinstance(child, EnsembleInvertibleMixin):
+            if not isinstance(child, InvertibleMixin):
                 raise AttributeError(
                     f"{child.__class__.__name__!r} object has no "
-                    "attribute 'inverse_transform_ensemble'"
+                    "attribute 'inverse_transform'"
                 )
-            out = child.inverse_transform_ensemble(out)
+            out = child.inverse_transform(out)
         return out
 
-    def __iter__(self) -> Iterator[EnsembleProcessor]:
-        return cast(Iterator[EnsembleProcessor], self.children())
+    def __iter__(self) -> Iterator[Processor]:
+        return cast(Iterator[Processor], self.children())
 
     def __len__(self) -> int:
         return len(self._modules)
 
     def __iadd__(self, other: object) -> Self:
-        self.append(EnsembleProcessor.as_processor(other))
-        return self
+        return self.append(other)
 
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self) == 0:
             return super().__repr__(indent=indent)
         reprs = "".join(
-            [f"{child.__repr__(indent=indent + 2)},\n" for child in self]
+            f"{child.__repr__(indent=indent + 2)},\n" for child in self
         )
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n{reprs}{' ' * indent})"

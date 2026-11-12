@@ -12,6 +12,7 @@ import sdm.processing as sp
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     RelatedTables,
     Stype,
     TableTensor,
@@ -193,17 +194,21 @@ class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
         self.generators.append(generator)
         self.draws.append(torch.rand((), generator=generator))
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         return table
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
         return table
 
 

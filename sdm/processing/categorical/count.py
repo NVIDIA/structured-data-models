@@ -6,8 +6,13 @@ from typing import cast
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
-from sdm.nn._buffer import BufferList
+from sdm import (
+    CategoricalTensor,
+    EnsembleData,
+    Stype,
+    TableLike,
+    TableTensor,
+)
 from sdm.processing import Processor
 from sdm.processing.categorical._categorical import (
     _check_categorical_codes,
@@ -42,38 +47,39 @@ class AddCategoryCounts(Processor):
     def __init__(self, min_cardinality: int = 0) -> None:
         super().__init__()
         self.min_cardinality = min_cardinality
-        self._columns: tuple[str, ...] = ()
-        self._categories: BufferList[Tensor] = BufferList()
+        self.register_buffer("_categories", None)
         self.register_buffer("_log_counts", torch.empty(0))
         self.register_buffer(
             "_num_categories",
             torch.empty(0, dtype=torch.long),
         )
 
-    def get_extra_state(self) -> tuple[str, ...]:
-        r""":meta private:"""  # noqa: D415
-        return self._columns
-
-    def set_extra_state(self, state: object) -> None:
-        r""":meta private:"""  # noqa: D415
-        self._columns = cast(tuple[str, ...], state)
-
     def _fit(
         self,
-        table: TableTensor,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        counts, sizes, categories = EnsembleData.execute(
+            self._fit_counts, table, batched=True
+        )
+        self.register_buffer("_log_counts", counts)
+        self.register_buffer("_num_categories", sizes)
+        self.register_buffer("_categories", categories)
+
+    def _fit_counts(
+        self, table: TableTensor
+    ) -> tuple[Tensor, Tensor, CategoricalTensor]:
         _check_categorical_codes(table)
         categorical = table.categorical
-        self._columns = tuple(
+        columns = tuple(
             column
             for column, categories in zip(
                 table.categorical_columns, _iter_categories(categorical)
             )
             if categories.numel() > self.min_cardinality
         )
-        categorical = table.select_columns(self._columns).categorical
+        categorical = table.select_columns(columns).categorical
         codes = categorical.code  # [*batch, num_rows, num_columns]
         sizes = [
             categories.numel() for categories in _iter_categories(categorical)
@@ -88,7 +94,7 @@ class AddCategoryCounts(Processor):
             dtype=torch.long,
             device=codes.device,
         )
-        counts.scatter_add_(-1, slots, torch.ones_like(slots))
+        counts.scatter_add_(-1, slots, slots.new_ones(()).expand_as(slots))
 
         dtype = table.numerical.dtype
         count_dtype = (
@@ -96,26 +102,55 @@ class AddCategoryCounts(Processor):
             if dtype in {torch.float16, torch.bfloat16}
             else dtype
         )
-        self._set_buffer(
-            name="_log_counts",
-            value=counts.to(count_dtype).log1p().to(dtype),
+        log_counts = counts.to(count_dtype).log1p().to(dtype)
+        categories = CategoricalTensor(
+            table.categorical.code.new_empty(
+                (*codes.shape[:-2], 0, table.categorical.size(-1))
+            ),
+            categories=table.categorical.categories,
         )
-        self._set_buffer("_num_categories", num_categories)
-        self._categories = BufferList(_iter_categories(table.categorical))
+        num_categories = num_categories.expand(*codes.shape[:-2], len(sizes))
+        return log_counts, num_categories, categories
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        _check_categories(table, self._categories)
+    def _transform(self, table: TableLike) -> TableLike:
+        return EnsembleData.execute(
+            self._add_counts,
+            table,
+            self._log_counts,
+            self._num_categories,
+            self._categories,
+            batched=True,
+        )
+
+    def _add_counts(
+        self,
+        table: TableTensor,
+        log_counts: Tensor,
+        num_categories: Tensor,
+        categories: CategoricalTensor,
+    ) -> TableTensor:
+        vocabularies = tuple(_iter_categories(categories))
+        _check_categories(table, vocabularies)
         _check_categorical_codes(table)
-        if not self._columns:
+        columns = tuple(
+            column
+            for column, category in zip(
+                table.categorical_columns, vocabularies
+            )
+            if category.numel() > self.min_cardinality
+        )
+        if not columns:
             return table
-        codes = table.select_columns(self._columns).categorical.code
-        slots = torch.where(codes >= 0, codes.long(), self._num_categories)
-        counts = self._log_counts.gather(-1, slots.transpose(-2, -1))
+        codes = table.select_columns(columns).categorical.code
+        slots = torch.where(
+            codes >= 0, codes.long(), num_categories.unsqueeze(-2)
+        )
+        counts = log_counts.gather(-1, slots.transpose(-2, -1))
 
         out_table = TableTensor(
             columns={
                 Stype.numerical.value: tuple(
-                    f"{column}__count" for column in self._columns
+                    f"{column}__count" for column in columns
                 ),
             },
             numerical=counts.transpose(-2, -1).to(table.numerical.dtype),

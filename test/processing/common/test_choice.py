@@ -9,7 +9,6 @@ import torch
 import sdm.processing as sp
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
-    EnsembleProcessor,
     InvertibleMixin,
     Processor,
 )
@@ -23,14 +22,18 @@ class Add(Processor, InvertibleMixin):
         super().__init__()
         self.value = value
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical + self.value)
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return table.replace_blocks(numerical=table.numerical.add(self.value))
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical - self.value)
+    def _inverse_transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return table.replace_blocks(numerical=table.numerical.sub(self.value))
 
 
-class AddFittedMemberCount(EnsembleProcessor):
+class AddFittedMemberCount(Processor):
     handles_stypes = tuple(Stype)
     requires_fit = True
 
@@ -38,24 +41,18 @@ class AddFittedMemberCount(EnsembleProcessor):
         super().__init__()
         self.value = 0
 
-    def _fit_ensemble(
+    def _fit(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableTensor | EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self.value = len(ensemble_table)
+        self.value = len(table) if isinstance(table, EnsembleTable) else 1
 
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        return ensemble_table.replace_groups(
-            [
-                group.replace_blocks(numerical=group.numerical + self.value)
-                for group in ensemble_table._iter_groups()
-            ]
-        )
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return table.replace_blocks(numerical=table.numerical.add(self.value))
 
 
 def _table() -> TableTensor:
@@ -146,13 +143,13 @@ def test_choice_round_robin_routes_members() -> None:
     query = context.replace_blocks(numerical=context.numerical + 100)
     processor = sp.Choice(Add(0), Add(10), method="round_robin")
 
-    transformed = processor.fit_transform_ensemble(
+    transformed = processor.fit_transform(
         EnsembleTable.from_table(context, num_members=8)
     )
-    query_transformed = processor.transform_ensemble(
+    query_transformed = processor.transform(
         EnsembleTable.from_table(query, num_members=8)
     )
-    restored = processor.inverse_transform_ensemble(transformed)
+    restored = processor.inverse_transform(transformed)
 
     for member_id in range(8):
         offset = 10 * (member_id % 2)
@@ -167,14 +164,14 @@ def test_choice_round_robin_routes_members() -> None:
         assert restored[member_id].equal(context)
 
 
-def test_choice_fit_ensemble_fits_selected_options() -> None:
+def test_choice_fits_selected_member_options() -> None:
     table = EnsembleTable.from_table(_table(), num_members=4)
     fitted = sp.Choice(sp.Standardize(), sp.Identity(), method="round_robin")
     combined = sp.Choice(sp.Standardize(), sp.Identity(), method="round_robin")
 
-    fitted.fit_ensemble(table)
-    transformed = fitted.transform_ensemble(table)
-    expected = combined.fit_transform_ensemble(table)
+    fitted.fit(table)
+    transformed = fitted.transform(table)
+    expected = combined.fit_transform(table)
 
     for member_id in range(len(table)):
         torch.testing.assert_close(
@@ -198,7 +195,7 @@ def test_choice_fits_options_on_selected_members() -> None:
         AddFittedMemberCount(),
         AddFittedMemberCount(),
         method="round_robin",
-    ).fit_transform_ensemble(table)
+    ).fit_transform(table)
 
     for member_id, source in enumerate(tables):
         torch.testing.assert_close(
@@ -219,7 +216,7 @@ def test_nested_choice_routes_selected_members_locally() -> None:
         method="round_robin",
     )
 
-    output = processor.fit_transform_ensemble(
+    output = processor.fit_transform(
         EnsembleTable.from_table(_table(), num_members=8)
     )
 
@@ -243,11 +240,7 @@ def test_choice_round_robin_uses_first_option_for_single_table() -> None:
 
 def test_choice_ensemble_requires_matching_member_count() -> None:
     processor = sp.Choice(Add(0), Add(1), method="round_robin")
-    processor.fit_transform_ensemble(
-        EnsembleTable.from_table(_table(), num_members=8)
-    )
+    processor.fit_transform(EnsembleTable.from_table(_table(), num_members=8))
 
     with pytest.raises(RuntimeError, match="fitted with 8"):
-        processor.transform_ensemble(
-            EnsembleTable.from_table(_table(), num_members=7)
-        )
+        processor.transform(EnsembleTable.from_table(_table(), num_members=7))

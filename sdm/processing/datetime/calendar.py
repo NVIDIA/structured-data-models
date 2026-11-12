@@ -7,7 +7,7 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import NaT, Stype, TableTensor
+from sdm import EnsembleData, NaT, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 
 US_PER_MINUTE = 60 * 1_000_000
@@ -48,7 +48,10 @@ class AddCalendarFields(Processor):
         self.fields = fields
         self.encoding = encoding
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(self, table: TableLike) -> TableLike:
+        return EnsembleData.execute(self._transform_table, table, batched=True)
+
+    def _transform_table(self, table: TableTensor) -> TableTensor:
         if len(self.fields) == 0:
             return table
 

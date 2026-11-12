@@ -4,12 +4,8 @@
 """Processors for structured data tables."""
 
 from sdm.processing.base import Processor, InvertibleMixin
-from sdm.processing.ensemble import (
-    EnsembleProcessor,
-    EnsembleInvertibleMixin,
-)
-from sdm.processing.target import TargetAwareEnsembleProcessor
-from sdm.processing.series import SeriesEnsembleProcessor
+from sdm.processing.target import TargetAwareProcessor
+from sdm.processing.series import SeriesProcessor
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -18,7 +14,6 @@ from sdm.processing.common import (
     StypeDispatch,
     TaskDispatch,
     TableDispatch,
-    EnsembleProcessorAdapter,
     Choice,
     ToNumerical,
     ShuffleColumns,
@@ -64,11 +59,8 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "EnsembleProcessor",
-    "EnsembleInvertibleMixin",
-    "TargetAwareEnsembleProcessor",
-    "SeriesEnsembleProcessor",
-    "EnsembleProcessorAdapter",
+    "TargetAwareProcessor",
+    "SeriesProcessor",
     "Identity",
     "Callable",
     "Sequential",

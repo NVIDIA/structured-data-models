@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 from sdm.testing import withCUDA
 
 
@@ -30,8 +30,10 @@ def _table(
 
 
 @withCUDA
+@pytest.mark.parametrize("ensemble", [False, True])
 def test_impute_mode_uses_most_frequent_category(
     device: torch.device,
+    ensemble: bool,
 ) -> None:
     context = _table(
         [
@@ -47,14 +49,18 @@ def test_impute_mode_uses_most_frequent_category(
         ],
         device=device,
     )
+    query_input = query
+    if ensemble:
+        context = EnsembleTable(groups=(context,), locations=((0, 0), (0, 1)))
+        query_input = EnsembleTable.from_tables(
+            tables=(query[1], query[0]), member_table_ids=(1, 0)
+        )
     processor = sp.ImputeMode().fit(context)
 
-    output = processor.transform(query)
+    output = processor.transform(query_input)
 
-    assert torch.equal(
-        processor._fill_values,
-        torch.tensor([[[0, 1]], [[2, 0]]], device=device),
-    )
+    if isinstance(output, EnsembleTable):
+        output = output.as_tensor()
     assert torch.equal(
         output.categorical.code,
         torch.tensor(

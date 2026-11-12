@@ -10,7 +10,7 @@ from typing import Self
 from torch.nn import Module
 
 import sdm.processing as sp
-from sdm.processing import EnsembleProcessor, Processor
+from sdm.processing import Processor
 
 
 @dataclass(init=False, repr=False)
@@ -44,9 +44,9 @@ class Recipe:
         output: Steps applied to stacked model outputs.
     """
 
-    _features: EnsembleProcessor
-    _target: EnsembleProcessor
-    _output: EnsembleProcessor
+    _features: Processor
+    _target: Processor
+    _output: Processor
 
     def __init__(
         self,
@@ -59,7 +59,7 @@ class Recipe:
         self._set_output(output)
 
     @property
-    def features(self) -> EnsembleProcessor:
+    def features(self) -> Processor:
         r"""The steps applied to model inputs."""
         return self._features
 
@@ -76,10 +76,10 @@ class Recipe:
     ) -> None:
         if processor is None:
             processor = sp.Identity()
-        self._features = EnsembleProcessor.as_processor(processor)
+        self._features = Processor.as_processor(processor)
 
     @property
-    def target(self) -> EnsembleProcessor:
+    def target(self) -> Processor:
         r"""The steps applied to labels."""
         return self._target
 
@@ -96,7 +96,7 @@ class Recipe:
     ) -> None:
         if processor is None:
             processor = sp.Identity()
-        self._target = EnsembleProcessor.as_processor(processor)
+        self._target = Processor.as_processor(processor)
 
         if any(
             isinstance(m, sp.TaskDispatch) for m in _iter_modules(self.target)
@@ -112,7 +112,7 @@ class Recipe:
             )
 
     @property
-    def output(self) -> EnsembleProcessor:
+    def output(self) -> Processor:
         r"""The steps applied to model outputs."""
         return self._output
 
@@ -129,7 +129,7 @@ class Recipe:
     ) -> None:
         if processor is None:
             processor = sp.Identity()
-        self._output = EnsembleProcessor.as_processor(processor)
+        self._output = Processor.as_processor(processor)
 
         if any(
             isinstance(m, sp.TableDispatch) for m in _iter_modules(self.output)

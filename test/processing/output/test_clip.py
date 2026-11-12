@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import pytest
 import torch
 
 from sdm import EnsembleTable, TableTensor
@@ -9,7 +10,8 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_clip_nonnegative(device: torch.device) -> None:
+@pytest.mark.parametrize("ensemble", [False, True])
+def test_clip_nonnegative(device: torch.device, ensemble: bool) -> None:
     target = torch.tensor(
         [[[0.0, -1.0], [1.0, 1.0]], [[1.0, 0.0], [2.0, 2.0]]],
         device=device,
@@ -17,9 +19,13 @@ def test_clip_nonnegative(device: torch.device) -> None:
     target[1, 1, 0, 0] = -1.0
 
     processor = ClipNonnegative()
-    processor._target = EnsembleTable(
-        groups=[TableTensor.from_tensor(target)],
-        locations=[(0, 0), (0, 1)],
+    processor._target = (
+        EnsembleTable(
+            groups=[TableTensor.from_tensor(target)],
+            locations=[(0, 0), (0, 1)],
+        )
+        if ensemble
+        else TableTensor.from_tensor(target[1])
     )
 
     out = target.new_tensor([[[-2.0, 1.0, -2.0, 1.0]]]).expand(2, 1, -1)

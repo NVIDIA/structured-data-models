@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
-from sdm.nn._buffer import BufferList
+from sdm import StringTensor, TableTensor
 from sdm.tensor.categorical import _iter_categories
 
 
@@ -38,7 +38,7 @@ def _check_categorical_codes(table: TableTensor) -> None:
 
 def _check_categories(
     table: TableTensor,
-    categories: BufferList[Tensor],
+    categories: Sequence[Tensor],
 ) -> None:
     """Raise if a category vocabulary differs from the fitted one.
 
@@ -61,6 +61,20 @@ def _check_categories(
         # 'AlignCategories' outputs the fitted vocabulary objects themselves,
         # so skip the comparison, which compiled code cannot evaluate.
         if actual is expected:
+            continue
+        if (
+            isinstance(actual, StringTensor)
+            and isinstance(expected, StringTensor)
+            and actual._data is expected._data
+            and actual._offset is expected._offset
+            and actual._valid is expected._valid
+            and actual.shape == expected.shape
+            and actual.stride() == expected.stride()
+            and actual._logical_storage_offset
+            == expected._logical_storage_offset
+        ):
+            # Categorical tensor views can rebuild the string wrapper while
+            # retaining the exact same vocabulary storage and logical view.
             continue
         expected = expected.to(device=actual.device)
         if not actual.equal(expected):

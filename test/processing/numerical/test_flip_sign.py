@@ -12,7 +12,7 @@ def test_flip_sign() -> None:
     ensemble = EnsembleTable.from_table(table, num_members=8)
     processor = FlipSign()
 
-    output = processor.fit_transform_ensemble(
+    output = processor.fit_transform(
         ensemble,
         generator=torch.Generator().manual_seed(42),
     )
@@ -34,13 +34,13 @@ def test_flip_sign() -> None:
 def test_flip_sign_inverse_grouped() -> None:
     table = TableTensor.from_tensor(torch.randn(20, 3))
     processor = FlipSign()
-    output = processor.fit_transform_ensemble(
+    output = processor.fit_transform(
         EnsembleTable.from_table(table, num_members=4)
     )
 
     # Multiple consecutive outputs per column, e.g., quantiles:
     pred = TableTensor.from_tensor(torch.randn(5, 3 * 9))
-    inverse = processor.inverse_transform_ensemble(
+    inverse = processor.inverse_transform(
         EnsembleTable.from_table(pred, num_members=4)
     )
     for member_id in range(len(output)):

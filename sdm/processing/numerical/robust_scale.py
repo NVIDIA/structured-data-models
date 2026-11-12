@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _isfinite
@@ -45,11 +45,20 @@ class RobustScale(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
+        median, scale = EnsembleData.execute(
+            self._quantiles, table.numerical, batched=True
+        )
+        self.register_buffer("median", median)
+        self.register_buffer("scale", scale)
+
+    def _quantiles(self, numerical: Tensor) -> tuple[Tensor, Tensor]:
+        if numerical.size(-1) == 0:
+            empty = numerical.new_empty((*numerical.shape[:-2], 1, 0))
+            return empty, empty
         finite_or_nan = numerical.masked_fill(~_isfinite(numerical), torch.nan)
         q_low, q_high = (value / 100.0 for value in self.quantile_range)
         # 'nanquantile' requires single or double precision input.
@@ -72,16 +81,17 @@ class RobustScale(Processor, InvertibleMixin):
                 for chunk in _split_tensor(quantile_input, size, dim=-1)
             ],
             dim=-1,
-        )
-        self._set_buffer("median", median.to(dtype=numerical.dtype))
+        ).unbind(0)
         scale = torch.where(lower == upper, 1.0, upper - lower)
-        self._set_buffer("scale", scale.to(dtype=numerical.dtype))
+        return median.to(dtype=numerical.dtype), scale.to(
+            dtype=numerical.dtype
+        )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(self, table: TableLike) -> TableLike:
         numerical = (table.numerical - self.median).div_(self.scale)
         return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform(self, table: TableLike) -> TableLike:
         numerical = (table.numerical * self.scale).add_(self.median)
         return table.replace_blocks(numerical=numerical)
 

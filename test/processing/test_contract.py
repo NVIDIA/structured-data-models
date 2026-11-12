@@ -100,10 +100,10 @@ class ProcessorCase:
 
 def _make_processor_pair(
     processor: sp.Processor,
-) -> tuple[sp.EnsembleProcessor, sp.EnsembleProcessor]:
+) -> tuple[sp.Processor, sp.Processor]:
     return (
-        sp.EnsembleProcessor.as_processor(deepcopy(processor)),
-        sp.EnsembleProcessor.as_processor(deepcopy(processor)),
+        sp.Processor.as_processor(deepcopy(processor)),
+        sp.Processor.as_processor(deepcopy(processor)),
     )
 
 
@@ -148,7 +148,6 @@ PROCESSOR_CASES = (
         sp.AverageEstimators(trim_fraction=0.25),
         _make_reduction_table,
     ),
-    ProcessorCase(sp.EnsembleProcessorAdapter(sp.Standardize())),
     ProcessorCase(
         sp.Sequential(
             sp.StypeDispatch(
@@ -222,12 +221,12 @@ def test_fit_transform_matches_fit_then_transform(
 ) -> None:
     table = case.make_table()
     processor_a, processor_b = _make_processor_pair(case.processor)
-    processor_a.fit_ensemble(
+    processor_a.fit(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    expected = processor_a.transform_ensemble(table)
-    actual = processor_b.fit_transform_ensemble(
+    expected = processor_a.transform(table)
+    actual = processor_b.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
@@ -246,10 +245,10 @@ def test_save_and_load_preserves_fitted_processor_behavior(
 ) -> None:
     table = case.make_table()
     processor_a, processor_b = _make_processor_pair(case.processor)
-    processor_a.fit_ensemble(table)
-    expected = processor_a.transform_ensemble(table)
+    processor_a.fit(table)
+    expected = processor_a.transform(table)
     processor_b.load_state_dict(processor_a.state_dict())
-    actual = processor_b.transform_ensemble(table)
+    actual = processor_b.transform(table)
     assert len(actual) == len(expected)
     for member_id in range(len(actual)):
         assert actual[member_id].equal(expected[member_id])
@@ -262,11 +261,11 @@ def test_save_and_load_preserves_fitted_processor_behavior(
 )
 def test_inverse_transform_round_trip(case: ProcessorCase) -> None:
     table = case.make_table()
-    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
-    transformed = processor.fit_transform_ensemble(table)
-    restored = cast(
-        sp.EnsembleInvertibleMixin, processor
-    ).inverse_transform_ensemble(transformed)
+    processor = sp.Processor.as_processor(deepcopy(case.processor))
+    transformed = processor.fit_transform(table)
+    restored = cast(sp.InvertibleMixin, processor).inverse_transform(
+        transformed
+    )
     assert len(restored) == len(table)
     for member_id in range(len(restored)):
         torch.testing.assert_close(
@@ -287,8 +286,8 @@ def test_preserves_rows_and_unhandled_stypes(
     case: ProcessorCase,
 ) -> None:
     table = case.make_table()
-    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
-    output = processor.fit_transform_ensemble(table)
+    processor = sp.Processor.as_processor(deepcopy(case.processor))
+    output = processor.fit_transform(table)
     for member_id in range(len(output)):
         before = table[member_id]
         after = output[member_id]
@@ -300,6 +299,17 @@ def test_preserves_rows_and_unhandled_stypes(
             assert after.select_columns(columns).equal(
                 before.select_columns(columns)
             )
+    if isinstance(processor, sp.AverageEstimators):
+        return
+    # The stype no-op contract also applies to individual ensemble members.
+    unsupported = table[0].drop_stypes(processor.handles_stypes)
+    mixed = EnsembleTable.from_tables(
+        (table[0], unsupported), member_table_ids=(0, 1)
+    )
+    output = processor.fit_transform(mixed)
+    assert output[1].equal(unsupported)
+    if isinstance(processor, sp.InvertibleMixin):
+        assert processor.inverse_transform(output)[1].equal(unsupported)
 
 
 @pytest.mark.parametrize(
@@ -316,11 +326,11 @@ def test_processor_state_moves_to_dtype(case: ProcessorCase) -> None:
             for group in source._iter_groups()
         ]
     )
-    processor = sp.EnsembleProcessor.as_processor(deepcopy(case.processor))
-    processor.fit_ensemble(source)
-    expected = processor.transform_ensemble(source)
+    processor = sp.Processor.as_processor(deepcopy(case.processor))
+    processor.fit(source)
+    expected = processor.transform(source)
     processor.to(dtype=dtype)
-    actual = processor.transform_ensemble(target)
+    actual = processor.transform(target)
     assert all(
         actual[member_id].dtype == dtype for member_id in range(len(actual))
     )
@@ -359,11 +369,11 @@ def test_processor_state_moves_to_cuda(case: ProcessorCase) -> None:
         ]
     )
     processor_a, processor_b = _make_processor_pair(case.processor)
-    processor_a.fit_ensemble(source)
-    expected = processor_a.transform_ensemble(source)
+    processor_a.fit(source)
+    expected = processor_a.transform(source)
     processor_b.load_state_dict(processor_a.state_dict())
     processor_b.to(device=device)
-    actual = processor_b.transform_ensemble(target)
+    actual = processor_b.transform(target)
     assert all(
         actual[member_id].device.type == device.type
         for member_id in range(len(actual))

@@ -1,12 +1,21 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import cast
+
 import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, EnsembleTable, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    RelatedTables,
+    StringTensor,
+    TableTensor,
+)
 from sdm.models.kumo.tabular import KumoTabular
+from sdm.processing.execution import RecipeExecution
 from sdm.testing import withCUDA
 
 
@@ -30,7 +39,7 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     )
     recipe = KumoTabular.default_recipe()
 
-    output = recipe.features.fit_transform_ensemble(
+    output = recipe.features.fit_transform(
         EnsembleTable.from_table(features, num_members=2)
     )
     missing_by_column = {
@@ -62,7 +71,7 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
             categories=(torch.arange(3),),
         ),
     )
-    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+    output = KumoTabular.default_recipe().features.fit_transform(
         EnsembleTable.from_table(features, num_members=8)
     )
 
@@ -88,7 +97,7 @@ def test_default_recipe_keeps_values_distinct_beside_outliers() -> None:
     numerical = torch.arange(100.0).unsqueeze(-1)
     numerical[0] = 1e12
 
-    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+    output = KumoTabular.default_recipe().features.fit_transform(
         EnsembleTable.from_table(
             TableTensor.from_tensor(numerical),
             num_members=8,
@@ -114,7 +123,7 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
         ),
     )
 
-    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+    output = KumoTabular.default_recipe().features.fit_transform(
         EnsembleTable.from_table(features, num_members=2)
     )
 
@@ -145,3 +154,85 @@ def test_default_recipe_reduces_outputs_per_task() -> None:
     )
     assert output.size() == (5, 3)
     torch.testing.assert_close(output.numerical.sum(dim=-1), torch.ones(5))
+
+
+@withCUDA
+def test_default_recipe_preserves_member_state_for_ragged_queries(
+    device: torch.device,
+) -> None:
+    categories = (torch.tensor([10, 20], device=device),)
+    fitted = []
+    query_tables = []
+    for rows in (24, 32, 28, 36):
+        fitted.append(
+            TableTensor(
+                numerical=torch.randn(rows, 4, device=device),
+                categorical=CategoricalTensor(
+                    torch.randint(0, 2, (rows, 1), device=device),
+                    categories=categories,
+                ),
+                text=StringTensor.from_list(
+                    [["training text"]] * rows, device=device
+                ),
+            )
+        )
+        query_tables.append(
+            TableTensor(
+                numerical=torch.randn(8, 4, device=device),
+                categorical=CategoricalTensor(
+                    torch.randint(0, 2, (8, 1), device=device),
+                    categories=categories,
+                ),
+                text=StringTensor.from_list(
+                    [["query text"]] * 8, device=device
+                ),
+            )
+        )
+    recipe = KumoTabular.default_recipe()
+    recipe.features = sp.TableDispatch(related=recipe.features)
+    execution = RecipeExecution(recipe)
+    task = TableTensor.from_tensor(torch.zeros(2, 1, device=device))
+    execution.fit_transform(
+        task,
+        task,
+        RelatedTables(
+            tables={"related": EnsembleTable.from_tables(fitted, range(4))},
+            relationships=[],
+            task_links=[],
+        ),
+        num_members=4,
+    )
+
+    batched = EnsembleTable(
+        groups=(cast(TableTensor, torch.stack(tuple(query_tables))),),
+        locations=tuple((0, i) for i in range(4)),
+    )
+    expected = execution.transform(
+        task,
+        RelatedTables(
+            tables={"related": batched}, relationships=[], task_links=[]
+        ),
+    )
+    rows = (3, 4, 6, 8)
+    ragged = EnsembleTable.from_tables(
+        tuple(table[:count] for table, count in zip(query_tables, rows)),
+        range(4),
+    )
+    actual = execution.transform(
+        task,
+        RelatedTables(
+            tables={"related": ragged}, relationships=[], task_links=[]
+        ),
+    )
+    for member, count in enumerate(rows):
+        actual_related = actual[member].related_tables
+        expected_related = expected[member].related_tables
+        assert actual_related is not None
+        assert expected_related is not None
+        result = actual_related.tables["related"]
+        reference = expected_related.tables["related"]
+        assert result.columns == reference.columns
+        torch.testing.assert_close(
+            result.numerical, reference.numerical[:count]
+        )
+        assert result.text.equal(reference.text[:count])

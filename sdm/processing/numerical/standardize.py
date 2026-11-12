@@ -6,7 +6,7 @@ from typing import Self
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
@@ -17,9 +17,8 @@ from sdm.processing.numerical._stats import (
 class Standardize(Processor, InvertibleMixin):
     """Center and scale each numerical column.
 
-    Constant columns use a unit scale to keep the transform finite and
-    invertible. NaN and infinite values are ignored when fitting statistics
-    and preserved during the transform.
+    With ``eps=0``, constant columns use a unit scale. NaN and infinite values
+    are ignored when fitting statistics and preserved during the transform.
 
     Args:
         eps: Value added to each fitted standard deviation.
@@ -46,8 +45,8 @@ class Standardize(Processor, InvertibleMixin):
             mean: The mean to subtract.
             scale: The scale to divide by.
         """
-        mean = torch.atleast_1d(torch.as_tensor(mean))
-        scale = torch.atleast_1d(torch.as_tensor(scale))
+        mean = torch.atleast_2d(torch.as_tensor(mean))
+        scale = torch.atleast_2d(torch.as_tensor(scale))
         self._set_buffer("mean", mean)
         self._set_buffer("scale", scale)
         self.requires_fit = False
@@ -55,12 +54,12 @@ class Standardize(Processor, InvertibleMixin):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
 
-        finite = _isfinite(table.numerical)
+        finite = EnsembleData.execute(_isfinite, table.numerical, batched=True)
         count = finite.sum(dim=-2, keepdim=True)
         finite_or_nan = table.numerical.masked_fill(~finite, torch.nan)
 
@@ -80,17 +79,30 @@ class Standardize(Processor, InvertibleMixin):
         else:
             self.scale.add_(self.eps)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(self, table: TableLike) -> TableLike:
         mean = self.mean.to(table.device)
         scale = self.scale.to(table.device)
         numerical = (table.numerical - mean).div_(scale)
         return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical.unflatten(-1, (self.scale.size(-1), -1))
-        numerical = numerical * self.scale.to(table.device).unsqueeze(-1)
-        numerical.add_(self.mean.to(table.device).unsqueeze(-1))
-        return table.replace_blocks(numerical=numerical.flatten(-2))
+    def _inverse_transform(self, table: TableLike) -> TableLike:
+        numerical = EnsembleData.execute(
+            self._invert,
+            table.numerical,
+            self.mean,
+            self.scale,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    @staticmethod
+    def _invert(numerical: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
+        if scale.size(-1) == 0:
+            return numerical
+        numerical = numerical.unflatten(-1, (scale.size(-1), -1))
+        numerical = numerical * scale.to(numerical.device).unsqueeze(-1)
+        numerical.add_(mean.to(numerical.device).unsqueeze(-1))
+        return numerical.flatten(-2)
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.eps == 0:

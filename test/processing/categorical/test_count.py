@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import cast
+
 import pytest
 import torch
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, Stype, TableTensor
 from sdm.processing import AddCategoryCounts
 from sdm.testing import withCUDA
 
@@ -66,7 +68,8 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
     # Code 3 is part of the vocabulary but was never observed while fitting.
     query = _table([[2, 0], [0, 1], [-1, 0], [3, 1]], device=device)
 
-    output = AddCategoryCounts().fit(context).transform(query)
+    processor = AddCategoryCounts().fit(context)
+    output = processor.transform(query)
 
     torch.testing.assert_close(
         output.numerical,
@@ -75,13 +78,26 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
             device=device,
         ).log1p(),
     )
+    batched = cast(TableTensor, torch.stack((query, query[[3, 2, 1, 0]])))
+    ensemble = EnsembleTable(
+        groups=(batched,),
+        locations=((0, 0), (0, 1)),
+    )
+    result = processor.transform(ensemble)
+    for member in range(2):
+        torch.testing.assert_close(
+            result[member].numerical,
+            processor.transform(ensemble[member]).numerical,
+        )
 
 
 @withCUDA
 @pytest.mark.parametrize("min_cardinality", [0, 3])
+@pytest.mark.parametrize("ensemble", [False, True])
 def test_add_category_counts_fits_leading_batches_independently(
     device: torch.device,
     min_cardinality: int,
+    ensemble: bool,
 ) -> None:
     batched = _table(
         [
@@ -91,15 +107,26 @@ def test_add_category_counts_fits_leading_batches_independently(
         device=device,
     )
 
-    output = AddCategoryCounts(min_cardinality=min_cardinality).fit_transform(
-        batched,
+    context = (
+        EnsembleTable(groups=(batched,), locations=((0, 0), (0, 1)))
+        if ensemble
+        else batched
     )
+    processor = AddCategoryCounts(min_cardinality=min_cardinality).fit(context)
+    query = batched[..., :2, :]
+    if ensemble:
+        query = EnsembleTable.from_tables(
+            tables=(query[1], query[0]), member_table_ids=(1, 0)
+        )
+    output = processor.transform(query)
+    if isinstance(output, EnsembleTable):
+        output = output.as_tensor()
 
-    assert output.size() == (2, 4, 4 if min_cardinality == 0 else 3)
+    assert output.size() == (2, 2, 4 if min_cardinality == 0 else 3)
     torch.testing.assert_close(
         output.numerical[..., 0],
         torch.tensor(
-            [[2.0, 2.0, 1.0, 1.0], [1.0, 2.0, 2.0, 1.0]],
+            [[2.0, 2.0], [1.0, 2.0]],
             device=device,
         ).log1p(),
     )

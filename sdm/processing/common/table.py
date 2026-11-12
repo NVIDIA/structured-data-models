@@ -6,11 +6,11 @@ from typing import Literal, cast
 import torch
 from torch.nn import ModuleDict
 
-from sdm import EnsembleTable, Stype
-from sdm.processing import EnsembleProcessor, Processor
+from sdm import Stype, TableLike
+from sdm.processing import Processor
 
 
-class TableDispatch(EnsembleProcessor):
+class TableDispatch(Processor):
     """Apply separate feature processors to task and related tables.
 
     :class:`TableDispatch` is resolved only during model execution.
@@ -27,11 +27,11 @@ class TableDispatch(EnsembleProcessor):
         related: object = None,
     ) -> None:
         super().__init__()
-        self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
+        self.processors: ModuleDict[Processor] = ModuleDict()
         for route, processor in (("task", task), ("related", related)):
             if processor is None:
                 continue
-            self.processors[route] = EnsembleProcessor.as_processor(processor)
+            self.processors[route] = Processor.as_processor(processor)
 
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
@@ -43,9 +43,9 @@ class TableDispatch(EnsembleProcessor):
         r""":meta private:"""  # noqa: D415
         return self._merge_stypes(self.processors.values())
 
-    def _fit_ensemble(
+    def _fit(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -55,41 +55,41 @@ class TableDispatch(EnsembleProcessor):
                 "use it in a 'Recipe' through model execution"
             )
         if self._route in self.processors:
-            self.processors[self._route].fit_ensemble(
-                ensemble_table,
+            self.processors[self._route].fit(
+                table,
                 generator=generator,
             )
 
-    def _fit_transform_ensemble(
+    def _fit_transform(
         self,
-        ensemble_table: EnsembleTable,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
+    ) -> TableLike:
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "
                 "use it in a 'Recipe' through model execution"
             )
         if self._route not in self.processors:
-            return ensemble_table
-        return self.processors[self._route].fit_transform_ensemble(
-            ensemble_table,
+            return table
+        return self.processors[self._route].fit_transform(
+            table,
             generator=generator,
         )
 
-    def _transform_ensemble(
+    def _transform(
         self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
+        table: TableLike,
+    ) -> TableLike:
         if self._route is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved table route; "
                 "use it in a 'Recipe' through model execution"
             )
         if self._route not in self.processors:
-            return ensemble_table
-        return self.processors[self._route].transform_ensemble(ensemble_table)
+            return table
+        return self.processors[self._route].transform(table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

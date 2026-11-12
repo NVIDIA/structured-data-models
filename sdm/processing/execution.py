@@ -12,6 +12,7 @@ from torch import Tensor
 
 import sdm.processing as sp
 from sdm import (
+    EnsembleData,
     EnsembleTable,
     Recipe,
     RelatedTables,
@@ -19,7 +20,7 @@ from sdm import (
     TableLike,
     TableTensor,
 )
-from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.recipe import _iter_modules
 
 
@@ -47,18 +48,15 @@ class RecipeExecution:
     def __init__(self, recipe: Recipe) -> None:
         self.recipe = recipe
 
-        self._related_processors: Mapping[str, EnsembleProcessor] | None = None
-        self._related_locations: (
-            Mapping[str, tuple[tuple[int, int], ...]] | None
-        ) = None
+        self._related_processors: Mapping[str, Processor] | None = None
         self._num_estimators: int | None = None
-        self._y_locations: tuple[tuple[int, int], ...] | None = None
+        self._num_members: int | None = None
 
     @property
     def num_members(self) -> int:
         r"""The number of fitted members."""
-        assert self._y_locations is not None
-        return len(self._y_locations)
+        assert self._num_members is not None
+        return self._num_members
 
     @overload
     def fit_transform(
@@ -97,40 +95,34 @@ class RecipeExecution:
         """Fit and transform context data."""
         self._num_estimators = num_members
 
-        # Transform target first to be able to resolve task type. Inverse
-        # target transforms require distinct member assignment:
-        series_processors: tuple[sp.SeriesEnsembleProcessor, ...] = ()
+        # Transform the target first to resolve the task type.
+        series_processors: tuple[sp.SeriesProcessor, ...] = ()
         if y is not None:
-            y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
+            y: TableLike = _to_table(y, num_members)
 
             for processor in (
                 self.recipe.features,
                 self.recipe.output,
             ):
                 for module in _iter_modules(processor):
-                    if isinstance(module, sp.TargetAwareEnsembleProcessor):
+                    if isinstance(module, sp.TargetAwareProcessor):
                         module._target = y
 
             series_processors = tuple(
                 module
                 for processor in (self.recipe.features, self.recipe.target)
                 for module in _iter_modules(processor)
-                if isinstance(module, sp.SeriesEnsembleProcessor)
+                if isinstance(module, sp.SeriesProcessor)
             )
             for module in series_processors:
                 module._set_buffer(
                     name="_offset",
-                    value=torch.zeros(
-                        size=(len(y),),
-                        dtype=torch.long,
-                        device=y[0].device,
-                    ),
+                    value=torch.zeros((), dtype=torch.long, device=y.device),
                 )
 
-            y = self.recipe.target.fit_transform_ensemble(
-                y, generator=generator
-            )
-            self._y_locations = y._locations
+            y = self.recipe.target.fit_transform(y, generator=generator)
+            targets = y if isinstance(y, EnsembleTable) else (y,)
+            self._num_members = len(targets)
 
             task_dispatchers = tuple(
                 module
@@ -139,19 +131,16 @@ class RecipeExecution:
                 if isinstance(module, sp.TaskDispatch)
             )
             if len(task_dispatchers) > 0:
-                if any(group.size(-1) != 1 for group in y._iter_groups()):
+                if any(target.size(-1) != 1 for target in targets):
                     raise ValueError(
                         "Expected the transformed target to contain exactly "
                         "one column"
                     )
 
-                if all(
-                    group.numerical.size(-1) == 1 for group in y._iter_groups()
-                ):
+                if all(target.numerical.size(-1) == 1 for target in targets):
                     task = "regression"
                 elif all(
-                    group.categorical.size(-1) == 1
-                    for group in y._iter_groups()
+                    target.categorical.size(-1) == 1 for target in targets
                 ):
                     task = "classification"
                 else:
@@ -163,34 +152,29 @@ class RecipeExecution:
                     task_dispatcher._task = task
 
         self._related_processors = None
-        self._related_locations = None
-        related_ensembles: Mapping[str, EnsembleTable] = {}
+        related_outputs: Mapping[str, TableLike] = {}
         if related_tables is not None:
             self._related_processors = {}
-            self._related_locations = {}
             for name, table in related_tables.tables.items():
                 processor = copy.deepcopy(self.recipe.features)
                 for module in _iter_modules(processor):
                     if isinstance(module, sp.TableDispatch):
                         module._route = "related"
                 self._related_processors[name] = processor
-                ensemble_table = _to_ensemble_table(table, num_members)
-                self._related_locations[name] = ensemble_table._locations
-                related_ensembles[name] = processor.fit_transform_ensemble(
-                    ensemble_table,
+                related_input = _to_table(table, num_members)
+                related_outputs[name] = processor.fit_transform(
+                    related_input,
                     generator=generator,
                 )
                 for module in _iter_modules(processor):
-                    if isinstance(module, sp.SeriesEnsembleProcessor):
+                    if isinstance(module, sp.SeriesProcessor):
                         module._set_buffer(
                             name="_offset",
-                            value=torch.tensor(
-                                data=[
-                                    ensemble_table[i].size(-2)
-                                    for i in range(len(ensemble_table))
-                                ],
+                            value=EnsembleData.execute(
+                                torch.scalar_tensor,
+                                related_input.size(-2),
                                 dtype=torch.long,
-                                device=ensemble_table[0].device,
+                                device=related_input.device,
                             ),
                         )
 
@@ -198,62 +182,69 @@ class RecipeExecution:
             if isinstance(module, sp.TableDispatch):
                 module._route = "task"
 
-        x_context_only: EnsembleTable | None = None
+        x_context_only: TableLike | None = None
         if context_only_columns:
             assert y is not None
             if not isinstance(x, TableTensor):
                 x = TableTensor.from_tensor(cast(Tensor, x))
             context_only_columns = [str(col) for col in context_only_columns]
             processor = copy.deepcopy(self.recipe.features)
-            x_context_only = processor.fit_transform_ensemble(
-                _to_ensemble_table(
-                    x.select_columns(context_only_columns), num_members
-                ),
+            x_context_only = processor.fit_transform(
+                _to_table(x.select_columns(context_only_columns), num_members),
                 generator=generator,
             )
             x = x.drop_columns(context_only_columns)
 
-        inputs = _to_ensemble_table(x, num_members)
-        x: EnsembleTable = self.recipe.features.fit_transform_ensemble(
+        inputs = _to_table(x, num_members)
+        x: TableLike = self.recipe.features.fit_transform(
             inputs,
             generator=generator,
         )
+        features = x if isinstance(x, EnsembleTable) else (x,)
+        self._num_members = len(features)
 
         for module in series_processors:
             module._set_buffer(
                 name="_offset",
-                value=torch.tensor(
-                    data=[x[i].size(-2) for i in range(len(x))],
+                value=EnsembleData.execute(
+                    torch.scalar_tensor,
+                    x.size(-2),
                     dtype=torch.long,
-                    device=x[0].device,
+                    device=x.device,
                 ),
             )
 
         members: list[MemberContext | MemberQuery] = []
-        for member_id in range(len(x)):
+        for member_id, features_i in enumerate(features):
             related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
                 related_tables_i = RelatedTables(
                     tables={
                         name: table[member_id]
-                        for name, table in related_ensembles.items()
+                        if isinstance(table, EnsembleTable)
+                        else table
+                        for name, table in related_outputs.items()
                     },
                     relationships=related_tables.relationships,
                     task_links=related_tables.task_links,
                 )
             if y is not None:
                 member = MemberContext(
-                    x=x[member_id],
-                    y=y[member_id],
+                    x=features_i,
+                    y=y[member_id] if isinstance(y, EnsembleTable) else y,
                     x_context_only=x_context_only[member_id]
-                    if x_context_only is not None
-                    else None,
+                    if isinstance(x_context_only, EnsembleTable)
+                    else x_context_only,
                     related_tables=related_tables_i,
-                    input_stypes=inputs[member_id].stypes,
+                    input_stypes=(
+                        inputs[member_id]
+                        if isinstance(inputs, EnsembleTable)
+                        else inputs
+                    ).stypes,
                 )
             else:
                 member = MemberQuery(
-                    x=x[member_id],
+                    x=features_i,
                     related_tables=related_tables_i,
                 )
             members.append(member)
@@ -266,41 +257,35 @@ class RecipeExecution:
         related_tables: RelatedTables | None,
     ) -> tuple[MemberQuery, ...]:
         """Transform query data."""
-        x: EnsembleTable = _to_ensemble_table(x, self._num_estimators)
-        x = self.recipe.features.transform_ensemble(x)
+        x: TableLike = _to_table(x, self._num_estimators)
+        x = self.recipe.features.transform(x)
 
-        related_ensembles: Mapping[str, EnsembleTable] = {}
+        related_outputs: Mapping[str, TableLike] = {}
         if related_tables is not None:
             assert self._related_processors is not None
-            assert self._related_locations is not None
             for name, table in related_tables.tables.items():
                 processor = self._related_processors[name]
-                ensemble_table = _to_ensemble_table(
-                    table, self._num_estimators
-                )
-                ensemble_table = _align_to_fitted_groups(
-                    ensemble_table,
-                    self._related_locations[name],
-                )
-                related_ensembles[name] = processor.transform_ensemble(
-                    ensemble_table
-                )
+                related_input = _to_table(table, self._num_estimators)
+                related_outputs[name] = processor.transform(related_input)
 
         members: list[MemberQuery] = []
-        for member_id in range(len(x)):
+        features = x if isinstance(x, EnsembleTable) else (x,)
+        for member_id, features_i in enumerate(features):
             related_tables_i: RelatedTables[TableTensor] | None = None
             if related_tables is not None:
                 related_tables_i = RelatedTables(
                     tables={
                         name: table[member_id]
-                        for name, table in related_ensembles.items()
+                        if isinstance(table, EnsembleTable)
+                        else table
+                        for name, table in related_outputs.items()
                     },
                     relationships=related_tables.relationships,
                     task_links=related_tables.task_links,
                 )
             members.append(
                 MemberQuery(
-                    x=x[member_id],
+                    x=features_i,
                     related_tables=related_tables_i,
                 )
             )
@@ -308,40 +293,20 @@ class RecipeExecution:
         return tuple(members)
 
     def inverse_transform_target(
-        self,
-        outputs: Sequence[TableTensor],
+        self, outputs: Sequence[TableTensor]
     ) -> tuple[TableTensor, ...]:
-        """Invert fitted target transforms on member outputs."""
-        assert len(outputs) == self.num_members
-
-        # Reconstruct the group layout of the transformed target:
-        assert self._y_locations is not None
-        num_groups = max(group for group, _ in self._y_locations) + 1
-        groups: list[list[TableTensor | None]] = [
-            [] for _ in range(num_groups)
-        ]
-        for group_id, _ in self._y_locations:
-            groups[group_id].append(None)
-        for i, (group_id, position) in enumerate(self._y_locations):
-            groups[group_id][position] = outputs[i]
-
-        table = EnsembleTable(
-            groups=[
-                cast(
-                    TableTensor,
-                    group[0].unsqueeze(0)  # type: ignore
-                    if len(group) == 1
-                    else torch.stack(group, dim=0),  # type: ignore
-                )
-                for group in groups
-            ],
-            locations=self._y_locations,
+        """Invert fitted target transforms on corresponding member outputs."""
+        table = (
+            outputs[0]
+            if len(outputs) == 1
+            else EnsembleTable.from_tables(
+                outputs, member_table_ids=range(len(outputs))
+            )
         )
-
-        if not isinstance(self.recipe.target, EnsembleInvertibleMixin):
+        if not isinstance(self.recipe.target, InvertibleMixin):
             raise RuntimeError("Target recipe is not invertible")
-        table = self.recipe.target.inverse_transform_ensemble(table)
-        return tuple(table[i] for i in range(len(table)))
+        table = self.recipe.target.inverse_transform(table)
+        return tuple(table) if isinstance(table, EnsembleTable) else (table,)
 
     def transform_output(
         self,
@@ -365,118 +330,23 @@ class RecipeExecution:
         return self.recipe.output.transform(cast(TableTensor, out))
 
 
-def _align_to_fitted_groups(
-    ensemble_table: EnsembleTable,
-    fitted_locations: Sequence[tuple[int, int]],
-) -> EnsembleTable:
-    """Align query groups with the fitted related-table groups."""
-    fitted_locations = tuple(fitted_locations)
-    if ensemble_table._locations == fitted_locations:
-        return ensemble_table
-
-    members_by_fitted_position: list[dict[int, list[int]]] = [
-        {} for _ in range(max(group for group, _ in fitted_locations) + 1)
-    ]
-    for member_id, (group, position) in enumerate(fitted_locations):
-        members_by_fitted_position[group].setdefault(position, []).append(
-            member_id
-        )
-
-    groups = []
-    locations = list(fitted_locations)
-    for group_id, fitted_positions in enumerate(members_by_fitted_position):
-        positions_and_members = tuple(sorted(fitted_positions.items()))
-        sources_by_position = tuple(
-            tuple(
-                dict.fromkeys(
-                    ensemble_table._locations[member_id]
-                    for member_id in member_ids
-                )
-            )
-            for _, member_ids in positions_and_members
-        )
-
-        # A fitted position may fan out only when its state can broadcast over
-        # the entire group; otherwise states could map to the wrong queries.
-        if len(sources_by_position) > 1 and any(
-            len(sources) > 1 for sources in sources_by_position
-        ):
-            raise ValueError(
-                "Cannot align query tables with fitted related-table groups"
-            )
-
-        if len(sources_by_position) == 1:
-            source_locations = sources_by_position[0]
-            position_by_source = {
-                source: position
-                for position, source in enumerate(source_locations)
-            }
-            for member_id in positions_and_members[0][1]:
-                locations[member_id] = (
-                    group_id,
-                    position_by_source[ensemble_table._locations[member_id]],
-                )
-        else:
-            source_locations = tuple(
-                sources[0] for sources in sources_by_position
-            )
-
-        tables = tuple(
-            ensemble_table._groups[group][position]
-            for group, position in source_locations
-        )
-        # Reuse one shared query without materializing a copy per fitted state.
-        if all(source == source_locations[0] for source in source_locations):
-            table = tables[0]
-            output = cast(
-                TableTensor,
-                table.unsqueeze(0).expand(len(tables), *table.size()),
-            )
-        else:
-            packed_groups, _ = EnsembleTable._pack_tables(tables)
-            if len(packed_groups) != 1:
-                raise ValueError(
-                    "Cannot align query tables with fitted related-table "
-                    "groups"
-                )
-            output = packed_groups[0]
-        groups.append(output)
-
-    return EnsembleTable(groups=groups, locations=locations)
-
-
-def _to_ensemble_table(
+def _to_table(
     x: Tensor | TableLike,
     num_estimators: int | None,
-    *,
-    expand: bool = False,
-) -> EnsembleTable:
-    r"""Convert model input data into an ensemble-aware representation.
+) -> TableLike:
+    r"""Normalize model input, creating an ensemble only for multiple members.
 
     Args:
         x: The input table.
         num_estimators: Number of estimators to represent. If ``None``, a 2D
             input creates one estimator and higher-rank inputs infer the
             estimator count from their leading dimension.
-        expand: Whether to expand shared inputs into distinct logical member
-            positions.
     """
     if isinstance(x, EnsembleTable):
         if num_estimators is not None and num_estimators != len(x):
             raise ValueError(
                 f"Expected {num_estimators} members in 'EnsembleTable' "
                 f"(got {len(x)})"
-            )
-        if expand:
-            groups = [x.expanded_group(i) for i in range(x.num_groups)]
-            locations = []
-            next_pos = [0] * x.num_groups
-            for i, _ in x._locations:
-                locations.append((i, next_pos[i]))
-                next_pos[i] += 1
-            x = EnsembleTable(
-                groups=tuple(groups),
-                locations=tuple(locations),
             )
         if len(x) < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -487,6 +357,8 @@ def _to_ensemble_table(
 
     # Treat leading dimension as ensemble dimension:
     if x.dim() > 2 and num_estimators is None:
+        if x.size(0) == 1:
+            return x[0]
         locations = tuple((0, i) for i in range(x.size(0)))
         x = EnsembleTable(groups=(x,), locations=locations)
         if len(x) < 1:
@@ -497,14 +369,6 @@ def _to_ensemble_table(
     if num_estimators < 1:
         raise ValueError("'num_estimators' needs to be positive")
 
-    # Add a leading ensemble dimension:
-    x = x.unsqueeze(0)
-    if expand:
-        x = x.expand(num_estimators, *x.size()[1:])
-
-    if x.size(0) == 1:
-        locations = ((0, 0),) * num_estimators
-    else:
-        locations = tuple((0, i) for i in range(num_estimators))
-
-    return EnsembleTable(groups=(cast(TableTensor, x),), locations=locations)
+    if num_estimators == 1:
+        return x
+    return EnsembleTable.from_table(x, num_members=num_estimators)

@@ -20,13 +20,15 @@ def test_random_projection() -> None:
     table = _table()
 
     inp = EnsembleTable.from_table(table, num_members=8)
-    out = RandomProjection(8).fit_transform_ensemble(inp)
+    out = RandomProjection(8).fit_transform(inp)
 
-    assert out.num_groups == 1
     assert len(out) == 8
-    group = out._groups[0]
+    group = out.as_tensor()
     assert group.size() == (8, 6, 9)
     assert group.numerical.size() == (8, 6, 8)
     assert group.numerical.stride() == (6 * 8, 8, 1)
     assert group.categorical.size() == (8, 6, 1)
-    assert group.categorical.stride() == (0, 1, 1)
+    for member in range(len(out)):
+        torch.testing.assert_close(
+            out[member].categorical.code, table.categorical.code
+        )

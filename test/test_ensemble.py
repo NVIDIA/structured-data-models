@@ -121,7 +121,7 @@ def test_replace_groups_rejects_group_count_mismatch() -> None:
         ensemble_table.replace_groups(tuple(ensemble_table._iter_groups()) * 2)
 
 
-def test_replace_tables_packs_only_within_existing_groups() -> None:
+def test_replace_tables_can_regroup_compatible_members() -> None:
     ensemble_table = EnsembleTable(
         groups=(
             TableTensor.from_tensor(torch.tensor([[[0.0]], [[1.0]]])),
@@ -139,8 +139,8 @@ def test_replace_tables_packs_only_within_existing_groups() -> None:
         member_table_ids=range(4),
     )
 
-    assert output.num_groups == 2
-    assert all(group.size(0) == 2 for group in output._iter_groups())
+    assert output.num_groups == 1
+    assert output.as_tensor().size(0) == 4
     for member_id, table in enumerate(tables):
         assert output[member_id].equal(table)
 
@@ -290,7 +290,7 @@ def test_concatenate_columns_regroups_different_layouts() -> None:
 def test_concatenate_columns_rejects_different_member_counts() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
 
-    with pytest.raises(ValueError, match="different member counts"):
+    with pytest.raises(ValueError, match="same number of members"):
         EnsembleTable.concatenate_columns(
             (
                 EnsembleTable.from_table(table, num_members=2),

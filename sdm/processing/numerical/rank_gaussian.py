@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
 from sdm.processing.numerical._stats import _isfinite, _ndtri
@@ -48,11 +48,17 @@ class RankGaussian(Processor):
 
     def _fit(
         self,
-        table: TableTensor,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
+        values, probabilities = EnsembleData.execute(
+            self._knots, table.numerical, batched=True
+        )
+        self.register_buffer("_values", values)
+        self.register_buffer("_probabilities", probabilities)
+
+    def _knots(self, numerical: Tensor) -> tuple[Tensor, Tensor]:
         dtype = torch.promote_types(numerical.dtype, torch.float32)
         # Columns are fitted on their own, so chunks of columns bound the
         # sorting and ranking temporaries of about ten values per cell.
@@ -135,14 +141,24 @@ class RankGaussian(Processor):
             )
 
         values, probabilities = zip(*knots, strict=True)
-        self._set_buffer("_values", torch.cat(values, dim=-2))
-        self._set_buffer("_probabilities", torch.cat(probabilities, dim=-2))
+        return torch.cat(values, dim=-2), torch.cat(probabilities, dim=-2)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical
+    def _transform(self, table: TableLike) -> TableLike:
+        numerical = EnsembleData.execute(
+            self._gaussian,
+            table.numerical,
+            self._values,
+            self._probabilities,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    def _gaussian(
+        self, numerical: Tensor, values: Tensor, probabilities: Tensor
+    ) -> Tensor:
         columns = numerical.movedim(-1, -2)  # [..., C, R]
-        values = self._values.flatten(end_dim=-2)
-        probabilities = self._probabilities.flatten(end_dim=-2)
+        values = values.flatten(end_dim=-2)
+        probabilities = probabilities.flatten(end_dim=-2)
         output = torch.empty_like(numerical)
         # Rows transform on their own, so chunks of rows bound the
         # interpolation temporaries of about a dozen values per cell.
@@ -163,7 +179,7 @@ class RankGaussian(Processor):
             )
             normal = _ndtri(quantiles).reshape(rows.shape)
             out.copy_(normal.masked_fill_(rows.isnan(), torch.nan).mT)
-        return table.replace_blocks(numerical=output)
+        return output
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 import pytest
@@ -213,7 +213,7 @@ def test_align_categories_filters_per_ensemble_member(
         member_table_ids=(0, 1),
     )
 
-    output = AlignCategories(min_frequency=2).fit_transform_ensemble(context)
+    output = AlignCategories(min_frequency=2).fit_transform(context)
 
     assert output[0].categorical.categories[0].tolist() == ["red"]
     assert output[0].categorical.code.squeeze(-1).tolist() == [0, 0, -1]
@@ -481,16 +481,15 @@ def test_align_categories_ensemble_matches_member_fits(
         categories=(("red", "blue", "green"),),
         device=device,
     )
+    query = cast(TableTensor, query.unsqueeze(0).expand(2, -1, -1))
     query_ensemble = EnsembleTable.from_tables(
         tables=(query, query),
         member_table_ids=member_table_ids,
     )
     combined = AlignCategories()
-    fitted = AlignCategories().fit_ensemble(context)
 
-    context_output = combined.fit_transform_ensemble(context)
-    query_output = combined.transform_ensemble(query_ensemble)
-    fitted_query_output = fitted.transform_ensemble(query_ensemble)
+    context_output = combined.fit_transform(context)
+    query_output = combined.transform(query_ensemble)
     references = [
         AlignCategories().fit(first_context),
         AlignCategories().fit(second_context),
@@ -503,7 +502,6 @@ def test_align_categories_ensemble_matches_member_fits(
         )
         expected_query = reference.transform(query)
         assert query_output[member_id].equal(expected_query)
-        assert fitted_query_output[member_id].equal(expected_query)
 
 
 def test_string_category_lookups_compile(compilation: None) -> None:

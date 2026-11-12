@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor
+from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
 from sdm.processing import Processor, TableDispatch
 from sdm.processing.execution import RecipeExecution
 
@@ -17,8 +17,10 @@ class _Add(Processor):
         super().__init__()
         self.value = value
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical + self.value)
+    def _transform(
+        self, table: TableTensor | EnsembleTable
+    ) -> TableTensor | EnsembleTable:
+        return table.replace_blocks(numerical=table.numerical.add(self.value))
 
 
 def test_table_dispatch() -> None:

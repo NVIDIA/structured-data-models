@@ -5,34 +5,25 @@ from typing import cast
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 
 
 class ToNumerical(Processor):
-    """Move categorical columns into the numerical block.
+    """Move categorical codes into the numerical block.
 
-    This is an stype conversion step:
-    :class:`~sdm.tensor.CategoricalTensor` already stores ordinal category ids
-    and the category vocabulary. ``ToNumerical`` reuses those existing ids,
-    casts them to the numerical dtype, and clears the categorical block so
-    numerical-only models can consume both original numerical and categorical
-    columns. Missing categorical values remain ``-1``.
-
-    Unhandled semantic types are preserved unchanged.
-
+    Existing numerical columns come first; categorical codes are cast to
+    their dtype. Missing categorical values remain ``-1``.
     """
 
     requires_fit = False
     handles_stypes = (Stype.numerical, Stype.categorical)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        """Return ``table`` with categorical columns moved to ``numerical``."""
-        # Already numerical-only: nothing to move.
-        if all(
-            stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in TableTensor.items(table)
-        ):
+    def _transform(self, table: TableLike) -> TableLike:
+        return EnsembleData.execute(self._convert, table, batched=True)
+
+    def _convert(self, table: TableTensor) -> TableTensor:
+        if table.categorical.size(-1) == 0:
             return table
 
         # Casting to the (floating-point) numerical dtype also unwraps a

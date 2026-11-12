@@ -5,7 +5,7 @@ from itertools import accumulate
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike, TableTensor
 from sdm.processing import Processor
 from sdm.tensor.categorical import _iter_categories
 
@@ -20,7 +20,10 @@ class ToOneHot(Processor):
     handles_stypes = (Stype.categorical,)
     requires_fit = False
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform(self, table: TableLike) -> TableLike:
+        return EnsembleData.execute(self._transform_table, table, batched=True)
+
+    def _transform_table(self, table: TableTensor) -> TableTensor:
         codes = table.categorical.code
         sizes = [
             categories.numel()

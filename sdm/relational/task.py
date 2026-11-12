@@ -433,6 +433,7 @@ class RelatedTables(DeviceMixin, Generic[T]):
                 }
                 row.append(", ".join(stypes))
             else:
+                table = cast(TableTensor, table)
                 row += [
                     table.size(-2),
                     table.size(-1),

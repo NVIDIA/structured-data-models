@@ -6,30 +6,12 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import EnsembleData, Stype, TableLike
 from sdm.processing import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _ndtri
 
 BOUNDS_THRESH = 1e-7
 _MAX_NUM_COLS = 32
-
-
-def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
-    n = xp.numel()
-    if n == 1:
-        return fp[0].expand_as(x)
-
-    idx = torch.searchsorted(xp, x, right=True).clamp(1, n - 1)
-
-    x0, x1 = xp[idx - 1], xp[idx]
-    y0, y1 = fp[idx - 1], fp[idx]
-
-    denom = x1 - x0
-    weight = torch.where(denom != 0, (x - x0) / denom, 0.0)
-    result = torch.lerp(y0, y1, weight)
-
-    result = torch.where(x <= xp[0], fp[0], result)
-    return torch.where(x >= xp[-1], fp[-1], result)
 
 
 def _batched_interp(
@@ -42,16 +24,20 @@ def _batched_interp(
     n = boundaries.shape[-1]
     if n == 1:
         if references.dim() == 1:
-            return references[0].expand_as(values)
+            return references.select(0, 0).expand_as(values)
         return references[:, :1].expand_as(values)
 
+    if boundaries.dim() == 2 and boundaries.stride(0) == 0:
+        boundaries = boundaries[0]
+    if references.dim() == 2 and references.stride(0) == 0:
+        references = references[0]
     idx = torch.searchsorted(boundaries, values, right=True).clamp(1, n - 1)
 
     if boundaries.dim() == 1:
-        x0 = boundaries[idx - 1]
-        x1 = boundaries[idx]
-        lower_boundary = boundaries[0]
-        upper_boundary = boundaries[-1]
+        x0 = boundaries.take(idx - 1)
+        x1 = boundaries.take(idx)
+        lower_boundary = boundaries.select(0, 0)
+        upper_boundary = boundaries.select(0, -1)
     else:
         x0 = boundaries.gather(1, idx - 1)
         x1 = boundaries.gather(1, idx)
@@ -59,10 +45,10 @@ def _batched_interp(
         upper_boundary = boundaries[:, -1:]
 
     if references.dim() == 1:
-        y0 = references[idx - 1]
-        y1 = references[idx]
-        lower = references[0]
-        upper = references[-1]
+        y0 = references.take(idx - 1)
+        y1 = references.take(idx)
+        lower = references.select(0, 0)
+        upper = references.select(0, -1)
     else:
         y0 = references.gather(1, idx - 1)
         y1 = references.gather(1, idx)
@@ -123,24 +109,26 @@ class QuantileTransform(Processor, InvertibleMixin):
             torch.empty(0),
         )
 
-    def _subsample_indices(
-        self,
-        inp: Tensor,
-        generator: torch.Generator | None,
-    ) -> Tensor:
-        return torch.randperm(
-            inp.size(-2),
-            generator=generator,
-            device=inp.device,
-        )[: self.subsample]
-
     def _fit(
         self,
-        table: TableTensor,
+        table: TableLike,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
+        quantiles, references = EnsembleData.execute(
+            self._grid, table.numerical, generator=generator, batched=True
+        )
+        self.register_buffer("_quantiles", quantiles)
+        self.register_buffer("_references", references)
+
+    def _grid(
+        self, numerical: Tensor, *, generator: torch.Generator | None
+    ) -> tuple[Tensor, Tensor]:
+        if numerical.size(-1) == 0:
+            return (
+                numerical.new_empty((*numerical.shape[:-2], 1, 0)),
+                numerical.new_zeros((*numerical.shape[:-2], 1)),
+            )
         n_samples = numerical.size(-2)
         quantile_limit = n_samples
         if self.subsample is not None:
@@ -163,7 +151,9 @@ class QuantileTransform(Processor, InvertibleMixin):
         )
 
         if self.subsample is not None and self.subsample < n_samples:
-            indices = self._subsample_indices(numerical, generator)
+            indices = torch.randperm(
+                n_samples, generator=generator, device=numerical.device
+            )[: self.subsample]
             input_sample = numerical.index_select(-2, indices)
         else:
             input_sample = numerical
@@ -186,27 +176,43 @@ class QuantileTransform(Processor, InvertibleMixin):
             )
             .movedim(-1, -2)
         )
-        self._set_buffer("_quantiles", quantiles)
-        self._set_buffer("_references", references)
+        return quantiles, references.expand(*numerical.shape[:-2], n_quantiles)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical
+    def _transform(self, table: TableLike) -> TableLike:
+        numerical = EnsembleData.execute(
+            self._transform_values,
+            table.numerical,
+            self._quantiles,
+            self._references,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    def _transform_values(
+        self, numerical: Tensor, quantiles: Tensor, references: Tensor
+    ) -> Tensor:
         n_samples = numerical.size(-2)
         n_features = numerical.size(-1)
         input_columns = (
             numerical.movedim(-1, -2).reshape(-1, n_samples).contiguous()
         )
         quantile_columns = (
-            self._quantiles.movedim(-1, -2)
-            .reshape(-1, self._references.numel())
+            quantiles.movedim(-1, -2)
+            .reshape(-1, references.size(-1))
             .contiguous()
+        )
+        reference_columns = (
+            references.unsqueeze(-2)
+            .expand(*quantiles.shape[:-2], n_features, references.size(-1))
+            .reshape(-1, references.size(-1))
         )
         transformed_columns = torch.empty_like(input_columns)
 
         for start in range(0, input_columns.size(0), _MAX_NUM_COLS):
             end = min(start + _MAX_NUM_COLS, input_columns.size(0))
-            input_chunk = input_columns[start:end]
-            quantile_chunk = quantile_columns[start:end]
+            input_chunk = input_columns.narrow(0, start, end - start)
+            quantile_chunk = quantile_columns.narrow(0, start, end - start)
+            reference_chunk = reference_columns.narrow(0, start, end - start)
             lower_bound_x = quantile_chunk[:, :1]
             upper_bound_x = quantile_chunk[:, -1:]
             if self.output_distribution == "normal":
@@ -224,12 +230,12 @@ class QuantileTransform(Processor, InvertibleMixin):
             forward = _batched_interp(
                 input_chunk,
                 quantile_chunk,
-                self._references,
+                reference_chunk,
             )
             backward = _batched_interp(
                 -input_chunk,
                 -quantile_chunk.flip(1),
-                -self._references.flip(0),
+                -reference_chunk.flip(-1),
             )
             output = 0.5 * (forward - backward)
 
@@ -247,31 +253,47 @@ class QuantileTransform(Processor, InvertibleMixin):
 
             transformed_columns[start:end] = output
 
-        transformed = transformed_columns.reshape(
+        return transformed_columns.reshape(
             *numerical.shape[:-2],
             n_features,
             n_samples,
         ).movedim(-1, -2)
-        return table.replace_blocks(numerical=transformed)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical
+    def _inverse_transform(self, table: TableLike) -> TableLike:
+        numerical = EnsembleData.execute(
+            self._inverse_transform_values,
+            table.numerical,
+            self._quantiles,
+            self._references,
+            batched=True,
+        )
+        return table.replace_blocks(numerical=numerical)
+
+    def _inverse_transform_values(
+        self, numerical: Tensor, quantiles: Tensor, references: Tensor
+    ) -> Tensor:
         n_samples = numerical.size(-2)
         n_features = numerical.size(-1)
         input_columns = (
             numerical.movedim(-1, -2).reshape(-1, n_samples).contiguous()
         )
         quantile_columns = (
-            self._quantiles.movedim(-1, -2)
-            .reshape(-1, self._references.numel())
+            quantiles.movedim(-1, -2)
+            .reshape(-1, references.size(-1))
             .contiguous()
+        )
+        reference_columns = (
+            references.unsqueeze(-2)
+            .expand(*quantiles.shape[:-2], n_features, references.size(-1))
+            .reshape(-1, references.size(-1))
         )
         inverse_columns = torch.empty_like(input_columns)
 
         for start in range(0, input_columns.size(0), _MAX_NUM_COLS):
             end = min(start + _MAX_NUM_COLS, input_columns.size(0))
-            input_chunk = input_columns[start:end]
-            quantile_chunk = quantile_columns[start:end]
+            input_chunk = input_columns.narrow(0, start, end - start)
+            quantile_chunk = quantile_columns.narrow(0, start, end - start)
+            reference_chunk = reference_columns.narrow(0, start, end - start)
             lower_bound_y = quantile_chunk[:, :1]
             upper_bound_y = quantile_chunk[:, -1:]
             if self.output_distribution == "normal":
@@ -291,19 +313,18 @@ class QuantileTransform(Processor, InvertibleMixin):
 
             output = _batched_interp(
                 input_chunk,
-                self._references,
+                reference_chunk,
                 quantile_chunk,
             )
             output = torch.where(upper_bounds_idx, upper_bound_y, output)
             output = torch.where(lower_bounds_idx, lower_bound_y, output)
             inverse_columns[start:end] = output
 
-        inverse = inverse_columns.reshape(
+        return inverse_columns.reshape(
             *numerical.shape[:-2],
             n_features,
             n_samples,
         ).movedim(-1, -2)
-        return table.replace_blocks(numerical=inverse)
 
     def __repr__(self, *, indent: int = 0) -> str:
         arguments = []
