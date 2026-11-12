@@ -490,8 +490,8 @@ class ICLModel(Model):
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`.
-                ``recompile_limit`` defaults to ``256``, since the bodies of
-                all models also share one recompile limit.
+                ``recompile_limit`` defaults to ``256``, since all bodies
+                that run the same function also share one recompile limit.
 
         Returns:
             The compiled function, which is called like :meth:`predict`.
