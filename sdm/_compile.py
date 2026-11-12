@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import functools
+import threading
 from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
@@ -14,6 +15,9 @@ from sdm.cache import KVCacheEntry
 _compile_body: ContextVar[Callable[..., Any] | None] = ContextVar(
     "_compile_body", default=None
 )
+# PyTorch 2.14.1 looks up and compiles graphs without a lock, so one compiled
+# body runs at a time.
+_lock = threading.Lock()
 
 
 def chunk_body(body: Callable[..., Any]) -> Callable[..., Any]:
@@ -67,12 +71,14 @@ def _dynamic_shapes(body: Callable[..., Any]) -> Callable[..., Any]:
         args = tuple(_mark_dynamic(arg) for arg in args)
         kwargs = {key: _mark_dynamic(arg) for key, arg in kwargs.items()}
         if out is None:
-            return body(*args, **kwargs)
+            with _lock:
+                return body(*args, **kwargs)
         # PyTorch 2.14.1 cannot compile a write to an input that shares its
         # memory with another input of dynamic size, so the graph writes to a
         # temporary.
         tmp = _mark_dynamic(torch.empty_like(out))
-        result = body(*args, out=tmp, **kwargs)
+        with _lock:
+            result = body(*args, out=tmp, **kwargs)
         out.copy_(tmp)
         return (out, *result[1:]) if isinstance(result, tuple) else out
 
