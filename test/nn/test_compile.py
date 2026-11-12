@@ -177,7 +177,7 @@ def test_sdpa_compile_dynamic_batch() -> None:
     key = torch.randn(3, 5, 2, 8)
     value = torch.randn_like(key)
     for tensor in (query, key, value):
-        torch._dynamo.mark_dynamic(tensor, 0, min=2, max=65_535)
+        torch._dynamo.mark_dynamic(tensor, 0)
     with torch.inference_mode():
         expected = module(query=query, key=key, value=value)
         out = fullgraph(module)(query=query, key=key, value=value)

@@ -24,7 +24,7 @@ import torch
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm._memory import chunk_memory_limit
+from sdm._memory import chunk_memory_limit, fits
 
 
 class CellEmbedding(torch.nn.Module):
@@ -169,6 +169,9 @@ class CellEmbedding(torch.nn.Module):
                 if torch.is_autocast_enabled(x.device.type)
                 else x.dtype,
             )
+
+        if fits(math.prod(B) * R * C, batch_size_limit):
+            return self._forward(x, freq, weight, bias, out=out, **kwargs)
 
         rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
         for chunk_index in range((R + rows_per_chunk - 1) // rows_per_chunk):

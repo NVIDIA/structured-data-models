@@ -233,8 +233,8 @@ class RowEmbedding(torch.nn.Module):
         return self.norm(buffer if buffer is not None else x).flatten(-2)
 
     def max_query_rows(self, cache: Cache, device: torch.device) -> int:
-        # The query rows `forward` embeds without splitting an attention
-        # batch, as limited by the blocks that split.
+        # The query rows `forward` embeds within the memory of one attention
+        # batch, which also keeps row attention within its kernel limit.
         key = cast(KVCacheEntry, cache["row_embedding.col_block0"]).key
         *B, C, M = key.size()[:-2]  # [..., C, M, H, D]
         K = self.readout_token.size(-2)

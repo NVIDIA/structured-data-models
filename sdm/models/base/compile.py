@@ -28,9 +28,11 @@ class DynamicShapes:
     :meth:`~sdm.models.ICLModel._dynamic_shapes`.
     """
 
-    #: The query rows the model predicts in one pass, i.e. without splitting
-    #: its work by the number of rows. Requires that the model and its
-    #: recipe predict query rows independently of each other.
+    #: The query rows one pass of the model holds in memory; larger queries
+    #: are split. The graph does not depend on the capacity, which only
+    #: trades memory for passes, as long as attention batches fit their
+    #: kernels. Requires that the model and its recipe predict query rows
+    #: independently of each other.
     query_rows: int | None = None
     # TODO: Declare context rows and columns here as dimensions of tensors in
     # the fitted cache, and mark them in `compile_predict`.
@@ -43,10 +45,10 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     With ``dynamic=False``, one graph serves the :class:`DynamicShapes` the
-    fitted model declares: queries are split into chunks of at most
-    ``query_rows`` rows, whose rows are marked as dynamic. Empty queries,
-    queries with related tables or callbacks, and models without a pass of at
-    least two rows are predicted eagerly.
+    fitted model declares: the query rows are marked as dynamic, and queries
+    are split into chunks of at most ``query_rows`` rows. Empty queries,
+    queries with related tables or callbacks, and models without capacity for
+    two rows are predicted eagerly.
 
     Args:
         model: The model.
@@ -65,11 +67,11 @@ def compile_predict(
         *,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:  # Recipe-defined output shape.
-        max_rows = _max_query_rows(model, x.device)
-        if max_rows is None:
+        capacity = _query_rows(model, x.device)
+        if capacity is None:
             return compiled(x, related_tables, callbacks=callbacks)
         if (
-            max_rows < 2
+            capacity < 2
             or x.size(-2) == 0
             or related_tables is not None
             or callbacks
@@ -77,13 +79,13 @@ def compile_predict(
             return model.predict(x, related_tables, callbacks=callbacks)
 
         outs: list[Tensor] = []
-        for start in range(0, x.size(-2), max_rows):
-            end = min(start + max_rows, x.size(-2))
+        for start in range(0, x.size(-2), capacity):
+            end = min(start + capacity, x.size(-2))
             # Gather every chunk, so all chunks share one layout, and repeat
             # the row of single-row chunks: a single row would specialize.
             index = torch.arange(start, max(end, start + 2), device=x.device)
             chunk = x.index_select(-2, index.clamp_(max=end - 1))
-            _mark_rows(chunk, max_rows)
+            _mark_rows(chunk)
             outs.append(compiled(chunk)[..., : end - start, :])
         out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=-2)
         return cast(TableTensor, out)
@@ -91,8 +93,8 @@ def compile_predict(
     return predict
 
 
-def _max_query_rows(model: ICLModel, device: torch.device) -> int | None:
-    # The query rows every batch of estimators predicts in one pass, or
+def _query_rows(model: ICLModel, device: torch.device) -> int | None:
+    # The query rows every batch of estimators holds in one pass, or
     # `None` if the model is not fitted or does not declare them.
     if model._cache is None:
         return None
@@ -103,7 +105,7 @@ def _max_query_rows(model: ICLModel, device: torch.device) -> int | None:
     return None if None in rows else min(cast(list[int], rows))
 
 
-def _mark_rows(x: Tensor, max_rows: int) -> None:
+def _mark_rows(x: Tensor) -> None:
     tensors = [x]
     if isinstance(x, TableTensor):
         # Marks reach inner tensors of the same rank only; the text layout
@@ -115,4 +117,4 @@ def _mark_rows(x: Tensor, max_rows: int) -> None:
             if storage is not None:
                 torch._dynamo.maybe_mark_dynamic(storage, 0)
     for tensor in tensors:
-        torch._dynamo.mark_dynamic(tensor, x.dim() - 2, min=2, max=max_rows)
+        torch._dynamo.mark_dynamic(tensor, x.dim() - 2)

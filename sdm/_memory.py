@@ -7,11 +7,22 @@ import torch
 from torch.fx.experimental.symbolic_shapes import statically_known_true
 
 
+def fits(num_items: int, limit: int) -> bool:
+    r"""Whether ``num_items`` fit ``limit``, *i.e.* take one chunk.
+
+    Equal to ``num_items <= limit`` for integers. A graph holds a fixed number
+    of chunks, so a size that is dynamic while compiling fits without a guard
+    unless it provably exceeds the limit: the caller of the graph has to
+    bound it.
+    """
+    return not statically_known_true(num_items > limit)
+
+
 def _split_tensor(
     tensor: torch.Tensor, size: int, dim: int
 ) -> tuple[torch.Tensor, ...]:
-    """Return one chunk when the dimension provably fits the split size."""
-    if statically_known_true(tensor.size(dim) <= size):
+    """Return one chunk when the dimension fits the split size."""
+    if fits(tensor.size(dim), size):
         return (tensor,)
     return tensor.split(size, dim=dim)
 
@@ -69,8 +80,7 @@ def split_size(num_items: int, item_bytes: int, device: torch.device) -> int:
         return max(num_items, 1)
     limit = max(chunk_memory_limit(device), 1)
     capacity = max(limit // item_bytes, 1)
-    # Avoid guards on the balanced-chunk arithmetic when one chunk fits.
-    if statically_known_true(num_items <= capacity):
+    if fits(num_items, capacity):
         return max(num_items, 1)
     num_chunks = max(-(-num_items // capacity), 1)
     return max(-(-num_items // num_chunks), 1)
