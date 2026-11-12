@@ -11,7 +11,14 @@ import torch
 from torch import Tensor
 
 import sdm.processing as sp
-from sdm import EnsembleTable, Recipe, RelatedTables, Stype, TableTensor
+from sdm import (
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableLike,
+    TableTensor,
+)
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.processing.recipe import _iter_modules
 
@@ -439,7 +446,7 @@ def _align_to_fitted_groups(
 
 
 def _to_ensemble_table(
-    x: Tensor | TableTensor | EnsembleTable,
+    x: Tensor | TableLike,
     num_estimators: int | None,
     *,
     expand: bool = False,
