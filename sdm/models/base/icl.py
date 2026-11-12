@@ -4,6 +4,7 @@
 import abc
 import copy
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
+from functools import partial
 from typing import Any, ClassVar, cast
 
 import torch
@@ -28,7 +29,7 @@ from sdm.processing.execution import (
     RecipeExecution,
 )
 from sdm.relational.task import RelatedTablesSchema
-from sdm.tensor.table import TableSchema
+from sdm.tensor.table import TableSchema, _mark_dynamic_rows
 
 
 class ICLModel(Model):
@@ -381,6 +382,18 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        return self._predict(
+            x, related_tables, callbacks=callbacks, forward=self._forward
+        )
+
+    def _predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+        forward: Callable[..., TableTensor],
+    ) -> TableTensor:  # Recipe-defined output shape.
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -460,6 +473,11 @@ class ICLModel(Model):
                     callbacks=callbacks,
                     requires_grad=requires_grad,
                     generator=None,
+                    forward=forward,
+                    # Autograd keeps the memory of every chunk.
+                    query_chunk_size=None
+                    if requires_grad
+                    else self._query_chunk_size(cache, x.device),
                     **cast(dict[str, Any], self._cache["kwargs"]),
                 )
 
@@ -490,7 +508,40 @@ class ICLModel(Model):
             :meth:`predict` itself is not compiled.
         """
         kwargs = {"isolate_recompiles": True} | kwargs
-        return torch.compile(self.predict, **kwargs)
+        compiled = torch.compile(self._forward, **kwargs)
+
+        def forward(x_query: TableTensor, **kwargs: Any) -> TableTensor:
+            num_rows = x_query.size(-2)
+            max_rows = self._query_chunk_size(kwargs["cache"], x_query.device)
+            if max_rows is None:
+                return compiled(x_query=x_query, **kwargs)
+            # Empty queries would specialize; queries with gradients are not
+            # chunked and may exceed the rows of one pass.
+            if num_rows == 0 or torch.is_grad_enabled():
+                return self._forward(x_query=x_query, **kwargs)
+            # Gather, so that views and copies share one graph, and repeat
+            # the row of single-row queries: 1-row inputs would specialize.
+            index = torch.arange(max(num_rows, 2), device=x_query.device)
+            x_query = x_query.index_select(-2, index.clamp_(max=num_rows - 1))
+            _mark_dynamic_rows(x_query, min_rows=2, max_rows=max_rows)
+            return compiled(x_query=x_query, **kwargs)[..., :num_rows, :]
+
+        return partial(self._predict, forward=forward)
+
+    def _query_chunk_size(
+        self,
+        cache: Cache,
+        device: torch.device,
+    ) -> int | None:
+        r"""The query rows one :meth:`_forward` of a fitted cache handles.
+
+        Models that predict query rows independently of each other return the
+        number of rows, more than two, that one pass handles without chunking
+        internally. :meth:`predict` then runs larger queries in chunks, and a
+        compiled :meth:`predict` reuses one graph for any number of query
+        rows. ``None`` runs every query in one pass.
+        """
+        return None
 
     # Abstract Methods ########################################################
 
@@ -671,6 +722,8 @@ class ICLModel(Model):
         callbacks: Sequence[Callback],
         requires_grad: bool,
         generator: torch.Generator | None,
+        forward: Callable[..., TableTensor] | None = None,
+        query_chunk_size: int | None = None,
         **kwargs: Any,
     ) -> list[TableTensor]:
         # Stacking inside the autograd region keeps callback-captured leaves
@@ -681,10 +734,10 @@ class ICLModel(Model):
                 assert contexts is not None
                 categorical_mask = _categorical_mask(contexts)
             query = _stack_query(queries)
-            out = self._forward(
+            forward = partial(
+                self._forward if forward is None else forward,
                 x_context=None if context is None else context.x,
                 y_context=None if context is None else context.y,
-                x_query=query.x,
                 x_context_only=None
                 if context is None
                 else context.x_context_only,
@@ -697,6 +750,20 @@ class ICLModel(Model):
                 categorical_mask=categorical_mask,
                 **kwargs,
             )
+            if (
+                query_chunk_size is None
+                or query.x.size(-2) <= query_chunk_size
+            ):
+                out = forward(x_query=query.x)
+            else:
+                # Run the query in chunks of rows that one pass handles.
+                chunks = query.x.split(query_chunk_size, dim=-2)
+                out = cast(
+                    TableTensor,
+                    torch.cat(
+                        [forward(x_query=chunk) for chunk in chunks], dim=-2
+                    ),
+                )
             outs = _unstack(out, class_values, len(queries))
             for i in range(len(outs)):
                 for callback in callbacks:
