@@ -6,7 +6,13 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, EnsembleTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleData,
+    EnsembleTable,
+    EnsembleTensor,
+    TableTensor,
+)
 
 
 def test_tensor_member_selection() -> None:
@@ -121,22 +127,16 @@ def test_replace_groups_rejects_group_count_mismatch() -> None:
         ensemble_table.replace_groups(tuple(ensemble_table._iter_groups()) * 2)
 
 
-def test_replace_tables_can_regroup_compatible_members() -> None:
-    ensemble_table = EnsembleTable(
-        groups=(
-            TableTensor.from_tensor(torch.tensor([[[0.0]], [[1.0]]])),
-            TableTensor.from_tensor(torch.tensor([[[2.0]], [[3.0]]])),
-        ),
-        locations=((0, 0), (0, 1), (1, 0), (1, 1)),
-    )
+def test_gather_members_regroups_compatible_members() -> None:
     tables = tuple(
         TableTensor.from_tensor(torch.tensor([[float(value)]]))
         for value in range(4)
     )
 
-    output = ensemble_table.replace_tables(
-        tables=tables,
-        member_table_ids=range(4),
+    ensemble_table = EnsembleTable.from_tables(tables, range(4))
+    output = ensemble_table.gather_members(
+        tables=(ensemble_table,) * 4,
+        member_ids=range(4),
     )
 
     assert output.num_groups == 1
@@ -146,7 +146,7 @@ def test_replace_tables_can_regroup_compatible_members() -> None:
 
 
 @pytest.mark.parametrize("shared_categories", [False, True])
-def test_replace_tables_preserves_category_identity(
+def test_gather_members_preserves_category_identity(
     shared_categories: bool,
 ) -> None:
     categories = torch.tensor([10, 20])
@@ -163,10 +163,10 @@ def test_replace_tables_preserves_category_identity(
             (torch.tensor([[1], [0]]), second_categories),
         )
     )
-    ensemble_table = EnsembleTable.from_table(tables[0], num_members=3)
-    output = ensemble_table.replace_tables(
-        tables=tables,
-        member_table_ids=(0, 1, 0),
+    ensemble_table = EnsembleTable.from_tables(tables, (0, 1, 0))
+    output = ensemble_table.gather_members(
+        tables=(ensemble_table,) * 3,
+        member_ids=range(3),
     )
 
     assert output.num_groups == (1 if shared_categories else 2)
@@ -211,7 +211,7 @@ def test_gather_members_rejects_source_count_mismatch() -> None:
         )
 
 
-def test_concatenate_columns_preserves_member_order() -> None:
+def test_column_concatenation_preserves_member_order() -> None:
     left = EnsembleTable.from_tables(
         tables=(
             TableTensor.from_tensor(
@@ -239,7 +239,7 @@ def test_concatenate_columns_preserves_member_order() -> None:
         member_table_ids=(1, 0, 1),
     )
 
-    output = EnsembleTable.concatenate_columns((left, right))
+    output = EnsembleData.execute(torch.cat, (left, right), dim=-1)
 
     assert output[0].numerical.tolist() == [
         [3.0, 30.0],
@@ -252,7 +252,7 @@ def test_concatenate_columns_preserves_member_order() -> None:
     assert output[2].equal(output[0])
 
 
-def test_concatenate_columns_regroups_different_layouts() -> None:
+def test_column_concatenation_regroups_different_layouts() -> None:
     left = EnsembleTable.from_tables(
         tables=(
             TableTensor.from_tensor(
@@ -274,7 +274,7 @@ def test_concatenate_columns_regroups_different_layouts() -> None:
         num_members=3,
     )
 
-    output = EnsembleTable.concatenate_columns((left, right))
+    output = EnsembleData.execute(torch.cat, (left, right), dim=-1)
 
     assert output[0].numerical.tolist() == [
         [3.0, 10.0],
@@ -287,13 +287,15 @@ def test_concatenate_columns_regroups_different_layouts() -> None:
     assert output[2].equal(output[0])
 
 
-def test_concatenate_columns_rejects_different_member_counts() -> None:
+def test_column_concatenation_rejects_different_member_counts() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
 
     with pytest.raises(ValueError, match="same number of members"):
-        EnsembleTable.concatenate_columns(
+        EnsembleData.execute(
+            torch.cat,
             (
                 EnsembleTable.from_table(table, num_members=2),
                 EnsembleTable.from_table(table, num_members=3),
-            )
+            ),
+            dim=-1,
         )

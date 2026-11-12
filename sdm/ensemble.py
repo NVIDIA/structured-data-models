@@ -719,18 +719,6 @@ class EnsembleTensor(EnsembleData[TensorT]):
                 return cast(TensorT, group.expand(len(self), *group.shape[1:]))
         return cast(TensorT, torch.stack(tuple(self)))
 
-    def mean(
-        self,
-        dim: int | tuple[int, ...] | None = None,
-        keepdim: bool = False,
-        *,
-        dtype: torch.dtype | None = None,
-    ) -> EnsembleTensor:
-        """Return each member's mean along logical tensor dimensions."""
-        return EnsembleData.execute(
-            torch.mean, self, dim=dim, keepdim=keepdim, dtype=dtype
-        )
-
     def __add__(self, other: Any) -> EnsembleTensor:
         return EnsembleData.execute(operator.add, self, other)
 
@@ -1196,9 +1184,10 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
                 outputs.append(table[member_id])
             member_table_ids.append(output_id)
 
-        return self.replace_tables(
-            tables=outputs,
-            member_table_ids=member_table_ids,
+        groups, locations = self._pack_tables(outputs)
+        return self.__class__(
+            groups=groups,
+            locations=tuple(locations[index] for index in member_table_ids),
         )
 
     @property
@@ -1236,40 +1225,6 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
             )
         return self.replace_groups(
             [group.select_stypes(stypes) for group in self._groups]
-        )
-
-    @classmethod
-    def concatenate_columns(cls, tables: Sequence[Self]) -> Self:
-        """Concatenate columns of corresponding ensemble members.
-
-        Args:
-            tables: Ensemble tables with equal member counts.
-        """
-        nonempty = tuple(table for table in tables if table.active_stypes)
-        tables = nonempty or tables
-        if len(tables) == 1:
-            return tables[0]
-        return EnsembleData.execute(torch.cat, tables, dim=-1)
-
-    def replace_tables(
-        self, tables: Sequence[TableTensor], member_table_ids: Sequence[int]
-    ) -> Self:
-        """Replace logical members, packing compatible replacement tables.
-
-        Args:
-            tables: Replacement tables available to the ensemble members.
-            member_table_ids: Index into tables for each logical member.
-        """
-        if len(member_table_ids) != len(self):
-            raise ValueError("Expected one replacement table per member")
-        table_ids = tuple(dict.fromkeys(member_table_ids))
-        groups, locations = self._pack_tables(
-            tuple(tables[index] for index in table_ids)
-        )
-        by_table = dict(zip(table_ids, locations))
-        return self.__class__(
-            groups=groups,
-            locations=tuple(by_table[index] for index in member_table_ids),
         )
 
     def replace_groups(self, groups: Sequence[TableTensor]) -> Self:

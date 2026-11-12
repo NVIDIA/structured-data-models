@@ -110,23 +110,14 @@ class Processor(torch.nn.Module, abc.ABC):
             )
         )
 
-    @property
-    def _fitted(self) -> bool:
-        return self.__fitted
-
-    @_fitted.setter
-    def _fitted(self, value: bool) -> None:
-        self._update_fitted(value)
-
     def _update_fitted(self, value: bool) -> None:
-        # Internal callers avoid deferring the property setter until replay.
         self.__fitted = value
         self._fitted_state.fill_(value)
 
     @property
     def is_fitted(self) -> bool:
         """Whether the processor has all state required for transformation."""
-        return not self.requires_fit or self._fitted
+        return not self.requires_fit or self.__fitted
 
     @staticmethod
     def as_processor(processor: object) -> Processor:
