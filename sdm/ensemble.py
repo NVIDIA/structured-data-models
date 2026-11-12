@@ -23,8 +23,6 @@ class EnsembleData(Generic[T]):
     """Represent an ordered collection of ensemble member values.
 
     Each group stores one value, which may be shared by multiple members.
-    Use :class:`EnsembleTensor` when a leading tensor dimension represents
-    ensemble members.
 
     Args:
         groups: Values containing the ensemble members.
