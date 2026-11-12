@@ -96,7 +96,7 @@ class KumoForecast(ICLModel):
     )
     metadata: ClassVar[Mapping[str, str]] = {
         "Output": "Point predictions per target and time step",
-        "Missing Values": "Handled natively",
+        "Missing Values": "Zero imputation in the default recipe",
         "Pretraining Scope": "Up to 512 rows",
     }
 
@@ -201,6 +201,12 @@ class KumoForecast(ICLModel):
                 f"Expected 'alpha' between zero and one (got {alpha})"
             )
 
+        if y_context.size(-2) < self.model.context_size:
+            raise ValueError(
+                f"Expected at least {self.model.context_size} context rows "
+                f"(got {y_context.size(-2)})"
+            )
+
         horizon = x_query.size(-2)
         context_size = self.model.context_size
         prediction_size = self.model.prediction_size
@@ -226,12 +232,6 @@ class KumoForecast(ICLModel):
 
         # Forecast:
         last_x = x[..., -self.model.context_size :]
-        if last_x.size(-1) < context_size:
-            last_x = torch.nn.functional.pad(
-                last_x,
-                pad=(context_size - last_x.size(-1), 0),
-                value=float("nan"),
-            )
         encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
         out = self.model.decode(encoded, mean, scale)
 
