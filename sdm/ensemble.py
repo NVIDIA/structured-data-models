@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Generic, Self, TypeAlias, TypeVar, cast, overload
+from typing import Generic, Self, TypeAlias, cast, overload
 
 import torch
 from torch import Tensor
