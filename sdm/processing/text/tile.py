@@ -13,7 +13,7 @@ from sdm import TableTensor
 
 
 def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
-    """Join text cells as ``The {column} is {value}.`` sentences per row.
+    """Join cells as ``The {column} is {value}.`` sentences per row.
 
     Args:
         table: The input table with shape ``[..., C]``, where ``C`` is the
