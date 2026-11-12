@@ -299,9 +299,7 @@ def test_tabiclv2_many_classes_forward_and_cache(
 def test_compile_predict_query_rows(
     device: torch.device,
     num_classes: int,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_: 8)
     model = TabICLv2(pretrained=False, device=device)
     x = torch.randn(49, 6, device=device)
     y = torch.randn(40, 1, device=device)

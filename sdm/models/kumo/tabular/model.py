@@ -110,6 +110,7 @@ class KumoTabular(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes(query=(-2,))
 
     paper: ClassVar[str] = "https://huggingface.co/blog/nvidia/kumo-tabular"
     source: ClassVar[str] = (
@@ -171,20 +172,6 @@ class KumoTabular(ICLModel):
             coverage possible.
         """  # noqa: D212
         return default_recipe()
-
-    def _dynamic_shapes(
-        self,
-        cache: Cache,
-        device: torch.device,
-    ) -> DynamicShapes:
-        regression = cache["classes"] is None
-        task = Task.regression if regression else Task.classification
-        row_embedding = cast(_KumoTabular, self.models[task]).row_embedding
-        # ECOC nests the model cache when classes exceed its capacity.
-        cache = cast(Cache, cache.get("ecoc_model", cache))
-        return DynamicShapes(
-            query_rows=row_embedding.max_query_rows(cache, device),
-        )
 
     def _load_from_pretrained(
         self,

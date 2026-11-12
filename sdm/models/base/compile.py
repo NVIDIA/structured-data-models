@@ -7,13 +7,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.cache import Cache
+from sdm._memory import single_chunk
 from sdm.models.base.callback import Callback
 
 if TYPE_CHECKING:
@@ -22,19 +22,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class DynamicShapes:
-    r"""The sizes one compiled graph of a model serves; ``None`` is static.
+    r"""The dimensions one compiled graph of a model keeps dynamic.
 
-    A model declares them per batch of estimators in
-    :meth:`~sdm.models.ICLModel._dynamic_shapes`.
+    A model declares them as :attr:`~sdm.models.ICLModel._dynamic_shapes`.
     """
 
-    #: The query rows one pass of the model holds in memory; larger queries
-    #: are split. The graph does not depend on the capacity, which only
-    #: trades memory for passes, as long as attention batches fit their
-    #: kernels. Requires that the model and its recipe predict query rows
-    #: independently of each other.
-    query_rows: int | None = None
-    # TODO: Declare context rows and columns here as dimensions of tensors in
+    #: The dimensions of the query. Rows (``-2``) require that the model and
+    #: its recipe predict every query row independently of the other rows.
+    query: tuple[int, ...] = ()
+    # TODO: Declare context rows and columns as the dimensions of tensors in
     # the fitted cache, and mark them in `compile_predict`.
 
 
@@ -44,11 +40,11 @@ def compile_predict(
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
-    With ``dynamic=False``, one graph serves the :class:`DynamicShapes` the
-    fitted model declares: the query rows are marked as dynamic, and queries
-    are split into chunks of at most ``query_rows`` rows. Empty queries,
-    queries with related tables or callbacks, and models without capacity for
-    two rows are predicted eagerly.
+    With ``dynamic=False``, the graph keeps the :class:`DynamicShapes` the
+    model declares dynamic. It predicts a query in a single chunk, so its
+    memory grows with the query: split large queries before calling it.
+    Empty queries and queries with related tables or callbacks are predicted
+    eagerly.
 
     Args:
         model: The model.
@@ -58,7 +54,8 @@ def compile_predict(
     """
     kwargs = {"isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    if kwargs.get("dynamic") is not False:
+    dims = model._dynamic_shapes.query
+    if kwargs.get("dynamic") is not False or not dims:
         return compiled
 
     def predict(
@@ -67,54 +64,28 @@ def compile_predict(
         *,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:  # Recipe-defined output shape.
-        capacity = _query_rows(model, x.device)
-        if capacity is None:
-            return compiled(x, related_tables, callbacks=callbacks)
-        if (
-            capacity < 2
-            or x.size(-2) == 0
-            or related_tables is not None
-            or callbacks
-        ):
+        rows = x.size(-2)
+        if rows == 0 or related_tables is not None or callbacks:
             return model.predict(x, related_tables, callbacks=callbacks)
-
-        outs: list[Tensor] = []
-        for start in range(0, x.size(-2), capacity):
-            end = min(start + capacity, x.size(-2))
-            # Gather every chunk, so all chunks share one layout, and repeat
-            # the row of single-row chunks: a single row would specialize.
-            index = torch.arange(start, max(end, start + 2), device=x.device)
-            chunk = x.index_select(-2, index.clamp_(max=end - 1))
-            _mark_rows(chunk)
-            outs.append(compiled(chunk)[..., : end - start, :])
-        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=-2)
-        return cast(TableTensor, out)
+        # A contiguous copy has the same layout for any view of a query. A
+        # single row would specialize, so it is repeated.
+        x = (
+            torch.cat([x, x], dim=-2)
+            if rows == 1
+            else x.clone(memory_format=torch.contiguous_format)
+        )
+        _mark_dynamic(x, dims)
+        with single_chunk():
+            out = compiled(x)
+        return out[..., :1, :] if rows == 1 else out
 
     return predict
 
 
-def _query_rows(model: ICLModel, device: torch.device) -> int | None:
-    # The query rows every batch of estimators holds in one pass, or
-    # `None` if the model is not fitted or does not declare them.
-    if model._cache is None:
-        return None
-    rows = [
-        model._dynamic_shapes(cast(Cache, model._cache[i]), device).query_rows
-        for i in range(cast(int, model._cache["num_batches"]))
-    ]
-    return None if None in rows else min(cast(list[int], rows))
-
-
-def _mark_rows(x: Tensor) -> None:
-    tensors = [x]
-    if isinstance(x, TableTensor):
-        # Marks reach inner tensors of the same rank only; the text layout
-        # has one more dimension.
-        text = x.text
-        tensors.append(text._layout)
-        # The text storage varies in size with the rows.
-        for storage in (text._data, text._offset, text._valid):
-            if storage is not None:
-                torch._dynamo.maybe_mark_dynamic(storage, 0)
-    for tensor in tensors:
-        torch._dynamo.mark_dynamic(tensor, x.dim() - 2)
+def _mark_dynamic(tensor: Tensor, dims: tuple[int, ...]) -> None:
+    for dim in dims:
+        dim %= tensor.dim()
+        if isinstance(tensor, TableTensor):
+            tensor._mark_dynamic(dim)
+        else:
+            torch._dynamo.mark_dynamic(tensor, dim)

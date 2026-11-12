@@ -128,6 +128,7 @@ class TabICLv2(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes(query=(-2,))
 
     paper: ClassVar[str] = "https://arxiv.org/abs/2602.11139"
     source: ClassVar[str] = "https://github.com/soda-inria/tabicl"
@@ -179,18 +180,6 @@ class TabICLv2(ICLModel):
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
-
-    def _dynamic_shapes(
-        self,
-        cache: Cache,
-        device: torch.device,
-    ) -> DynamicShapes:
-        regression = cache["classes"] is None
-        task = Task.regression if regression else Task.classification
-        row_embedding = cast(_TabICLv2, self.models[task]).row_embedding
-        return DynamicShapes(
-            query_rows=row_embedding.max_query_rows(cache, device),
-        )
 
     def _load_from_pretrained(
         self,

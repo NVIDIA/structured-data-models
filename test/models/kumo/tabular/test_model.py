@@ -10,7 +10,6 @@ from torch._dynamo.testing import CompileCounter
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import KumoTabular
-from sdm.models.kumo.tabular.row_embedding import RowEmbedding
 from sdm.testing import onlyMPS, withCUDA
 
 
@@ -415,9 +414,7 @@ def test_compile_predict_static_shapes(
 def test_compile_predict_query_rows(
     device: torch.device,
     num_classes: int,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_: 8)
     task = "classification" if num_classes > 0 else "regression"
     model = _build(task, "small").to(device)
     # The size of the text storage differs from query to query.

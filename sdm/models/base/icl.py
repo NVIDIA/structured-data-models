@@ -58,6 +58,9 @@ class ICLModel(Model):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
+    #: The dimensions a compiled :meth:`predict` keeps dynamic.
+    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -490,19 +493,6 @@ class ICLModel(Model):
             :meth:`predict` itself is not compiled.
         """
         return compile_predict(self, **kwargs)
-
-    def _dynamic_shapes(
-        self,
-        cache: Cache,
-        device: torch.device,
-    ) -> DynamicShapes:
-        r"""The sizes a compiled :meth:`predict` keeps dynamic.
-
-        Args:
-            cache: The fitted cache of one batch of estimators.
-            device: The device of the query.
-        """
-        return DynamicShapes()
 
     # Abstract Methods ########################################################
 
