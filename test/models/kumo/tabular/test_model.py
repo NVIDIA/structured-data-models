@@ -5,11 +5,12 @@ from typing import Literal
 
 import pytest
 import torch
-from torch._dynamo.testing import CompileCounter
+from torch._dynamo.testing import CompileCounterWithBackend
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import KumoTabular
+from sdm.nn import TransformerBlock
 from sdm.testing import onlyMPS
 
 
@@ -360,14 +361,21 @@ def test_estimator_batching_many_classes(
 
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("task", ["classification", "regression"])
-def test_compile_predict_static_shapes(
+def test_compile_predict(
     task: Literal["classification", "regression"],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Row attention splits queries of more than eight rows into chunks.
+    monkeypatch.setattr(
+        TransformerBlock,
+        "auto_batch_size_limit",
+        lambda *args, **kwargs: 8,
+    )
     model = _build(task, "small")
-    code = torch.arange(48, dtype=torch.int32).remainder(3).unsqueeze(-1)
+    code = torch.arange(64, dtype=torch.int32).remainder(3).unsqueeze(-1)
     x = torch.cat(
         [
-            TableTensor.from_tensor(torch.randn(48, 4)),
+            TableTensor.from_tensor(torch.randn(64, 4)),
             TableTensor(
                 columns={Stype.categorical: ("categorical",)},
                 categorical=CategoricalTensor(
@@ -376,7 +384,7 @@ def test_compile_predict_static_shapes(
                 ),
             ),
             TableTensor.from_tensor(
-                StringTensor.from_list([["a" * (i % 5)] for i in range(48)]),
+                StringTensor.from_list([["a" * (i % 5)] for i in range(64)]),
                 columns=["text"],
             ),
         ],
@@ -390,21 +398,24 @@ def test_compile_predict_static_shapes(
         )
     model.fit(x[:40], y, num_estimators=4)
 
-    counter = CompileCounter()
+    counter = CompileCounterWithBackend("aot_eager")
     predict = model._compile_predict(
         backend=counter,
         fullgraph=True,
         dynamic=False,
     )
-    # Queries of the same size reuse one graph.
-    for _ in range(2):
+    predict(x[40:48])
+    frame_count = counter.frame_count
+    assert frame_count > 0
+    # Other query sizes and chunk counts reuse the compiled bodies.
+    for rows in (3, 24):
         torch.testing.assert_close(
-            actual=predict(x[40:]).numerical,
-            expected=model.predict(x[40:]).numerical,
+            actual=predict(x[-rows:]).numerical,
+            expected=model.predict(x[-rows:]).numerical,
             atol=1e-4,
             rtol=1e-4,
         )
-    assert counter.frame_count == 1
+    assert counter.frame_count == frame_count
 
 
 @onlyMPS

@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm._compile import chunk_body
 from sdm._memory import _split_tensor, chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
@@ -708,8 +709,9 @@ class TransformerBlock(torch.nn.Module):
             ):
                 disable_chunking = True
 
+        forward = chunk_body(self._forward)
         if disable_chunking:
-            return self._forward(
+            return forward(
                 query=query,
                 key_value=key_value,
                 seqused_key_value=seqused_key_value,
@@ -731,7 +733,7 @@ class TransformerBlock(torch.nn.Module):
         for start in range(0, batch_size, batch_size_limit):
             end = min(start + batch_size_limit, batch_size)
 
-            result = self._forward(
+            result = forward(
                 query=_chunk(query, batch_shape, 2, start, end),
                 key_value=_chunk(key_value, batch_shape, 2, start, end),
                 seqused_key_value=_chunk(

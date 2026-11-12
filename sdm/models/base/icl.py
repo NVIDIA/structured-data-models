@@ -18,6 +18,7 @@ from sdm import (
     Task,
     TaskLike,
 )
+from sdm._compile import compile_chunk_bodies
 from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
@@ -478,11 +479,14 @@ class ICLModel(Model):
             return recipe_execution.transform_output(outs)
 
     def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
-        r"""Compile :meth:`predict` using :func:`torch.compile`.
+        r"""Compile the chunk bodies of :meth:`predict`.
+
+        The bodies are compiled using :func:`torch.compile`. The chunk loops
+        stay in Python, so a query of any size runs the compiled bodies.
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`.
-                ``isolate_recompiles`` defaults to ``True``, since all models
+                ``isolate_recompiles`` defaults to ``True``, since all bodies
                 would otherwise share one recompile limit.
 
         Returns:
@@ -490,7 +494,7 @@ class ICLModel(Model):
             :meth:`predict` itself is not compiled.
         """
         kwargs = {"isolate_recompiles": True} | kwargs
-        return torch.compile(self.predict, **kwargs)
+        return compile_chunk_bodies(self.predict, **kwargs)
 
     # Abstract Methods ########################################################
 

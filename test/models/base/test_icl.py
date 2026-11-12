@@ -6,7 +6,6 @@ from typing import Any, ClassVar, cast
 
 import pytest
 import torch
-from torch._dynamo.testing import CompileCounter
 
 import sdm.processing as sp
 from sdm import (
@@ -544,21 +543,6 @@ def test_predict_validates_cached_input_schema() -> None:
 
     with pytest.raises(ValueError, match="same schema"):
         model.predict(torch.randn(2, 3, 4))
-
-
-@pytest.mark.usefixtures("compilation")
-def test_compile_predict() -> None:
-    model = _RecordingModel()
-    model.fit(torch.randn(4, 3), torch.randn(4, 1))
-    x = torch.randn(2, 3)
-
-    counter = CompileCounter()
-    predict = model._compile_predict(backend=counter)
-    torch.testing.assert_close(
-        predict(x).numerical,
-        model.predict(x).numerical,
-    )
-    assert counter.frame_count == 1
 
 
 def test_related_table_validation() -> None:

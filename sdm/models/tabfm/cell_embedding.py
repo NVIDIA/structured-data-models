@@ -24,6 +24,7 @@ import torch
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm._compile import chunk_body
 from sdm._memory import chunk_memory_limit
 
 
@@ -159,8 +160,9 @@ class CellEmbedding(torch.nn.Module):
                 batch_size_limit = memory_limit // max(bytes_per_example, 1)
                 batch_size_limit = max(batch_size_limit, 1)
 
+        forward = chunk_body(self._forward)
         if batch_size_limit is None:
-            return self._forward(x, freq, weight, bias, out=out, **kwargs)
+            return forward(x, freq, weight, bias, out=out, **kwargs)
 
         if out is None:
             out = x.new_empty(
@@ -173,7 +175,7 @@ class CellEmbedding(torch.nn.Module):
         rows_per_chunk = max(1, batch_size_limit // max(math.prod(B) * C, 1))
         for chunk_index in range((R + rows_per_chunk - 1) // rows_per_chunk):
             start = chunk_index * rows_per_chunk
-            self._forward(
+            forward(
                 x=x[..., start : start + rows_per_chunk, :, :],
                 freq=freq,
                 weight=weight,
