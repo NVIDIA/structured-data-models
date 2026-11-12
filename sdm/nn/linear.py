@@ -27,7 +27,7 @@ class Linear(torch.nn.Linear):
         input = input.to(out.dtype)
         weight = self.weight.to(out.dtype).t()
 
-        if torch.compiler.is_compiling() and not out.is_contiguous():
+        if torch.compiler.is_dynamo_compiling() and not out.is_contiguous():
             out.copy_(torch.matmul(input, weight))
         elif input.dim() == 2:
             torch.matmul(input, weight, out=out)

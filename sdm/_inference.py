@@ -27,7 +27,7 @@ def inference_mode(
         # https://github.com/pytorch/pytorch/issues/180823
         context = (
             torch.no_grad()
-            if torch.compiler.is_compiling()
+            if torch.compiler.is_dynamo_compiling()
             else torch.inference_mode()
         )
     elif mode == "no_grad":

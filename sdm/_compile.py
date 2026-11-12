@@ -22,7 +22,7 @@ def chunk_body(body: Callable[..., Any]) -> Callable[..., Any]:
     This is ``body`` itself, or its compiled version while a function returned
     by :func:`compile_chunk_bodies` runs.
     """
-    if torch.compiler.is_compiling():
+    if torch.compiler.is_dynamo_compiling():
         return body
     compile_body = _compile_body.get()
     return body if compile_body is None else compile_body(body)
