@@ -485,13 +485,13 @@ class ICLModel(Model):
         stay in Python, so a query of any size runs the compiled bodies, except
         for a query of fewer than two rows, which runs :meth:`predict` itself.
         The bodies of all models share their graphs, so a forward hook on a
-        module inside a body is not supported.
+        module inside a body is not supported. Threads run the compiled bodies
+        one at a time.
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`.
-                ``recompile_limit`` defaults to ``256``, the most graphs that
-                PyTorch keeps for one function, since the bodies also share
-                one recompile limit.
+                ``recompile_limit`` defaults to ``256``, since the bodies of
+                all models also share one recompile limit.
 
         Returns:
             The compiled function, which is called like :meth:`predict`.

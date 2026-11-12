@@ -15,9 +15,9 @@ from sdm.cache import KVCacheEntry
 _compile_body: ContextVar[Callable[..., Any] | None] = ContextVar(
     "_compile_body", default=None
 )
-# PyTorch 2.14.1 looks up and compiles graphs without a lock, so one compiled
-# body runs at a time.
-_lock = threading.Lock()
+# Threads that look up a graph at the same time can miss it in PyTorch 2.14.1
+# and compile it again, so one compiled body runs at a time.
+_lock = threading.RLock()
 
 
 def chunk_body(body: Callable[..., Any]) -> Callable[..., Any]:
