@@ -6,12 +6,12 @@ from datetime import datetime
 import torch
 
 from sdm import TableTensor
-from sdm.processing.text.tile import serialize_text
+from sdm.processing.text.tile import textify
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_serialize_text(device: torch.device) -> None:
+def test_textify(device: torch.device) -> None:
     table = TableTensor.from_columns(
         data={
             "description": ["gem 💎", None],
@@ -46,7 +46,7 @@ def test_serialize_text(device: torch.device) -> None:
         ],
     ]
 
-    array, span = serialize_text(table)
+    array, span = textify(table)
 
     assert array.to_pylist() == [" ".join(sentences) for sentences in expected]
     assert span.size() == (2, 5, 2)

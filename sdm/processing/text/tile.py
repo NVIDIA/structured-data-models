@@ -12,7 +12,7 @@ from torch import Tensor
 from sdm import TableTensor
 
 
-def serialize_text(table: TableTensor) -> tuple[pa.Array, Tensor]:
+def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
     """Join text cells as ``The {column} is {value}.`` sentences per row.
 
     Args:
