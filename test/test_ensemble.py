@@ -1,12 +1,98 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterable
 from typing import cast
 
 import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, EnsembleTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleData,
+    EnsembleTable,
+    EnsembleTensor,
+    TableTensor,
+)
+
+
+@pytest.mark.parametrize(
+    "values", [("first", "second"), (["first"], ["second"])]
+)
+def test_data_member_selection(
+    values: tuple[str, str] | tuple[list[str], list[str]],
+) -> None:
+    ensemble = EnsembleData(
+        groups=values,
+        locations=((1, 0), (0, 0), (1, 0)),
+    )
+
+    assert tuple(ensemble) == (values[1], values[0], values[1])
+    assert ensemble[0] is ensemble[2]
+    selected = ensemble[2, 0, 2]
+    assert tuple(selected) == (values[1],) * 3
+    assert selected[0] is values[1]
+    assert tuple(ensemble[1:]) == (values[0], values[1])
+    assert ensemble[-1] is values[1]
+    assert len(ensemble[()]) == 0
+
+
+def test_column_names() -> None:
+    batch = TableTensor.from_tensor(
+        tensor=torch.zeros(2, 3, 2),
+        columns=("first", "second"),
+    )
+    other = TableTensor.from_tensor(
+        tensor=torch.ones(1, 4, 1),
+        columns=("other",),
+    )
+    ensemble = EnsembleTable(
+        groups=(batch, other),
+        locations=((0, 1), (1, 0), (0, 0), (0, 1)),
+    )
+
+    names = ensemble.column_names
+
+    assert isinstance(names, EnsembleData)
+    assert tuple(names) == (
+        frozenset(("first", "second")),
+        frozenset(("other",)),
+        frozenset(("first", "second")),
+        frozenset(("first", "second")),
+    )
+    assert names[0] is names[2] is names[3]
+    assert len(EnsembleTable(groups=(), locations=()).column_names) == 0
+
+
+@pytest.mark.parametrize("columns", ["keep", ("keep",), iter(("keep",)), ()])
+def test_select_columns(columns: str | Iterable[str]) -> None:
+    batch = TableTensor.from_tensor(
+        tensor=torch.arange(12, dtype=torch.float32).view(2, 3, 2),
+        columns=("keep", "drop"),
+    )
+    other = TableTensor.from_tensor(
+        tensor=torch.ones(1, 4, 3),
+        columns=("drop", "keep", "extra"),
+    )
+    ensemble = EnsembleTable(
+        groups=(batch, other),
+        locations=((0, 1), (1, 0), (0, 0), (0, 1)),
+    )
+    expected = () if columns == () else ("keep",)
+
+    selected = ensemble.select_columns(columns)
+
+    assert len(selected) == len(ensemble)
+    assert selected.num_groups == ensemble.num_groups
+    for group, source in zip(
+        selected._iter_groups(), (batch, other), strict=True
+    ):
+        assert group.equal(source.select_columns(expected))
+        assert group.size(0) == source.size(0)
+    for member_id in range(len(ensemble)):
+        assert selected[member_id].equal(
+            ensemble[member_id].select_columns(expected)
+        )
 
 
 def test_tensor_member_selection() -> None:
