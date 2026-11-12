@@ -4,14 +4,13 @@
 import os
 
 import torch
-from torch.fx.experimental.symbolic_shapes import statically_known_true
 
 
 def _split_tensor(
     tensor: torch.Tensor, size: int, dim: int
 ) -> tuple[torch.Tensor, ...]:
-    """Return one chunk when the dimension provably fits the split size."""
-    if statically_known_true(tensor.size(dim) <= size):
+    """Return one chunk when the dimension fits the split size."""
+    if tensor.size(dim) <= size:
         return (tensor,)
     return tensor.split(size, dim=dim)
 
@@ -69,8 +68,7 @@ def split_size(num_items: int, item_bytes: int, device: torch.device) -> int:
         return max(num_items, 1)
     limit = max(chunk_memory_limit(device), 1)
     capacity = max(limit // item_bytes, 1)
-    # Avoid guards on the balanced-chunk arithmetic when one chunk fits.
-    if statically_known_true(num_items <= capacity):
+    if num_items <= capacity:
         return max(num_items, 1)
     num_chunks = max(-(-num_items // capacity), 1)
     return max(-(-num_items // num_chunks), 1)

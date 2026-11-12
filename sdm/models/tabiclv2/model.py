@@ -127,6 +127,8 @@ class TabICLv2(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    _supports_predict_graph: ClassVar[bool] = True
+    _independent_query_rows: ClassVar[bool] = True
 
     paper: ClassVar[str] = "https://arxiv.org/abs/2602.11139"
     source: ClassVar[str] = "https://github.com/soda-inria/tabicl"
@@ -251,8 +253,16 @@ class TabICLv2(ICLModel):
         out = self.models[Task.classification](
             x, y, cache=cache, num_classes=len(classes)
         )
+        if cache is not None and cache.is_replaying:
+            columns = cast(tuple[str, ...], cache["class_columns"])
+        else:
+            columns = tuple(str(i) for i in classes.tolist())
+
+        if cache is not None and cache.is_recording:
+            cache["class_columns"] = columns
+
         return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
+            columns={Stype.numerical: columns},
             numerical=out[..., : len(classes)],
         )
 

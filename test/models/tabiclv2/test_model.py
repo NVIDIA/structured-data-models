@@ -1,8 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 import torch
+from torch._dynamo.backends.registry import lookup_backend
 
 from sdm import Recipe
 from sdm.models import TabICLv2
@@ -289,6 +293,52 @@ def test_tabiclv2_many_classes_forward_and_cache(
         estimator_batch_size=estimator_batch_size,
     )
     assert model.predict(x_query).allclose(out)
+
+
+@pytest.mark.usefixtures("compilation")
+# More than 10 classes run through hierarchical classification.
+@pytest.mark.parametrize("num_classes", [0, 11])
+def test_compile_predict_refit(num_classes: int) -> None:
+    compiled = called = 0
+
+    def backend(*args: Any) -> Callable[..., Any]:
+        nonlocal compiled
+        compiled += 1
+        graph = lookup_backend("aot_eager")(*args)
+
+        def call(*args: Any) -> Any:
+            nonlocal called
+            called += 1
+            return graph(*args)
+
+        return call
+
+    model = TabICLv2(pretrained=False)
+    predict = model._compile_predict(
+        backend=backend,
+        fullgraph=True,
+        dynamic=False,
+    )
+    for fit, (rows, columns) in enumerate(((60, 6), (90, 6), (90, 9))):
+        x = torch.randn(rows + 40, columns)
+        y = torch.randn(rows, 1)
+        if num_classes > 0:
+            y = torch.arange(rows).remainder(num_classes).unsqueeze(-1)
+        model.fit(x[:rows], y, num_estimators=4)
+        for size in (5, 1, 40):
+            torch.testing.assert_close(
+                actual=predict(x[-size:]).numerical,
+                expected=model.predict(x[-size:]).numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
+            # Every query after the first of a fit runs one graph.
+            assert size == 5 or called == 1
+            called = 0
+        if fit == 0:
+            graphs = compiled
+        # A refit compiles one graph and reuses the chunk bodies.
+        assert compiled == graphs + fit
 
 
 @onlyCUDA

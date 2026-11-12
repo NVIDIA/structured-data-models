@@ -3,6 +3,7 @@
 
 import abc
 import copy
+import weakref
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
@@ -479,15 +480,20 @@ class ICLModel(Model):
             return recipe_execution.transform_output(outs)
 
     def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
-        r"""Compile the chunk bodies of :meth:`predict`.
+        r"""Compile :meth:`predict` using :func:`torch.compile`.
 
-        The bodies are compiled using :func:`torch.compile`. The chunk loops
-        stay in Python, so a query of any size runs the compiled bodies, except
-        for a query of fewer than two rows, which runs :meth:`predict` itself.
+        The chunk bodies of :meth:`predict` are compiled, and its chunk loops
+        stay in Python, so a query of any size runs the compiled bodies. A
+        model that supports it also compiles all of :meth:`predict` into one
+        graph, on two rows of the first query after every :meth:`fit`. A query
+        runs this graph while it fits one chunk everywhere, which the guards
+        of the graph decide, and the graph never compiles again. A query of
+        fewer than two rows runs :meth:`predict` itself, except that a model
+        with independent query rows predicts a single row twice.
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`.
-                ``isolate_recompiles`` defaults to ``True``, since all bodies
+                ``isolate_recompiles`` defaults to ``True``, since all graphs
                 would otherwise share one recompile limit.
 
         Returns:
@@ -497,13 +503,65 @@ class ICLModel(Model):
         kwargs = {"isolate_recompiles": True} | kwargs
         predict = compile_chunk_bodies(self.predict, **kwargs)
 
-        def wrapper(x: Tensor | TableTensor, *args: Any, **kwargs: Any) -> Any:
-            # PyTorch specializes graphs on sizes of zero and one, so a query
-            # of fewer than two rows runs in Python.
-            fn = predict if x.size(-2) > 1 else self.predict
-            return fn(x, *args, **kwargs)
+        def predict_graph(x: Tensor | TableTensor) -> TableTensor | None:
+            # A query that the guards of the graph reject runs this function
+            # in Python, which returns nothing.
+            if torch.compiler.is_dynamo_compiling():
+                return self.predict(x)
+            return None
+
+        graph = predict_graph
+        captured: weakref.ref[Cache] | None = None
+
+        def wrapper(
+            x: Tensor | TableTensor,  # [..., R, D]
+            related_tables: RelatedTables | None = None,
+            *,
+            callbacks: Sequence[Callback] | None = None,
+        ) -> TableTensor:
+            nonlocal captured, graph
+            rows = x.size(-2)
+            plain = related_tables is None and not callbacks
+            # PyTorch specializes graphs on sizes of zero and one, so a single
+            # row is predicted twice if nothing else depends on it.
+            if rows == 1 and plain and self._independent_query_rows:
+                return wrapper(torch.cat([x, x], dim=-2))[..., :1, :]
+            if rows < 2:
+                return self.predict(x, related_tables, callbacks=callbacks)
+            out = None
+            if plain and self._supports_predict_graph:
+                index = torch.arange(rows, device=x.device)
+                if captured is None or captured() is not self._cache:
+                    # Two rows compile the same graphs for any first query.
+                    query = x.index_select(-2, index[:2])
+                    if isinstance(query, TableTensor):
+                        query._mark_dynamic(query.dim() - 2)
+                    else:
+                        torch._dynamo.maybe_mark_dynamic(
+                            query, query.dim() - 2
+                        )
+                    predict(query)
+                    # PyTorch limits the graphs of one compiled function, and
+                    # the graph of an earlier fit never runs again.
+                    graph = torch.compile(predict_graph, **kwargs)
+                    graph(query)
+                    # A weak reference lets a refit release the previous cache.
+                    captured = weakref.ref(self._cache)
+                with torch.compiler.set_stance("eager_on_recompile"):
+                    # Gathered rows have one memory layout for every query.
+                    out = graph(x.index_select(-2, index))
+            if out is None:
+                out = predict(x, related_tables, callbacks=callbacks)
+            return out
 
         return wrapper
+
+    #: Whether :meth:`predict` compiles into one graph for any number of query
+    #: rows.
+    _supports_predict_graph: ClassVar[bool] = False
+
+    #: Whether every row of a prediction depends on its own query row only.
+    _independent_query_rows: ClassVar[bool] = False
 
     # Abstract Methods ########################################################
 

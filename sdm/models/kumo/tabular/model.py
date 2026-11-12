@@ -109,6 +109,8 @@ class KumoTabular(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
+    _supports_predict_graph: ClassVar[bool] = True
+    _independent_query_rows: ClassVar[bool] = True
 
     paper: ClassVar[str] = "https://huggingface.co/blog/nvidia/kumo-tabular"
     source: ClassVar[str] = (

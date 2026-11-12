@@ -561,6 +561,17 @@ class VarLenTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def _mark_dynamic(self, dim: int) -> None:
+        torch._dynamo.maybe_mark_dynamic(self, dim)
+        torch._dynamo.maybe_mark_dynamic(self._layout, dim)
+        # Byte lengths can be zero or one even when logical rows are dynamic.
+        torch._dynamo.decorators.mark_unbacked(
+            self._data, 0, min=0, max=torch.iinfo(self._offset.dtype).max
+        )
+        for storage in (self._offset, self._valid):
+            if storage is not None:
+                torch._dynamo.maybe_mark_dynamic(storage, 0)
+
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         # Offsets first avoid a torch.compile symbolic-shape check failure.
         attrs = ["_offset", "_data", "_layout"]

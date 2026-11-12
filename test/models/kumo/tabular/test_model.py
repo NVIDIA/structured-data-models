@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from collections.abc import Callable
+from typing import Any, Literal
 
 import pytest
 import torch
-from torch._dynamo.testing import CompileCounterWithBackend
+from torch._dynamo.backends.registry import lookup_backend
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
@@ -398,24 +399,41 @@ def test_compile_predict(
         )
     model.fit(x[:40], y, num_estimators=4)
 
-    counter = CompileCounterWithBackend("aot_eager")
+    compiled = called = 0
+
+    def backend(*args: Any) -> Callable[..., Any]:
+        nonlocal compiled
+        compiled += 1
+        graph = lookup_backend("aot_eager")(*args)
+
+        def call(*args: Any) -> Any:
+            nonlocal called
+            called += 1
+            return graph(*args)
+
+        return call
+
     predict = model._compile_predict(
-        backend=counter,
+        backend=backend,
         fullgraph=True,
         dynamic=False,
     )
-    predict(x[40:48])
-    frame_count = counter.frame_count
-    assert frame_count > 0
-    # Other query sizes and chunk counts compile nothing.
-    for rows in (3, 24, 1, 0):
+    # A first query of several chunks compiles every graph.
+    predict(x[40:])
+    graphs = compiled
+    for rows in (3, 1, 24, 0):
+        called = 0
         torch.testing.assert_close(
             actual=predict(x[40 : 40 + rows]).numerical,
             expected=model.predict(x[40 : 40 + rows]).numerical,
             atol=1e-4,
             rtol=1e-4,
         )
-    assert counter.frame_count == frame_count
+        # One chunk runs one graph, more chunks run the chunk bodies, and an
+        # empty query runs no graph.
+        assert (called == 1) == (0 < rows <= 8)
+        assert (called > 1) == (rows > 8)
+    assert compiled == graphs
 
 
 @onlyMPS
