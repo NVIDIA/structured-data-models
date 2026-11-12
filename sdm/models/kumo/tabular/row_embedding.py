@@ -4,6 +4,7 @@
 # ruff: noqa: D101, D102
 
 import math
+from collections.abc import Iterator
 from typing import Any, cast
 
 import torch
@@ -256,3 +257,11 @@ class RowEmbedding(torch.nn.Module):
             device, element_size, num_rows, M
         )
         return num_rows if math.prod(B) * C <= limit else 0
+
+    def column_dims(self, cache: Cache) -> Iterator[tuple[Tensor, int]]:
+        # The column dimensions of the cached state.
+        yield cast(Tensor, cache["cell_impute_mean"]), -1  # [..., 1, C]
+        for i in range(len(self.col_blocks)):
+            key = f"row_embedding.col_block{i}"
+            for tensor in cast(KVCacheEntry, cache[key]):
+                yield tensor, -4  # [..., C, M, H, D]

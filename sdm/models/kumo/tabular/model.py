@@ -179,11 +179,13 @@ class KumoTabular(ICLModel):
     ) -> DynamicShapes:
         regression = cache["classes"] is None
         task = Task.regression if regression else Task.classification
-        row_embedding = cast(_KumoTabular, self.models[task]).row_embedding
+        network = cast(_KumoTabular, self.models[task])
         # ECOC nests the model cache when classes exceed its capacity.
         cache = cast(Cache, cache.get("ecoc_model", cache))
         return DynamicShapes(
-            query_rows=row_embedding.max_query_rows(cache, device),
+            query_rows=network.row_embedding.max_query_rows(cache, device),
+            context_row_dims=[*network.icl_block.context_row_dims(cache)],
+            column_dims=[*network.row_embedding.column_dims(cache)],
         )
 
     def _load_from_pretrained(

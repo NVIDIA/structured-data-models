@@ -67,8 +67,8 @@ class SelectColumns(EnsembleProcessor):
         if self.method == "first":
             groups = []
             for group in ensemble_table._iter_groups():
-                columns: Mapping[StypeLike, Sequence[str]] = {
-                    stype: column_names[: self.max_columns]
+                columns: Mapping[StypeLike, Sequence[str] | None] = {
+                    stype: column_names and column_names[: self.max_columns]
                     for stype, column_names in group.column_groups
                 }
                 blocks = {

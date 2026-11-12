@@ -299,6 +299,7 @@ class ICLModel(Model):
         )
         cache = Cache(
             recipe_execution=recipe_execution,
+            x_columns=x.columns if isinstance(x, TableTensor) else None,
             kwargs=kwargs,
             num_batches=len(batches),
         )
@@ -388,6 +389,15 @@ class ICLModel(Model):
                 "gradient-based training through a fitted context cache. "
                 "To fix, call `model.eval()`."
             )
+
+        # Only compiled prediction, which checks the fitted columns first,
+        # runs unnamed columns.
+        if (
+            isinstance(x, TableTensor)
+            and None in x.columns.values()
+            and not torch.compiler.is_compiling()
+        ):
+            raise ValueError("Expected query columns to be named")
 
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
@@ -780,7 +790,11 @@ class ICLModel(Model):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context.columns != x_query.columns:
+        # Compiled prediction unnames query columns that match the fitted ones.
+        if any(
+            names is not None and names != x_context.columns[stype]
+            for stype, names in x_query.columns.items()
+        ):
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )

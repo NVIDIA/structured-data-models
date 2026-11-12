@@ -22,6 +22,12 @@ def test_select_first_columns() -> None:
     out = SelectColumns(max_columns=2, method="first").transform(table)
     assert out.equal(table.select_columns(("num_0", "num_1", "dt_0", "dt_1")))
 
+    # Unnamed blocks stay unnamed.
+    table = TableTensor(columns={"numerical": None}, numerical=table.numerical)
+    out = SelectColumns(max_columns=2, method="first").transform(table)
+    assert out.numerical_columns is None
+    assert out.numerical.equal(table.numerical[:, :2])
+
 
 def test_select_columns_round_robin_routes_members() -> None:
     table = TableTensor(
