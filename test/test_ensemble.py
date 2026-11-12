@@ -61,7 +61,8 @@ def test_shared_member_table() -> None:
 
 @pytest.mark.parametrize("stype", Stype.all())
 def test_column_blocks(stype: Stype) -> None:
-    group = TableTensor(
+    # Two member tables with three rows and all five semantic types.
+    batched_table = TableTensor(
         numerical=torch.arange(12, dtype=torch.float32).view(2, 3, 2),
         categorical=CategoricalTensor(
             code=torch.tensor([[[0], [1], [0]], [[1], [0], [1]]]),
@@ -73,25 +74,28 @@ def test_column_blocks(stype: Stype) -> None:
         ),
         id=ColumnarTensor((torch.arange(6).view(2, 3),)),
     )
-    empty = TableTensor(size=(1, 4))
+    empty_table = TableTensor(
+        size=(1, 4)
+    )  # One member, four rows, no columns.
     ensemble = EnsembleTable(
-        groups=(group, empty),
+        groups=(batched_table, empty_table),
         locations=((0, 1), (1, 0), (0, 0), (0, 1)),
     )
+    empty_ensemble = EnsembleTable(groups=(), locations=())
 
     blocks = getattr(ensemble, stype)
 
     assert isinstance(blocks, EnsembleTensor)
     assert len(blocks) == len(ensemble)
     for actual, table in zip(
-        blocks._iter_groups(), (group, empty), strict=True
+        blocks._iter_groups(), (batched_table, empty_table), strict=True
     ):
         # Access must reuse each whole batch, not copy or unpack its members.
         assert actual is getattr(table, stype)
     for member_id in range(len(ensemble)):
         assert blocks[member_id].equal(getattr(ensemble[member_id], stype))
     assert blocks[1].size() == (4, 0)
-    assert len(getattr(ensemble[()], stype)) == 0
+    assert len(getattr(empty_ensemble, stype)) == 0
 
 
 def test_from_tables_keeps_tables_separate() -> None:

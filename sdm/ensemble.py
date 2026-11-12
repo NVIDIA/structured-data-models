@@ -196,8 +196,6 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
     Shared tables are stored only once. Compatible tables are stacked along a
     leading dimension and form a group.
 
-    Column-block properties share data with the member tables.
-
     Args:
         groups: Sequence of :class:`~sdm.tensor.TableTensor`, optionally
             stacked along their leading dimension.
