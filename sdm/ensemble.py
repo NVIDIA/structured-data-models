@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import abc
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Generic, Self, TypeAlias, cast, overload
 
@@ -20,12 +19,15 @@ T = TypeVar("T")
 TensorT = TypeVar("TensorT", bound=Tensor, default=Tensor)
 
 
-class EnsembleData(abc.ABC, Generic[T]):
+class EnsembleData(Generic[T]):
     """Represent an ordered collection of ensemble member values.
+
+    Each group stores one value, which may be shared by multiple members.
 
     Args:
         groups: Values containing the ensemble members.
-        locations: Group index and position for each ensemble member.
+        locations: Group index and position for each ensemble member. Positions
+            are zero for unbatched values.
     """
 
     _groups: tuple[T, ...]
@@ -73,6 +75,10 @@ class EnsembleData(abc.ABC, Generic[T]):
     def __len__(self) -> int:
         return len(self._locations)
 
+    def __iter__(self) -> Iterator[T]:
+        for group_id, position in self._locations:
+            yield self._select_member(self._groups[group_id], position)
+
     @overload
     def __getitem__(self, index: int) -> T: ...
 
@@ -91,18 +97,21 @@ class EnsembleData(abc.ABC, Generic[T]):
         return iter(self._groups)
 
     @staticmethod
-    @abc.abstractmethod
     def _group_size(group: T) -> int:
-        pass
+        return 1
 
     @staticmethod
-    @abc.abstractmethod
     def _select_member(group: T, position: int) -> T:
-        pass
+        return group
 
-    @abc.abstractmethod
     def _select_members(self, member_ids: Sequence[int]) -> Self:
-        pass
+        group_ids = tuple(self._locations[i][0] for i in member_ids)
+        used_groups = tuple(dict.fromkeys(group_ids))
+        new_ids = {group: i for i, group in enumerate(used_groups)}
+        return self.__class__(
+            groups=tuple(self._groups[i] for i in used_groups),
+            locations=tuple((new_ids[i], 0) for i in group_ids),
+        )
 
 
 class EnsembleTensor(EnsembleData[TensorT]):
@@ -370,6 +379,54 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
         )
 
     @property
+    def numerical_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return numerical column names."""
+        return EnsembleData(
+            groups=tuple(group.numerical_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def categorical_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return categorical column names."""
+        return EnsembleData(
+            groups=tuple(group.categorical_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def datetime_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return datetime column names."""
+        return EnsembleData(
+            groups=tuple(group.datetime_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def text_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return text column names."""
+        return EnsembleData(
+            groups=tuple(group.text_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def id_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return identifier column names."""
+        return EnsembleData(
+            groups=tuple(group.id_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def column_names(self) -> EnsembleData[frozenset[str]]:
+        """Return the column names."""
+        return EnsembleData(
+            groups=tuple(group.column_names for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
     def num_groups(self) -> int:
         """Return the number of table groups."""
         return len(self._groups)
@@ -410,6 +467,17 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
             [cast(TableTensor, fn(group)) for group in self._groups]
         )
 
+    def select_columns(self, columns: str | Iterable[str]) -> Self:
+        """Return an ensemble table containing only ``columns``.
+
+        Args:
+            columns: Column names to select in every member table.
+        """
+        columns = (columns,) if isinstance(columns, str) else tuple(columns)
+        return self.replace_groups(
+            [group.select_columns(columns) for group in self._groups]
+        )
+
     def select_stypes(
         self,
         stypes: StypeLike | Iterable[StypeLike],
@@ -427,9 +495,7 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         if len(stypes) == 0:
-            return self.replace_groups(
-                [group.select_columns(()) for group in self._groups]
-            )
+            return self.select_columns(())
         return self.replace_groups(
             [group.select_stypes(stypes) for group in self._groups]
         )
