@@ -34,17 +34,18 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
                 numerical=[
                     numerical_processor(),
                     sp.FlipSign(),
+                    sp.Cast(torch.float32),
                 ],
                 categorical=[
                     sp.AlignCategories(sort_by="value"),
                     sp.AddCategoryCounts(min_cardinality=50),
                     sp.ToNumerical(),
                     numerical_processor(),
+                    sp.Cast(torch.float32),
                 ],
             ),
             sp.ShuffleColumns(method="latin"),
             sp.SelectColumns(500, method="first"),
-            sp.Cast(torch.float32),
         ],
         target=[
             sp.StypeDispatch(
