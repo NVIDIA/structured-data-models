@@ -23,6 +23,8 @@ class EnsembleData(Generic[T]):
     """Represent an ordered collection of ensemble member values.
 
     Each group stores one value, which may be shared by multiple members.
+    Use :class:`EnsembleTensor` when a leading tensor dimension represents
+    ensemble members.
 
     Args:
         groups: Values containing the ensemble members.
@@ -380,7 +382,7 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
 
     @property
     def column_names(self) -> EnsembleData[frozenset[str]]:
-        """Return the column names of each ensemble member."""
+        """Return the column names."""
         return EnsembleData(
             groups=tuple(group.column_names for group in self._groups),
             locations=tuple((group, 0) for group, _ in self._locations),
@@ -455,9 +457,7 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         if len(stypes) == 0:
-            return self.replace_groups(
-                [group.select_columns(()) for group in self._groups]
-            )
+            return self.select_columns(())
         return self.replace_groups(
             [group.select_stypes(stypes) for group in self._groups]
         )

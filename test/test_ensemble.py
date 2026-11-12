@@ -95,6 +95,17 @@ def test_select_columns(columns: str | Iterable[str]) -> None:
         )
 
 
+def test_data_does_not_infer_tensor_batching() -> None:
+    tensor = torch.arange(6).view(2, 3)
+    values = EnsembleData(groups=(tensor,), locations=((0, 0), (0, 0)))
+    members = EnsembleTensor(groups=(tensor,), locations=((0, 0), (0, 1)))
+
+    assert values[0] is tensor
+    assert values[1] is tensor
+    assert members[0].equal(tensor[0])
+    assert members[1].equal(tensor[1])
+
+
 def test_tensor_member_selection() -> None:
     first = torch.tensor([[1.0], [2.0], [3.0]])
     second = torch.tensor([[4.0]])
