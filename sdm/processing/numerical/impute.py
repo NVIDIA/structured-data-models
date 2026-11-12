@@ -73,13 +73,13 @@ class ImputeConstant(Processor, InvertibleMixin):
     unchanged.
 
     Args:
-        fill_value: Value used to replace NaNs. Defaults to zero.
+        fill_value: Value used to replace NaNs.
     """
 
     handles_stypes = (Stype.numerical,)
     requires_fit = False
 
-    def __init__(self, fill_value: float = 0.0) -> None:
+    def __init__(self, fill_value: float) -> None:
         super().__init__()
         self.fill_value = fill_value
 

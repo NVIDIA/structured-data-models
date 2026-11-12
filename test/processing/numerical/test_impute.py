@@ -102,11 +102,7 @@ def test_impute_constant(
         dtype=dtype,
     )
     table = TableTensor.from_tensor(inp)
-    processor = (
-        ImputeConstant()
-        if fill_value == 0.0
-        else ImputeConstant(fill_value=fill_value)
-    )
+    processor = ImputeConstant(fill_value=fill_value)
     out = processor.transform(table)
     expected = torch.tensor(
         [

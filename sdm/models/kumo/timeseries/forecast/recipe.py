@@ -11,11 +11,11 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
 
     return sp.Recipe(
         features=[
-            sp.ImputeConstant(),
+            sp.ImputeConstant(fill_value=0.0),
             sp.Standardize().with_state(mean, scale),
         ],
         target=[
-            sp.ImputeConstant(),
+            sp.ImputeConstant(fill_value=0.0),
             sp.Standardize().with_state(mean, scale),
         ],
         output=sp.AverageEstimators(),

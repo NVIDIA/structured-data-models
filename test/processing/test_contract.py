@@ -123,7 +123,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.Clip(-3.0, 3.0, method="saturate")),
     ProcessorCase(sp.ClipSigma(method="log")),
     ProcessorCase(sp.ImputeMean(), _make_impute_mean_table),
-    ProcessorCase(sp.ImputeConstant(), _make_impute_mean_table),
+    ProcessorCase(sp.ImputeConstant(fill_value=0.0), _make_impute_mean_table),
     ProcessorCase(sp.PowerTransform()),
     ProcessorCase(
         sp.QuantileTransform(n_quantiles=4, subsample=None),
