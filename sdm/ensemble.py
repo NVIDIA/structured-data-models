@@ -75,6 +75,10 @@ class EnsembleData(Generic[T]):
     def __len__(self) -> int:
         return len(self._locations)
 
+    def __iter__(self) -> Iterator[T]:
+        for group_id, position in self._locations:
+            yield self._select_member(self._groups[group_id], position)
+
     @overload
     def __getitem__(self, index: int) -> T: ...
 
