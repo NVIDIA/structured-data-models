@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -60,7 +61,7 @@ def compile_predict(
     if kwargs.get("dynamic") is not False or not shapes.query:
         return compiled
 
-    captured: Cache | None = None
+    captured: weakref.ref[Cache] | None = None
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -72,10 +73,11 @@ def compile_predict(
         rows = x.size(-2)
         if rows == 0 or callbacks is not None or related_tables is not None:
             return model.predict(x, related_tables, callbacks=callbacks)
-        if captured is not model._cache:
+        if captured is None or captured() is not model._cache:
             # Two rows capture the same graph whatever the first query is.
             compiled(_prepare_query(x[..., :2, :], shapes.query))
-            captured = model._cache
+            # A weak reference lets a refit release the previous cache.
+            captured = weakref.ref(model._cache)
         x = _prepare_query(x, shapes.query)
         # A query that misses the chunk guards of the graph runs eagerly.
         with torch.compiler.set_stance("eager_on_recompile"):
