@@ -379,6 +379,46 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
         )
 
     @property
+    def numerical_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return numerical column names."""
+        return EnsembleData(
+            groups=tuple(group.numerical_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def categorical_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return categorical column names."""
+        return EnsembleData(
+            groups=tuple(group.categorical_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def datetime_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return datetime column names."""
+        return EnsembleData(
+            groups=tuple(group.datetime_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def text_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return text column names."""
+        return EnsembleData(
+            groups=tuple(group.text_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
+    def id_columns(self) -> EnsembleData[tuple[str, ...]]:
+        """Return identifier column names."""
+        return EnsembleData(
+            groups=tuple(group.id_columns for group in self._groups),
+            locations=tuple((group, 0) for group, _ in self._locations),
+        )
+
+    @property
     def column_names(self) -> EnsembleData[frozenset[str]]:
         """Return the column names."""
         return EnsembleData(

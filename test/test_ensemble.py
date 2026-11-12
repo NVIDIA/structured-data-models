@@ -9,9 +9,12 @@ import torch
 
 from sdm import (
     CategoricalTensor,
+    ColumnarTensor,
     EnsembleData,
     EnsembleTable,
     EnsembleTensor,
+    StringTensor,
+    Stype,
     TableTensor,
 )
 
@@ -37,10 +40,29 @@ def test_data_member_selection(
     assert len(ensemble[()]) == 0
 
 
-def test_column_names() -> None:
-    batch = TableTensor.from_tensor(
-        tensor=torch.zeros(2, 3, 2),
-        columns=("first", "second"),
+@pytest.mark.parametrize(
+    "property_name",
+    ["column_names", *(f"{stype}_columns" for stype in Stype.all())],
+)
+def test_column_names(property_name: str) -> None:
+    batch = TableTensor(
+        columns={
+            "numerical": ("first", "second"),
+            "categorical": ("category",),
+            "datetime": ("time",),
+            "text": ("text",),
+            "id": ("key",),
+        },
+        numerical=torch.zeros(2, 3, 2),
+        categorical=CategoricalTensor(
+            code=torch.zeros(2, 3, 1, dtype=torch.long),
+            categories=(torch.tensor([10]),),
+        ),
+        datetime=torch.zeros(2, 3, 1, dtype=torch.long),
+        text=StringTensor.from_list(
+            [[["a"], ["b"], ["c"]], [["d"], ["e"], ["f"]]]
+        ),
+        id=ColumnarTensor((torch.arange(6).view(2, 3),)),
     )
     other = TableTensor.from_tensor(
         tensor=torch.ones(1, 4, 1),
@@ -51,17 +73,18 @@ def test_column_names() -> None:
         locations=((0, 1), (1, 0), (0, 0), (0, 1)),
     )
 
-    names = ensemble.column_names
+    names = getattr(ensemble, property_name)
 
     assert isinstance(names, EnsembleData)
     assert tuple(names) == (
-        frozenset(("first", "second")),
-        frozenset(("other",)),
-        frozenset(("first", "second")),
-        frozenset(("first", "second")),
+        getattr(batch, property_name),
+        getattr(other, property_name),
+        getattr(batch, property_name),
+        getattr(batch, property_name),
     )
     assert names[0] is names[2] is names[3]
-    assert len(EnsembleTable(groups=(), locations=()).column_names) == 0
+    empty_ensemble = EnsembleTable(groups=(), locations=())
+    assert len(getattr(empty_ensemble, property_name)) == 0
 
 
 @pytest.mark.parametrize("columns", ["keep", ("keep",), iter(("keep",)), ()])
