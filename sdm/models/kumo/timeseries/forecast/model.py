@@ -173,7 +173,6 @@ class KumoForecast(ICLModel):
         context_tables = [x_context, y_context]
         for i, table in enumerate(context_tables):
             numerical = table.numerical
-            numerical = numerical.masked_fill(numerical.isnan(), 0)
             if table.size(-2) < self.model.context_size:
                 padded = numerical.new_zeros(
                     (

@@ -67,3 +67,46 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
+
+
+@withCUDA
+@pytest.mark.parametrize("context_size", [37, 600])
+def test_zero_imputation(
+    monkeypatch: pytest.MonkeyPatch,
+    context_size: int,
+    device: torch.device,
+) -> None:
+    monkeypatch.setattr(
+        forecasting,
+        "_KumoForecast",
+        partial(
+            forecasting._KumoForecast,
+            channels=8,
+            hidden_channels=16,
+            num_layers=1,
+            num_heads=2,
+            cross_channel_heads=2,
+        ),
+    )
+    model = KumoForecast(pretrained=False, device=device)
+    x_context = torch.randn(context_size, 2, device=device)
+    y_context = torch.randn(context_size, 1, device=device)
+    x_context[::7] = torch.nan
+    y_context[::11] = torch.nan
+    x_query = torch.empty(3, 0, device=device)
+
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        alpha=0.5,
+        num_estimators=1,
+    )
+    expected = model(
+        x_context.masked_fill(x_context.isnan(), 0),
+        y_context.masked_fill(y_context.isnan(), 0),
+        x_query,
+        alpha=0.5,
+        num_estimators=1,
+    )
+    torch.testing.assert_close(out.numerical, expected.numerical)
