@@ -3,6 +3,7 @@
 
 import pytest
 import torch
+from torch._dynamo.testing import CompileCounter
 
 from sdm import Recipe
 from sdm.models import TabICLv2
@@ -289,6 +290,42 @@ def test_tabiclv2_many_classes_forward_and_cache(
         estimator_batch_size=estimator_batch_size,
     )
     assert model.predict(x_query).allclose(out)
+
+
+@withCUDA
+@pytest.mark.usefixtures("compilation")
+# More than 10 classes run through hierarchical classification.
+@pytest.mark.parametrize("num_classes", [0, 11])
+def test_compile_predict_query_rows(
+    device: torch.device,
+    num_classes: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(RowEmbedding, "max_query_rows", lambda *_: 8)
+    model = TabICLv2(pretrained=False, device=device)
+    x = torch.randn(49, 6, device=device)
+    y = torch.randn(40, 1, device=device)
+    if num_classes > 0:
+        y = torch.arange(40, device=device).remainder(num_classes)
+        y = y.unsqueeze(-1)
+    model.fit(x[:40], y, num_estimators=4)
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        dynamic=False,
+    )
+    for size in (3, 1, 9):
+        actual = predict(x[-size:])
+        expected = model.predict(x[-size:])
+        torch.testing.assert_close(
+            actual=actual.numerical,
+            expected=expected.numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
 
 
 @onlyCUDA

@@ -19,6 +19,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base.compile import DynamicShapes
 from sdm.models.tabiclv2.ckpt import remap_ckpt
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
@@ -179,6 +180,18 @@ class TabICLv2(ICLModel):
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
+    def _dynamic_shapes(
+        self,
+        cache: Cache,
+        device: torch.device,
+    ) -> DynamicShapes:
+        regression = cache["classes"] is None
+        task = Task.regression if regression else Task.classification
+        row_embedding = cast(_TabICLv2, self.models[task]).row_embedding
+        return DynamicShapes(
+            query_rows=row_embedding.max_query_rows(cache, device),
+        )
+
     def _load_from_pretrained(
         self,
         device: torch.device | str | None,
@@ -251,8 +264,16 @@ class TabICLv2(ICLModel):
         out = self.models[Task.classification](
             x, y, cache=cache, num_classes=len(classes)
         )
+        if cache is not None and cache.is_replaying:
+            columns = cast(tuple[str, ...], cache["class_columns"])
+        else:
+            columns = tuple(str(i) for i in classes.tolist())
+
+        if cache is not None and cache.is_recording:
+            cache["class_columns"] = columns
+
         return TableTensor(
-            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
+            columns={Stype.numerical: columns},
             numerical=out[..., : len(classes)],
         )
 
