@@ -77,14 +77,7 @@ def _sdpa_operator(
 
 @_sdpa_operator.register_fake
 def _sdpa_operator_fake(
-    query: Tensor,
-    key: Tensor,
-    value: Tensor,
-    attn_mask: Tensor | None,
-    dropout_p: float,
-    enable_gqa: bool,
-    is_causal: bool,
-    scale: float | None,
+    query: Tensor, key: Tensor, value: Tensor, *args: Any, **kwargs: Any
 ) -> Tensor:
     return query.new_empty(
         (query.size(0), query.size(2), query.size(1), value.size(-1))
