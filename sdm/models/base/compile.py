@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar, cast
@@ -13,6 +14,7 @@ import torch
 from torch import Tensor
 
 from sdm import TableTensor
+from sdm.cache import Cache
 from sdm.processing.execution import RecipeExecution
 
 if TYPE_CHECKING:
@@ -86,6 +88,8 @@ def compile_predict(
     if shapes == DynamicShapes():
         return compiled
 
+    mark_cache = _once_per_fit(lambda cache: cache._mark_dynamic(shapes.cache))
+
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
         *args: Any,
@@ -93,8 +97,7 @@ def compile_predict(
     ) -> TableTensor:
         rows = x.size(-2)
         cache = model._cache
-        # Marks do not reach a new fit, so the cache is marked on every call.
-        if rows == 0 or cache is None or not cache._mark_dynamic(shapes.cache):
+        if rows == 0 or cache is None or not mark_cache(cache):
             return model.predict(x, *args, **kwargs)
         if isinstance(x, TableTensor) and x.categorical.size(-1) > 0:
             # A graph specializes on the size of every list of categories.
@@ -115,6 +118,21 @@ def compile_predict(
         return out[..., :1, :] if repeat else out
 
     return predict
+
+
+def _once_per_fit(mark: Callable[[Cache], bool]) -> Callable[[Cache], bool]:
+    # Marks stay on the tensors of a fit, and a fit replaces the cache of a
+    # model, so `mark` runs once per cache.
+    memo: tuple[weakref.ref[Cache], bool] | None = None
+
+    def mark_once(cache: Cache) -> bool:
+        nonlocal memo
+        entry = memo
+        if entry is None or entry[0]() is not cache:
+            memo = entry = (weakref.ref(cache), mark(cache))
+        return entry[1]
+
+    return mark_once
 
 
 def _mark_dynamic(tensor: Tensor, dims: tuple[int, ...]) -> None:
