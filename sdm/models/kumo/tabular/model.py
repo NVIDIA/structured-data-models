@@ -68,6 +68,12 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
     query=(-2,),
     # Context rows of the keys and values with shape [..., R, H, C].
     cache={"icl_block": (-3,)},
+    columns={
+        # Keys and values with shape [..., C, M, H, D].
+        "row_embedding": (-4,),
+        # Imputation means with shape [..., 1, C].
+        "cell_impute_mean": (-1,),
+    },
 )
 class KumoTabular(ICLModel):
     r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New

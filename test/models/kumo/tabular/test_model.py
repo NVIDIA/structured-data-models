@@ -486,6 +486,57 @@ def test_compile_predict_context_rows(
     assert counter.frame_count == 1
 
 
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_compile_predict_columns(
+    task: Literal["classification", "regression"],
+) -> None:
+    model = _build(task, "small")
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        dynamic=False,
+    )
+    # The second table holds a constant column. The last one holds more
+    # columns than the recipe selects, and such tables use a second graph.
+    for num_columns, num_context in [(17, 40), (5, 130), (2, 40), (600, 40)]:
+        x = torch.randn(num_context + 9, num_columns)
+        if num_columns == 5:
+            x[:, 1] = 1.0
+        x = TableTensor.from_tensor(
+            x, columns=[f"{num_columns}_{i}" for i in range(num_columns)]
+        )
+        y, generator = torch.randn(num_context, 1), None
+        if task == "classification":
+            code = torch.arange(num_context).remainder(11).unsqueeze(-1)
+            y = TableTensor(
+                columns={Stype.categorical: ("target",)},
+                categorical=CategoricalTensor.from_tensor(code),
+            )
+            # The seed keeps the order of the classes.
+            generator = torch.Generator().manual_seed(0)
+        model.fit(x[:num_context], y, num_estimators=4, generator=generator)
+
+        actual = predict(x[num_context:])
+        expected = model.predict(x[num_context:])
+        assert actual.columns == expected.columns
+        torch.testing.assert_close(
+            actual=actual.numerical,
+            expected=expected.numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        assert counter.frame_count == 1 + (num_columns > 500)
+
+    unnamed = TableTensor(
+        columns={Stype.numerical: None},
+        numerical=x.numerical,
+    )
+    with pytest.raises(ValueError, match="to be named"):
+        model.predict(unnamed)
+
+
 @onlyMPS
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_default_recipe_on_mps(

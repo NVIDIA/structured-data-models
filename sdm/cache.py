@@ -102,12 +102,18 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         _freeze(self)
         return self
 
-    def _mark_dynamic(self, dims: Mapping[str, tuple[int, ...]]) -> bool:
+    def _mark_dynamic(
+        self,
+        dims: Mapping[str, tuple[int, ...]],
+        strict: bool = True,
+    ) -> bool:
         r"""Mark dimensions of cached tensors for :func:`torch.compile`.
 
         Args:
             dims: The dynamic dimensions of tensors and of keys and values by
                 the first dotted component of their cache keys.
+            strict: If set to :obj:`False`, a graph may specialize on a marked
+                dimension.
 
         Returns:
             ``False`` if a dimension has fewer than two entries. A graph
@@ -120,11 +126,14 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         missing = dims.keys() - {name for name, _ in tensors}
         if missing:
             raise KeyError(f"No cached tensors of {sorted(missing)}")
+        mark = torch._dynamo.maybe_mark_dynamic
+        if strict:
+            mark = torch._dynamo.mark_dynamic
         for name, tensor in tensors:
             for dim in dims[name]:
                 if tensor.size(dim) < 2:
                     return False
-                torch._dynamo.mark_dynamic(tensor, dim % tensor.dim())
+                mark(tensor, dim % tensor.dim())
         return True
 
     def _named_tensors(self) -> Iterator[tuple[str, Tensor]]:

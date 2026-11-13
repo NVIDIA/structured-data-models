@@ -302,6 +302,7 @@ class ICLModel(Model):
         )
         cache = Cache(
             recipe_execution=recipe_execution,
+            x_columns=x.columns if isinstance(x, TableTensor) else None,
             kwargs=kwargs,
             num_batches=len(batches),
         )
@@ -391,6 +392,15 @@ class ICLModel(Model):
                 "gradient-based training through a fitted context cache. "
                 "To fix, call `model.eval()`."
             )
+
+        # Only compiled predictions, which compare the names with the fitted
+        # ones first, run tables without column names.
+        if (
+            isinstance(x, TableTensor)
+            and None in x.columns.values()
+            and not torch.compiler.is_dynamo_compiling()
+        ):
+            raise ValueError("Expected query columns to be named")
 
         callbacks = () if callbacks is None else callbacks
         requires_grad = any(callback.requires_grad for callback in callbacks)
@@ -770,7 +780,13 @@ class ICLModel(Model):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context.columns != x_query.columns:
+        # Compiled predictions run numerical features that are named as in
+        # `fit` without their column names.
+        if any(
+            names != x_context.columns[stype]
+            for stype, names in x_query.columns.items()
+            if stype != Stype.numerical or names is not None
+        ):
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )
