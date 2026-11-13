@@ -49,6 +49,17 @@ def test_cache_size() -> None:
     assert cache.size() == 3 * 4 + 2 * 8 + 5 * 1 + 4 * 2
 
 
+def test_cache_mark_dynamic() -> None:
+    entry = KVCacheEntry(key=torch.randn(3, 2, 4), value=torch.randn(3, 2, 4))
+    cache = Cache({0: Cache({"block.layer0": entry, "mask": torch.ones(1)})})
+    assert cache._mark_dynamic({"block": (-3,)})
+    # A graph specializes on a size of one.
+    assert not cache._mark_dynamic({"mask": (-1,)})
+    # A name is the first dotted component of a cache key.
+    with pytest.raises(KeyError, match="layer0"):
+        cache._mark_dynamic({"block.layer0": (-3,)})
+
+
 @withCUDA
 @pytest.mark.parametrize("map_to_device", [False, True])
 def test_cache_serialization(

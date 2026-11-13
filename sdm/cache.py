@@ -102,6 +102,46 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         _freeze(self)
         return self
 
+    def _mark_dynamic(self, dims: Mapping[str, tuple[int, ...]]) -> bool:
+        r"""Mark dimensions of cached tensors for :func:`torch.compile`.
+
+        Args:
+            dims: The dynamic dimensions of tensors and of keys and values by
+                the first dotted component of their cache keys.
+
+        Returns:
+            ``False`` if a dimension has fewer than two entries. A graph
+            specializes on sizes of zero and one, so they cannot be marked.
+
+        Raises:
+            KeyError: If no cached tensor has one of the names.
+        """
+        tensors = [item for item in self._named_tensors() if item[0] in dims]
+        missing = dims.keys() - {name for name, _ in tensors}
+        if missing:
+            raise KeyError(f"No cached tensors of {sorted(missing)}")
+        for name, tensor in tensors:
+            for dim in dims[name]:
+                if tensor.size(dim) < 2:
+                    return False
+                torch._dynamo.mark_dynamic(tensor, dim % tensor.dim())
+        return True
+
+    def _named_tensors(self) -> Iterator[tuple[str, Tensor]]:
+        # Tensors, keys and values of this cache and of nested ones, each with
+        # the first dotted component of its cache key.
+        for key, value in self.items():
+            if isinstance(value, Cache):
+                yield from value._named_tensors()
+            elif isinstance(key, str) and isinstance(
+                value, Tensor | KVCacheEntry
+            ):
+                name = key.partition(".")[0]
+                for tensor in (
+                    value if isinstance(value, KVCacheEntry) else (value,)
+                ):
+                    yield name, tensor
+
     def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(

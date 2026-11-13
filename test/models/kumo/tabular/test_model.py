@@ -442,6 +442,50 @@ def test_compile_predict_query_categories() -> None:
     assert counter.frame_count == 1
 
 
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_compile_predict_context_rows(
+    task: Literal["classification", "regression"],
+) -> None:
+    model = _build(task, "small")
+    code = torch.arange(140).remainder(11).unsqueeze(-1)
+    x = TableTensor(
+        columns={Stype.numerical: ("n0", "n1"), Stype.categorical: ("c",)},
+        numerical=torch.randn(140, 2),
+        categorical=CategoricalTensor.from_tensor(code),
+    )
+    y = torch.randn(140, 1)
+    if task == "classification":
+        # More than ten classes nest the cached keys and values.
+        y = TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor.from_tensor(code),
+        )
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        dynamic=False,
+    )
+    # A context of one row is predicted without the graph.
+    for num_context in (40, 1, 130):
+        model.fit(
+            x[:num_context],
+            y[:num_context],
+            num_estimators=4,
+            # The seed keeps the order of the fitted columns.
+            generator=torch.Generator().manual_seed(0),
+        )
+        torch.testing.assert_close(
+            actual=predict(x[130:]).numerical,
+            expected=model.predict(x[130:]).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
 @onlyMPS
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_default_recipe_on_mps(

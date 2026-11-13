@@ -64,7 +64,11 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-@dynamic_shapes(query=(-2,))
+@dynamic_shapes(
+    query=(-2,),
+    # Context rows of the keys and values with shape [..., R, H, C].
+    cache={"icl_block": (-3,)},
+)
 class KumoTabular(ICLModel):
     r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
     Accuracy-Efficiency Frontier for Tabular Prediction"
