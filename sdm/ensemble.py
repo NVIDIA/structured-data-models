@@ -21,11 +21,12 @@ TensorT = TypeVar("TensorT", bound=Tensor, default=Tensor)
 
 
 class EnsembleData(abc.ABC, Generic[T]):
-    """Represent an ordered collection of ensemble member values.
+    """A collection of values.
 
     Args:
-        groups: Values containing the ensemble members.
-        locations: Group index and position for each ensemble member.
+        groups: Groups containing the stored member values.
+        locations: One ``(group, position)`` pair per member, in member order.
+            Multiple members may reference the same stored value.
     """
 
     _groups: tuple[T, ...]
@@ -73,6 +74,12 @@ class EnsembleData(abc.ABC, Generic[T]):
     def __len__(self) -> int:
         return len(self._locations)
 
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"num_members={len(self)}, num_groups={len(self._groups)})"
+        )
+
     @overload
     def __getitem__(self, index: int) -> T: ...
 
@@ -106,11 +113,15 @@ class EnsembleData(abc.ABC, Generic[T]):
 
 
 class EnsembleTensor(EnsembleData[TensorT]):
-    """Store and group tensors as an ensemble.
+    """A collection of :class:`torch.Tensor` values.
 
     Args:
-        groups: Tensors containing the ensemble members.
-        locations: Group index and position for each ensemble member.
+        groups: Groups of compatible tensors, each stacked into a batch of
+            shape ``[B, ...]``. ``B`` is the number of stored tensors and
+            ``...`` their shape.
+        locations: One ``(group, position)`` pair per member, in member order.
+            The position indexes the group's leading dimension. Multiple
+            members may reference the same stored tensor.
     """
 
     @staticmethod
@@ -183,17 +194,16 @@ class EnsembleTensor(EnsembleData[TensorT]):
 
 
 class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
-    """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
-
-    Each ensemble member is associated with one
-    :class:`~sdm.tensor.TableTensor`.
-    Shared tables are stored only once. Compatible tables are stacked along a
-    leading dimension and form a group.
+    """A collection of :class:`~sdm.tensor.TableTensor` tables.
 
     Args:
-        groups: Sequence of :class:`~sdm.tensor.TableTensor`, optionally
-            stacked along their leading dimension.
-        locations: ``(group, batch)`` location of each ensemble member.
+        groups: Groups of compatible tables, each stacked into a batch of
+            shape ``[B, ..., R, C]``. ``B`` is the number of stored tables,
+            ``...`` their additional batch dimensions, ``R`` the number of
+            rows, and ``C`` the number of columns.
+        locations: One ``(group, position)`` pair per member, in member order.
+            The position indexes the group's leading dimension. Multiple
+            members may reference the same stored table.
     """
 
     @classmethod
@@ -568,12 +578,6 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
                 f"({self.num_groups}), got {len(groups)}."
             )
         return self.__class__(groups=groups, locations=self._locations)
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        return (
-            f"{' ' * indent}{self.__class__.__name__}("
-            f"num_members={len(self)}, num_groups={self.num_groups})"
-        )
 
 
 TableLike: TypeAlias = TableTensor | EnsembleTable
