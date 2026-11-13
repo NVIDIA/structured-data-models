@@ -9,6 +9,7 @@ from torch._dynamo.testing import CompileCounter
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
 from sdm.testing import onlyMPS
 
@@ -416,6 +417,11 @@ def test_compile_predict(
             rtol=1e-4,
         )
     assert counter.frame_count == 1
+
+    # Callbacks see a single row as it is.
+    capture = CaptureInputs()
+    predict(x[42:43], callbacks=[capture])
+    assert capture.inputs[0][0].size(-2) == 1
 
 
 @onlyMPS
