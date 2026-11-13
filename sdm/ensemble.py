@@ -191,9 +191,15 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
     leading dimension and form a group.
 
     Args:
-        groups: Sequence of :class:`~sdm.tensor.TableTensor`, optionally
-            stacked along their leading dimension.
-        locations: ``(group, batch)`` location of each ensemble member.
+        groups: Tables with shape ``[B, ..., R, C]``, where ``B`` indexes
+            stored tables, ``...`` denotes each table's batch dimensions,
+            ``R`` is rows, and ``C`` is columns. The leading dimension is
+            required even when ``B = 1``; the constructor does not add it.
+            Use :meth:`from_table` or :meth:`from_tables` to add it
+            automatically.
+        locations: ``(group, position)`` for each ensemble member, indexing
+            the groups and their leading dimension. Members may share a
+            location.
     """
 
     @classmethod
