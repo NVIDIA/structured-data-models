@@ -202,6 +202,22 @@ def test_sdpa_compile_batch_above_kernel_limit() -> None:
     assert counter.frame_count == 1
 
 
+def test_transformer_block_compile_dynamic_batch() -> None:
+    module = TransformerBlock(
+        channels=8, num_query_heads=2, mlp=torch.nn.Identity()
+    ).eval()
+    counter = CompileCounter()
+    compiled = torch.compile(module, fullgraph=True, backend=counter)
+    with torch.inference_mode():
+        for batch_size in [3, 65_536]:
+            query = torch.randn(batch_size, 4, 8)
+            torch._dynamo.mark_dynamic(query, 0)
+            expected = module(query=query, batch_size_limit="auto")
+            out = compiled(query=query, batch_size_limit="auto")
+            torch.testing.assert_close(out, expected)
+    assert counter.frame_count == 1
+
+
 @withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "self_attn"),
