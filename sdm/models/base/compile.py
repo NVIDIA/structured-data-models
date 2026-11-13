@@ -13,8 +13,9 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
 from sdm.cache import Cache
+from sdm.processing import Processor
 from sdm.processing.execution import RecipeExecution
 
 if TYPE_CHECKING:
@@ -40,6 +41,14 @@ class DynamicShapes:
     #: the fits share columns, categories and classes in the same order (the
     #: same ``generator`` seed).
     cache: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
+    #: The column dimensions of cached tensors and of cached keys and values,
+    #: by the first dotted component of their cache keys. With them, a model
+    #: that is fit again on a numerical table with another number of columns
+    #: reuses the graph. Tables with more columns than the recipe keeps share
+    #: a second graph. Such tables run without their column names, which a
+    #: graph holds as constants, so the recipe must not read the names of
+    #: numerical columns.
+    columns: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
 
 
 def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
@@ -81,10 +90,12 @@ def compile_predict(
     # graph, and the generated code fails on CUDA with "UnboundLocalError:
     # cannot access local variable 'default_stream'". The setting holds for
     # every nested region of a call.
-    compiled = torch._dynamo.config.patch(
-        inline_single_use_invoke_subgraph=False,
-    )(compiled)
+    config = {"inline_single_use_invoke_subgraph": False}
     shapes = model._dynamic_shapes
+    if shapes.columns:
+        # Marks on the fitted state of processors apply only with this option.
+        config["force_parameter_static_shapes"] = False
+    compiled = torch._dynamo.config.patch(config)(compiled)
     if shapes == DynamicShapes():
         return compiled
 
@@ -103,6 +114,16 @@ def compile_predict(
             # A graph specializes on the size of every list of categories.
             execution = cast(RecipeExecution, cache["recipe_execution"])
             x = execution.align_categories(x)
+        # Column names are constants of a graph, so numerical features that
+        # are named as in `fit` run without them, with dynamic columns.
+        unnamed = bool(shapes.columns) and _named_as_fit(x, cache)
+        if unnamed:
+            if not _mark_columns(cache, shapes.columns):
+                return model.predict(x, *args, **kwargs)
+            x = TableTensor(
+                columns={Stype.numerical: None},
+                numerical=x.numerical if isinstance(x, TableTensor) else x,
+            )
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows. A
         # contiguous copy has one memory layout for any view, and shares no
@@ -114,6 +135,10 @@ def compile_predict(
             x = torch.cat([x, x], dim=-2)
         x = x.clone(memory_format=torch.contiguous_format)
         _mark_dynamic(x, shapes.query)
+        if unnamed:
+            # A strict mark would reach the empty blocks of the other
+            # semantic types, and a graph specializes on their size of zero.
+            torch._dynamo.maybe_mark_dynamic(x, x.dim() - 1)
         out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if repeat else out
 
@@ -142,3 +167,30 @@ def _mark_dynamic(tensor: Tensor, dims: tuple[int, ...]) -> None:
             tensor._mark_dynamic(dim)
         else:
             torch._dynamo.mark_dynamic(tensor, dim)
+
+
+def _named_as_fit(x: Tensor | TableTensor, cache: Cache) -> bool:
+    # Whether `x` holds numerical features only, named as in `fit`. A tensor
+    # has no names.
+    columns = cache.get("x_columns")
+    if not isinstance(x, TableTensor):
+        return columns is None
+    return x.active_stypes == {Stype.numerical} and x.columns == columns
+
+
+def _mark_columns(cache: Cache, dims: Mapping[str, tuple[int, ...]]) -> bool:
+    # Marks the column dimensions of the fitted state. Returns `False` if the
+    # model holds fewer than two columns. A recipe may keep a fixed number of
+    # the columns of wider tables, so a graph may specialize on these marks.
+    dims = {"categorical_mask": (-1,), **dims}
+    if not cache._mark_dynamic(dims, strict=False):
+        return False
+    recipe = cast(RecipeExecution, cache["recipe_execution"]).recipe
+    for processor in recipe.features.modules():
+        if isinstance(processor, Processor) and processor.is_fitted:
+            for tensor, dim in processor._column_dims():
+                if tensor.size(dim) >= 2:
+                    torch._dynamo.maybe_mark_dynamic(
+                        tensor, dim % tensor.dim()
+                    )
+    return True

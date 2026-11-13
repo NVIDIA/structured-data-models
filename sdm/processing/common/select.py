@@ -49,7 +49,12 @@ class SelectColumns(EnsembleProcessor):
         for group in ensemble_table._iter_groups():
             for stype, block in TableTensor.items(group):
                 widths[stype.value] = max(widths[stype.value], block.size(-1))
-        if max(widths.values(), default=0) > capacity:
+        # Compiled code does not warn, and the comparison would guard on a
+        # dynamic width.
+        if (
+            not torch.compiler.is_compiling()
+            and max(widths.values(), default=0) > capacity
+        ):
             warn_once(
                 key="select-columns-coverage",
                 message=(
