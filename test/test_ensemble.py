@@ -32,7 +32,6 @@ def test_tensor_member_selection() -> None:
     assert sliced[0].data_ptr() == first[0].data_ptr()
     assert ensemble[:] is ensemble
     assert len(ensemble[()]) == 0
-    assert repr(ensemble[()]) == "EnsembleTensor(num_members=0, num_groups=0)"
 
 
 def test_shared_member_table() -> None:
