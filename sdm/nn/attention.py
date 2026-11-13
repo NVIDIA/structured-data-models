@@ -726,7 +726,12 @@ class TransformerBlock(torch.nn.Module):
                 "already cached"
             )
 
-        if torch.is_grad_enabled():
+        # Autograd keeps the memory of every chunk. A compiled graph records
+        # the number of chunks, so it only chunks by an explicit limit.
+        if torch.is_grad_enabled() or (
+            not isinstance(batch_size_limit, int)
+            and torch.compiler.is_dynamo_compiling()
+        ):
             return self._forward(
                 query=query,
                 key_value=key_value,
