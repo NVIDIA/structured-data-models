@@ -64,8 +64,8 @@ def compile_predict(
     """
     kwargs = {"isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    dims = model._dynamic_shapes.query
-    if not dims:
+    shapes = model._dynamic_shapes
+    if shapes == DynamicShapes():
         return compiled
 
     def predict(
@@ -77,15 +77,17 @@ def compile_predict(
         if rows == 0:
             return model.predict(x, *args, **kwargs)
         # A graph specializes on sizes of zero and one, so a single row is
-        # repeated. A contiguous copy has one memory layout for any view.
+        # repeated if the rows are dynamic. A contiguous copy has one memory
+        # layout for any view.
+        repeat = rows == 1 and -2 in shapes.query
         x = (
             torch.cat([x, x], dim=-2)
-            if rows == 1
+            if repeat
             else x.clone(memory_format=torch.contiguous_format)
         )
-        _mark_dynamic(x, dims)
+        _mark_dynamic(x, shapes.query)
         out = compiled(x, *args, **kwargs)
-        return out[..., :1, :] if rows == 1 else out
+        return out[..., :1, :] if repeat else out
 
     return predict
 
