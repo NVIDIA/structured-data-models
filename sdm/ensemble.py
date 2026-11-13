@@ -21,11 +21,12 @@ TensorT = TypeVar("TensorT", bound=Tensor, default=Tensor)
 
 
 class EnsembleData(abc.ABC, Generic[T]):
-    """Represent an ordered collection of ensemble member values.
+    """A collection of values.
 
     Args:
-        groups: Values containing the ensemble members.
-        locations: Group index and position for each ensemble member.
+        groups: Groups containing the stored member values.
+        locations: One ``(group, position)`` pair per member, in member order.
+            Multiple members may reference the same stored value.
     """
 
     _groups: tuple[T, ...]
@@ -106,11 +107,15 @@ class EnsembleData(abc.ABC, Generic[T]):
 
 
 class EnsembleTensor(EnsembleData[TensorT]):
-    """Store and group tensors as an ensemble.
+    """A collection of :class:`torch.Tensor` values.
 
     Args:
-        groups: Tensors containing the ensemble members.
-        locations: Group index and position for each ensemble member.
+        groups: Groups of compatible tensors, each stacked into a batch of
+            shape ``[B, ...]``. ``B`` is the number of stored tensors and
+            ``...`` their shape.
+        locations: One ``(group, position)`` pair per member, in member order.
+            The position indexes the group's leading dimension. Multiple
+            members may reference the same stored tensor.
     """
 
     @staticmethod
