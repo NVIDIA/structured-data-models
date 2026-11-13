@@ -202,6 +202,22 @@ def test_sdpa_compile_batch_above_kernel_limit() -> None:
     assert counter.frame_count == 1
 
 
+def test_sdpa_compile_dynamic_batch_autocast() -> None:
+    module = SDPA(num_query_heads=2).eval()
+    query = torch.randn(3, 4, 2, 8)
+    key = torch.randn(3, 5, 2, 8)
+    value = torch.randn_like(key)
+    for tensor in (query, key, value):
+        torch._dynamo.mark_dynamic(tensor, 0)
+    with torch.inference_mode(), torch.autocast("cpu", torch.bfloat16):
+        expected = module(query=query, key=key, value=value)
+        out = torch.compile(module, fullgraph=True)(
+            query=query, key=key, value=value
+        )
+    assert out.dtype == expected.dtype
+    torch.testing.assert_close(out, expected)
+
+
 def test_transformer_block_compile_dynamic_batch() -> None:
     module = TransformerBlock(
         channels=8, num_query_heads=2, mlp=torch.nn.Identity()

@@ -271,6 +271,17 @@ class SDPA(torch.nn.Module):
             # A graph would hold one kernel call per slice of the batch at
             # hand. It holds the operator instead, which serves any batch.
             sdpa = _sdpa_operator
+            device_type = query.device.type
+            if (
+                torch.is_autocast_enabled(device_type)
+                and query.dtype != torch.float64
+            ):
+                # The output of the operator has the dtype of its query, so
+                # the inputs take the dtype that autocast computes in.
+                dtype = torch.get_autocast_dtype(device_type)
+                query, key, value = (
+                    tensor.to(dtype) for tensor in (query, key, value)
+                )
         out = sdpa(
             query,
             key,
