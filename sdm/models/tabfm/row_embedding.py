@@ -222,13 +222,13 @@ class RowEmbedding(torch.nn.Module):
 
             # Row-wise attention (B * R as the batch axis).
             for j, row_layer in enumerate(row_layers):
-                query = x
-                if i == len(self.row_blocks) - 1 and j == len(row_layers) - 1:
-                    query = x[..., :K, :]
-
+                last_layer = (
+                    i == len(self.row_blocks) - 1 and j == len(row_layers) - 1
+                )
+                query = x[..., :K, :] if last_layer else x
                 x = row_layer(
                     query=query,  # [..., R, K + C, D] or [..., R, K, D]
-                    key_value=x,  # [..., R, K + C, D]
+                    key_value=x if last_layer else None,  # [..., R, K + C, D]
                     batch_size_limit="auto",
                     out=None if buffer is None else query,
                 )  # [..., R, K + C, D] or [..., R, K, D]
