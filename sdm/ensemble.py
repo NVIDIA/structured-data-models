@@ -11,8 +11,14 @@ import torch
 from torch import Tensor
 from typing_extensions import TypeVar
 
-from sdm import Stype, StypeLike
-from sdm.tensor import TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    StypeLike,
+    TableTensor,
+)
 from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
@@ -205,6 +211,46 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
             The position indexes the group's leading dimension. Multiple
             members may reference the same stored table.
     """
+
+    @property
+    def numerical(self) -> EnsembleTensor:
+        """Return the numerical column blocks."""
+        return EnsembleTensor(
+            groups=tuple(group.numerical for group in self._groups),
+            locations=self._locations,
+        )
+
+    @property
+    def categorical(self) -> EnsembleTensor[CategoricalTensor]:
+        """Return the categorical column blocks."""
+        return EnsembleTensor(
+            groups=tuple(group.categorical for group in self._groups),
+            locations=self._locations,
+        )
+
+    @property
+    def datetime(self) -> EnsembleTensor:
+        """Return the datetime column blocks."""
+        return EnsembleTensor(
+            groups=tuple(group.datetime for group in self._groups),
+            locations=self._locations,
+        )
+
+    @property
+    def text(self) -> EnsembleTensor[StringTensor]:
+        """Return the text column blocks."""
+        return EnsembleTensor(
+            groups=tuple(group.text for group in self._groups),
+            locations=self._locations,
+        )
+
+    @property
+    def id(self) -> EnsembleTensor[ColumnarTensor]:
+        """Return the identifier column blocks."""
+        return EnsembleTensor(
+            groups=tuple(group.id for group in self._groups),
+            locations=self._locations,
+        )
 
     @classmethod
     def from_table(
