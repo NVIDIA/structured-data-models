@@ -67,9 +67,12 @@ def compile_predict(
             execution = cast(RecipeExecution, cache["recipe_execution"])
             x = execution.align_categories(x)
         # A graph specializes on sizes of zero and one, so a single row is
-        # repeated if the rows are dynamic. A contiguous copy has one memory
-        # layout for any view, and shares no tensor with the fitted categories.
-        repeat = rows == 1 and -2 in shapes.query
+        # repeated if the rows are dynamic, unless callbacks see the rows. A
+        # contiguous copy has one memory layout for any view, and shares no
+        # tensor with the fitted categories.
+        repeat = (
+            rows == 1 and -2 in shapes.query and not kwargs.get("callbacks")
+        )
         if repeat:
             x = torch.cat([x, x], dim=-2)
         x = x.clone(memory_format=torch.contiguous_format)
