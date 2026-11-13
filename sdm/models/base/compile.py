@@ -100,6 +100,9 @@ def compile_predict(
         return compiled
 
     mark_cache = _once_per_fit(lambda cache: cache._mark_dynamic(shapes.cache))
+    mark_columns = _once_per_fit(
+        lambda cache: _mark_columns(cache, shapes.columns)
+    )
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -118,7 +121,7 @@ def compile_predict(
         # are named as in `fit` run without them, with dynamic columns.
         unnamed = bool(shapes.columns) and _named_as_fit(x, cache)
         if unnamed:
-            if not _mark_columns(cache, shapes.columns):
+            if not mark_columns(cache):
                 return model.predict(x, *args, **kwargs)
             x = TableTensor(
                 columns={Stype.numerical: None},
