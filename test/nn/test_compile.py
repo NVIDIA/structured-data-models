@@ -7,6 +7,7 @@ from collections.abc import Callable
 import pytest
 import torch
 from torch import Tensor
+from torch._dynamo.testing import CompileCounter
 
 from sdm.nn import (
     SDPA,
@@ -182,6 +183,23 @@ def test_sdpa_compile_dynamic_batch() -> None:
         expected = module(query=query, key=key, value=value)
         out = fullgraph(module)(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
+
+
+def test_sdpa_compile_batch_above_kernel_limit() -> None:
+    module = SDPA(num_query_heads=2).eval()
+    counter = CompileCounter()
+    compiled = torch.compile(module, fullgraph=True, backend=counter)
+    with torch.inference_mode():
+        for batch_size in [3, 65_536]:
+            query = torch.randn(batch_size, 4, 2, 8)
+            key = torch.randn(batch_size, 5, 2, 8)
+            value = torch.randn_like(key)
+            for tensor in (query, key, value):
+                torch._dynamo.mark_dynamic(tensor, 0)
+            expected = module(query=query, key=key, value=value)
+            out = compiled(query=query, key=key, value=value)
+            torch.testing.assert_close(out, expected)
+    assert counter.frame_count == 1
 
 
 @withCUDA
