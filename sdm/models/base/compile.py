@@ -65,6 +65,15 @@ def compile_predict(
     """
     kwargs = {"isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
+    # PyTorch 2.14.1 inlines a nested compile region that is used once. The
+    # regions that copy the cache to the device have to stay nested: inlined,
+    # they copy tensors of dynamic size on the transfer stream within the
+    # graph, and the generated code fails on CUDA with "UnboundLocalError:
+    # cannot access local variable 'default_stream'". The setting holds for
+    # every nested region of a call.
+    compiled = torch._dynamo.config.patch(
+        inline_single_use_invoke_subgraph=False,
+    )(compiled)
     shapes = model._dynamic_shapes
     if shapes == DynamicShapes():
         return compiled
