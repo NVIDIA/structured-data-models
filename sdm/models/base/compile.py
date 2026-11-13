@@ -123,10 +123,8 @@ def compile_predict(
         if unnamed:
             if not mark_columns(cache):
                 return model.predict(x, *args, **kwargs)
-            x = TableTensor(
-                columns={Stype.numerical: None},
-                numerical=x.numerical if isinstance(x, TableTensor) else x,
-            )
+            if isinstance(x, TableTensor):
+                x = x.numerical
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows. A
         # contiguous copy has one memory layout for any view, and shares no
@@ -137,11 +135,12 @@ def compile_predict(
         if repeat:
             x = torch.cat([x, x], dim=-2)
         x = x.clone(memory_format=torch.contiguous_format)
-        _mark_dynamic(x, shapes.query)
         if unnamed:
+            x = TableTensor(columns={Stype.numerical: None}, numerical=x)
             # A strict mark would reach the empty blocks of the other
             # semantic types, and a graph specializes on their size of zero.
             torch._dynamo.maybe_mark_dynamic(x, x.dim() - 1)
+        _mark_dynamic(x, shapes.query)
         out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if repeat else out
 
