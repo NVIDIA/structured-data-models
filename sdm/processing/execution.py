@@ -307,6 +307,28 @@ class RecipeExecution:
 
         return tuple(members)
 
+    def align_categories(self, x: TableTensor) -> TableTensor:
+        """Map the categories of a query to the fitted categories.
+
+        The query is returned as is, unless the features begin by aligning
+        its categorical columns to one list of categories for all members.
+        """
+        processor: object = self.recipe.features
+        while isinstance(processor, (sp.Sequential, sp.StypeDispatch)):
+            if isinstance(processor, sp.Sequential):
+                processor = next(iter(processor.children()), None)
+            elif str(Stype.categorical) in processor.processors:
+                processor = processor.processors[str(Stype.categorical)]
+            else:
+                return x
+        if (
+            isinstance(processor, sp.AlignCategories)
+            and len(processor._categories) == 1
+            and len(processor._categories[0]) == x.categorical.size(-1)
+        ):
+            return processor.transform(x)
+        return x
+
     def inverse_transform_target(
         self,
         outputs: Sequence[TableTensor],

@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from torch import Tensor
 
 from sdm import TableTensor
+from sdm.processing.execution import RecipeExecution
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -58,15 +59,19 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
-        if rows == 0:
+        cache = model._cache
+        if rows == 0 or cache is None:
             return model.predict(x, *args, **kwargs)
+        if isinstance(x, TableTensor) and x.categorical.size(-1) > 0:
+            # A graph specializes on the size of every list of categories.
+            execution = cast(RecipeExecution, cache["recipe_execution"])
+            x = execution.align_categories(x)
         # A graph specializes on sizes of zero and one, so a single row is
-        # repeated. A contiguous copy has one memory layout for any view.
-        x = (
-            torch.cat([x, x], dim=-2)
-            if rows == 1
-            else x.clone(memory_format=torch.contiguous_format)
-        )
+        # repeated. A contiguous copy has one memory layout for any view, and
+        # shares no tensor with the fitted categories.
+        if rows == 1:
+            x = torch.cat([x, x], dim=-2)
+        x = x.clone(memory_format=torch.contiguous_format)
         _mark_dynamic(x, dims)
         out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if rows == 1 else out
