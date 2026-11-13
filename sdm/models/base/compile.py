@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -18,18 +18,34 @@ from sdm.processing.execution import RecipeExecution
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
 
+ModelT = TypeVar("ModelT", bound="ICLModel")
+
 
 @dataclass(frozen=True)
 class DynamicShapes:
     r"""The dimensions that a compiled graph of a model keeps dynamic.
 
-    A model declares them as :attr:`~sdm.models.ICLModel._dynamic_shapes`,
-    and :func:`compile_predict` marks them.
+    A model declares them with :func:`dynamic_shapes`, and
+    :func:`compile_predict` marks them.
     """
 
     #: The dimensions of the query. Rows (``-2``) require that the model and
     #: its recipe predict every query row independently of the other rows.
     query: tuple[int, ...] = ()
+
+
+def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
+    r"""Declare the :class:`DynamicShapes` of a model.
+
+    Args:
+        **dims: The fields of :class:`DynamicShapes`.
+    """
+
+    def decorator(cls: type[ModelT]) -> type[ModelT]:
+        cls._dynamic_shapes = DynamicShapes(**dims)
+        return cls
+
+    return decorator
 
 
 def compile_predict(

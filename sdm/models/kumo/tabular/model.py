@@ -16,7 +16,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.base.compile import DynamicShapes
+from sdm.models.base.compile import dynamic_shapes
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -64,6 +64,7 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
+@dynamic_shapes(query=(-2,))
 class KumoTabular(ICLModel):
     r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
     Accuracy-Efficiency Frontier for Tabular Prediction"
@@ -110,7 +111,6 @@ class KumoTabular(ICLModel):
     supports_multi_target: ClassVar[bool] = False
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
-    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes(query=(-2,))
 
     paper: ClassVar[str] = "https://huggingface.co/blog/nvidia/kumo-tabular"
     source: ClassVar[str] = (
