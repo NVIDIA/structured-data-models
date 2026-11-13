@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
@@ -32,6 +32,12 @@ class DynamicShapes:
     #: The dimensions of the query. Rows (``-2``) require that the model and
     #: its recipe predict every query row independently of the other rows.
     query: tuple[int, ...] = ()
+    #: The dimensions of cached tensors and of cached keys and values, by the
+    #: first dotted component of their cache keys. With the context rows, a
+    #: model that is fit again on another number of them reuses the graph, if
+    #: the fits share columns, categories and classes in the same order (the
+    #: same ``generator`` seed).
+    cache: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
 
 
 def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
@@ -54,8 +60,10 @@ def compile_predict(
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
-    One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares. Empty queries are predicted without the graph.
+    One graph serves queries and fits of any size along the
+    :class:`DynamicShapes` that ``model`` declares. Empty queries and fits
+    with fewer than two entries along a dimension are predicted without the
+    graph.
 
     Args:
         model: The model.
@@ -85,7 +93,8 @@ def compile_predict(
     ) -> TableTensor:
         rows = x.size(-2)
         cache = model._cache
-        if rows == 0 or cache is None:
+        # Marks do not reach a new fit, so the cache is marked on every call.
+        if rows == 0 or cache is None or not cache._mark_dynamic(shapes.cache):
             return model.predict(x, *args, **kwargs)
         if isinstance(x, TableTensor) and x.categorical.size(-1) > 0:
             # A graph specializes on the size of every list of categories.
