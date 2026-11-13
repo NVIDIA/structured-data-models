@@ -360,7 +360,7 @@ def test_estimator_batching_many_classes(
 
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("task", ["classification", "regression"])
-def test_compile_predict_static_shapes(
+def test_compile_predict(
     task: Literal["classification", "regression"],
 ) -> None:
     model = _build(task, "small")
@@ -396,11 +396,11 @@ def test_compile_predict_static_shapes(
         fullgraph=True,
         dynamic=False,
     )
-    # Queries of the same size reuse one graph.
-    for _ in range(2):
+    # Queries of any number of rows, including one and none, reuse one graph.
+    for query in (x[40:], x[41:44], x[42:43], x[40:40]):
         torch.testing.assert_close(
-            actual=predict(x[40:]).numerical,
-            expected=model.predict(x[40:]).numerical,
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
             atol=1e-4,
             rtol=1e-4,
         )

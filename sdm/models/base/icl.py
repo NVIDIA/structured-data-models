@@ -22,6 +22,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
+from sdm.models.base.compile import DynamicShapes, compile_predict
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -56,6 +57,9 @@ class ICLModel(Model):
 
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
+
+    #: The dimensions that a compiled :meth:`predict` keeps dynamic.
+    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -481,16 +485,14 @@ class ICLModel(Model):
         r"""Compile :meth:`predict` using :func:`torch.compile`.
 
         Args:
-            kwargs: Keyword arguments passed to :func:`torch.compile`.
-                ``isolate_recompiles`` defaults to ``True``, since all models
-                would otherwise share one recompile limit.
+            kwargs: Keyword arguments passed to
+                :func:`~sdm.models.base.compile.compile_predict`.
 
         Returns:
             The compiled function, which is called like :meth:`predict`.
             :meth:`predict` itself is not compiled.
         """
-        kwargs = {"isolate_recompiles": True} | kwargs
-        return torch.compile(self.predict, **kwargs)
+        return compile_predict(self, **kwargs)
 
     # Abstract Methods ########################################################
 
