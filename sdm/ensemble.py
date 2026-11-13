@@ -183,23 +183,16 @@ class EnsembleTensor(EnsembleData[TensorT]):
 
 
 class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
-    """Store and group input :class:`~sdm.tensor.TableTensor` as an ensemble.
-
-    Each ensemble member is associated with one
-    :class:`~sdm.tensor.TableTensor`.
-    Shared tables are stored only once. Compatible tables are stacked along a
-    leading dimension and form a group.
+    """A collection of :class:`~sdm.tensor.TableTensor` tables.
 
     Args:
-        groups: Tables with shape ``[B, ..., R, C]``, where ``B`` indexes
-            stored tables, ``...`` denotes each table's batch dimensions,
-            ``R`` is rows, and ``C`` is columns. The leading dimension is
-            required even when ``B = 1``; the constructor does not add it.
-            Use :meth:`from_table` or :meth:`from_tables` to add it
-            automatically.
-        locations: ``(group, position)`` for each ensemble member, indexing
-            the groups and their leading dimension. Members may share a
-            location.
+        groups: Groups of compatible tables, each stacked into a batch of
+            shape ``[B, ..., R, C]``. ``B`` is the number of stored tables,
+            ``...`` their additional batch dimensions, ``R`` the number of
+            rows, and ``C`` the number of columns.
+        locations: One ``(group, position)`` pair per member, in member order.
+            The position indexes the group's leading dimension. Multiple
+            members may reference the same stored table.
     """
 
     @classmethod
