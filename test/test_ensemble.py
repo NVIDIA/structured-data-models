@@ -17,6 +17,9 @@ def test_tensor_member_selection() -> None:
         locations=((0, 0), (1, 0), (0, 2), (0, 1), (1, 0)),
     )
 
+    assert repr(ensemble) == "EnsembleTensor(num_members=5, num_groups=2)"
+    assert ensemble.__repr__(indent=2) == f"  {ensemble!r}"
+
     selected = ensemble[4, 1, 2, 4, 0]
 
     assert isinstance(selected, EnsembleTensor)
@@ -32,6 +35,7 @@ def test_tensor_member_selection() -> None:
     assert sliced[0].data_ptr() == first[0].data_ptr()
     assert ensemble[:] is ensemble
     assert len(ensemble[()]) == 0
+    assert repr(ensemble[()]) == "EnsembleTensor(num_members=0, num_groups=0)"
 
 
 def test_shared_member_table() -> None:

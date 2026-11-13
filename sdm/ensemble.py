@@ -74,6 +74,12 @@ class EnsembleData(abc.ABC, Generic[T]):
     def __len__(self) -> int:
         return len(self._locations)
 
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"num_members={len(self)}, num_groups={len(self._groups)})"
+        )
+
     @overload
     def __getitem__(self, index: int) -> T: ...
 
@@ -572,12 +578,6 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
                 f"({self.num_groups}), got {len(groups)}."
             )
         return self.__class__(groups=groups, locations=self._locations)
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        return (
-            f"{' ' * indent}{self.__class__.__name__}("
-            f"num_members={len(self)}, num_groups={self.num_groups})"
-        )
 
 
 TableLike: TypeAlias = TableTensor | EnsembleTable
