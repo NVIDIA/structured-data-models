@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator
 from typing import cast
 
 import torch
@@ -49,6 +50,10 @@ class DropConstantColumns(EnsembleProcessor):
         # Unnamed tables select kept columns by this tensor, so their number
         # can vary under torch.compile. Set if all members keep the same.
         self.register_buffer("_kept_index", None, persistent=False)
+
+    def _column_dims(self) -> Iterator[tuple[Tensor, int]]:
+        if self._kept_index is not None:
+            yield self._kept_index, -1
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
         r""":meta private:"""  # noqa: D415
