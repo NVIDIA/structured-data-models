@@ -77,9 +77,11 @@ def compile_predict(
         if rows == 0:
             return model.predict(x, *args, **kwargs)
         # A graph specializes on sizes of zero and one, so a single row is
-        # repeated if the rows are dynamic. A contiguous copy has one memory
-        # layout for any view.
-        repeat = rows == 1 and -2 in shapes.query
+        # repeated if the rows are dynamic, unless callbacks see the rows. A
+        # contiguous copy has one memory layout for any view.
+        repeat = (
+            rows == 1 and -2 in shapes.query and not kwargs.get("callbacks")
+        )
         x = (
             torch.cat([x, x], dim=-2)
             if repeat
