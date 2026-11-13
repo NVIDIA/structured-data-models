@@ -27,8 +27,9 @@ def _sdpa(
     is_causal: bool,
     scale: float | None,
 ) -> Tensor:  # [B, Q, Hq, C]
-    # CUDA attention kernels accept at most 65,535 batch entries per call.
-    # Slicing a dynamic batch that provably fits would add a size guard.
+    # CUDA attention kernels accept at most 65,535 batch entries per call, so
+    # a larger batch is sliced. A batch that provably fits is not split:
+    # splitting a dynamic size would add a guard to a compiled graph.
     queries = _split_tensor(query, 65_535, dim=0)
     masks = (
         (None,) * len(queries)
@@ -257,20 +258,20 @@ class SDPA(torch.nn.Module):
         key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
+        # Under `torch.compile`, the slicing loop of `_sdpa` is unrolled into
+        # the graph, which then serves only batches with that many slices.
+        # `_sdpa_operator` runs the same loop but is traced as one call, so
+        # one graph serves any batch size. It is skipped with gradients, which
+        # it lacks, and when the batch provably fits one kernel call.
         sdpa = _sdpa
         if not torch.is_grad_enabled() and not statically_known_true(
             query.size(0) <= 65_535
         ):
-            # A graph would hold one kernel call per slice of the batch at
-            # hand. It holds the operator instead, which serves any batch.
             sdpa = _sdpa_operator
             device_type = query.device.type
-            if (
-                torch.is_autocast_enabled(device_type)
-                and query.dtype != torch.float64
-            ):
-                # The output of the operator has the dtype of its query, so
-                # the inputs take the dtype that autocast computes in.
+            if torch.is_autocast_enabled(device_type):
+                # The operator returns the dtype of its query, so the inputs
+                # take the dtype that autocast computes in.
                 dtype = torch.get_autocast_dtype(device_type)
                 query, key, value = (
                     tensor.to(dtype) for tensor in (query, key, value)
