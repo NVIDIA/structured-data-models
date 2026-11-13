@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Self
 
 import torch
@@ -134,6 +134,10 @@ class Processor(torch.nn.Module, abc.ABC):
             "_fitted_state", torch.ones_like(self._fitted_state, device=device)
         )
         self._update_fitted(True)
+
+    def _column_dims(self) -> Iterator[tuple[Tensor, int]]:
+        # Fitted tensors and their column dimensions for dynamic marking.
+        yield from ()
 
     def _check_is_fitted(self) -> None:
         if not self.is_fitted:
