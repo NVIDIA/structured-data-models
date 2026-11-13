@@ -23,3 +23,15 @@ def test_linear(device: torch.device, shape: tuple[int, ...]) -> None:
 
     assert actual is out
     torch.testing.assert_close(actual, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("shape", [(2, 4, 3), (2, 5, 4, 3)])
+def test_linear_compile(device: torch.device, shape: tuple[int, ...]) -> None:
+    layer = Linear(3, 5, device=device)
+    x = torch.randn(shape, device=device)
+    compiled = torch.compile(layer, backend="eager", fullgraph=True)
+
+    torch.testing.assert_close(compiled(x), layer(x))
+    x = x.transpose(0, 1)  # Not contiguous.
+    torch.testing.assert_close(compiled(x), layer(x))

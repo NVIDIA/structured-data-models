@@ -6,7 +6,26 @@
 import math
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
+
+
+def _linear(
+    input: Tensor, weight: Tensor, bias: Tensor | None = None
+) -> Tensor:
+    if (
+        not torch.compiler.is_dynamo_compiling()
+        or input.dim() < 3
+        or not input.is_contiguous()
+    ):
+        return F.linear(input, weight, bias)
+
+    # The matrix product reads the input as [N, C]. Compiled code copies the
+    # input unless it can prove that this is a view, which fails for leading
+    # sizes that are sums, such as `num_columns + 4`. Strides state the view.
+    *size, channels = input.size()
+    input = input.as_strided((math.prod(size), channels), (channels, 1))
+    return F.linear(input, weight, bias).unflatten(0, size)
 
 
 class Linear(torch.nn.Linear):
@@ -17,7 +36,7 @@ class Linear(torch.nn.Linear):
         out: Tensor | None = None,
     ) -> Tensor:
         if out is None:
-            return super().forward(input)
+            return _linear(input, self.weight, self.bias)
 
         if torch.is_grad_enabled():
             raise RuntimeError(

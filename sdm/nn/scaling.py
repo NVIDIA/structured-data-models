@@ -10,7 +10,9 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Parameter, Sequential
+from torch.nn import GELU, Parameter, Sequential
+
+from sdm.nn.linear import Linear
 
 
 class QueryScaling(torch.nn.Module, abc.ABC):
