@@ -271,10 +271,12 @@ class SDPA(torch.nn.Module):
             device_type = query.device.type
             if torch.is_autocast_enabled(device_type):
                 # The operator returns the dtype of its query, so the inputs
-                # take the dtype that autocast computes in.
+                # take the dtype that autocast computes in. As in autocast,
+                # 64-bit inputs stay as they are.
                 dtype = torch.get_autocast_dtype(device_type)
                 query, key, value = (
-                    tensor.to(dtype) for tensor in (query, key, value)
+                    x if x.dtype == torch.float64 else x.to(dtype)
+                    for x in (query, key, value)
                 )
         out = sdpa(
             query,
