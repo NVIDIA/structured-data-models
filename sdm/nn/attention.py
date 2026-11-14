@@ -270,9 +270,11 @@ class SDPA(torch.nn.Module):
             sdpa = _sdpa_operator
             device_type = query.device.type
             if torch.is_autocast_enabled(device_type):
-                # The operator returns the dtype of its query, so the inputs
-                # take the dtype that autocast computes in. As in autocast,
-                # 64-bit inputs stay as they are.
+                # Autocast converts the inputs of the attention kernel to its
+                # 16-bit dtype. `torch.compile` applies autocast while it
+                # traces and does not trace into the operator, so the kernel
+                # inside it would get unconverted inputs. They are converted
+                # here instead. As in autocast, 64-bit inputs stay as they are.
                 dtype = torch.get_autocast_dtype(device_type)
                 query, key, value = (
                     x if x.dtype == torch.float64 else x.to(dtype)
