@@ -9,11 +9,80 @@ from typing import Any, Literal, overload
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from torch.fx.experimental.symbolic_shapes import statically_known_true
 from torch.nn import Linear
 
 from sdm._memory import _split_tensor, chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
+
+
+def _sdpa(
+    query: Tensor,  # [B, Hq, Q, C]
+    key: Tensor,  # [B, Hkv, KV, C]
+    value: Tensor,  # [B, Hkv, KV, C]
+    attn_mask: Tensor | None,  # [B, Hq, Q, KV]
+    dropout_p: float,
+    enable_gqa: bool,
+    is_causal: bool,
+    scale: float | None,
+) -> Tensor:  # [B, Q, Hq, C]
+    # CUDA attention kernels accept at most 65,535 batch entries per call, so
+    # a larger batch is sliced. A batch that provably fits is not split:
+    # splitting a dynamic size would add a guard to a compiled graph.
+    queries = _split_tensor(query, 65_535, dim=0)
+    masks = (
+        (None,) * len(queries)
+        if attn_mask is None
+        else _split_tensor(attn_mask, 65_535, dim=0)
+    )
+    outs = []
+    for chunk_query, chunk_key, chunk_value, chunk_mask in zip(
+        queries,
+        _split_tensor(key, 65_535, dim=0),
+        _split_tensor(value, 65_535, dim=0),
+        masks,
+        strict=True,
+    ):
+        out = F.scaled_dot_product_attention(
+            query=chunk_query,
+            key=chunk_key,
+            value=chunk_value,
+            attn_mask=chunk_mask,
+            dropout_p=dropout_p,
+            enable_gqa=enable_gqa,
+            is_causal=is_causal,
+            scale=scale,
+        )
+        outs.append(out.transpose(-3, -2))
+    return outs[0] if len(outs) == 1 else torch.cat(outs)
+
+
+@torch.library.custom_op("sdm::sdpa", mutates_args=())
+def _sdpa_operator(
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    attn_mask: Tensor | None,
+    dropout_p: float,
+    enable_gqa: bool,
+    is_causal: bool,
+    scale: float | None,
+) -> Tensor:
+    """Slice the batch when the operator runs, not when a graph is traced."""
+    # The memory layout of a single slice depends on the attention kernel.
+    return _sdpa(
+        query, key, value, attn_mask, dropout_p, enable_gqa, is_causal, scale
+    ).contiguous()
+
+
+@_sdpa_operator.register_fake
+def _sdpa_operator_fake(
+    query: Tensor, key: Tensor, value: Tensor, *args: Any, **kwargs: Any
+) -> Tensor:
+    return query.new_empty(
+        (query.size(0), query.size(2), query.size(1), value.size(-1))
+    )
 
 
 class SDPA(torch.nn.Module):
@@ -189,34 +258,38 @@ class SDPA(torch.nn.Module):
         key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
-        # CUDA attention kernels accept at most 65,535 batch entries per call.
-        # Slicing a dynamic batch that provably fits would add a size guard.
-        queries = _split_tensor(query, 65_535, dim=0)
-        masks = (
-            (None,) * len(queries)
-            if attn_mask is None
-            else _split_tensor(attn_mask, 65_535, dim=0)
-        )
-        outs = []
-        for chunk_query, chunk_key, chunk_value, chunk_mask in zip(
-            queries,
-            _split_tensor(key, 65_535, dim=0),
-            _split_tensor(value, 65_535, dim=0),
-            masks,
-            strict=True,
+        # Under `torch.compile`, the slicing loop of `_sdpa` is unrolled into
+        # the graph, which then serves only batches with that many slices.
+        # `_sdpa_operator` runs the same loop but is traced as one call, so
+        # one graph serves any batch size. It is skipped with gradients, which
+        # it lacks, and when the batch provably fits one kernel call.
+        sdpa = _sdpa
+        if not torch.is_grad_enabled() and not statically_known_true(
+            query.size(0) <= 65_535
         ):
-            out = F.scaled_dot_product_attention(
-                query=chunk_query,
-                key=chunk_key,
-                value=chunk_value,
-                attn_mask=chunk_mask,  # [B, Hq, Q, KV]
-                dropout_p=self.dropout if self.training else 0.0,
-                enable_gqa=enable_gqa,
-                is_causal=is_causal,
-                scale=self.scale,
-            )
-            outs.append(out.transpose(-3, -2))  # [B, Q, Hq, C]
-        out = outs[0] if len(outs) == 1 else torch.cat(outs)
+            sdpa = _sdpa_operator
+            device_type = query.device.type
+            if torch.is_autocast_enabled(device_type):
+                # Autocast converts the inputs of the attention kernel to its
+                # 16-bit dtype. `torch.compile` applies autocast while it
+                # traces and does not trace into the operator, so the kernel
+                # inside it would get unconverted inputs. They are converted
+                # here instead. As in autocast, 64-bit inputs stay as they are.
+                dtype = torch.get_autocast_dtype(device_type)
+                query, key, value = (
+                    x if x.dtype == torch.float64 else x.to(dtype)
+                    for x in (query, key, value)
+                )
+        out = sdpa(
+            query,
+            key,
+            value,
+            attn_mask,  # [B, Hq, Q, KV]
+            self.dropout if self.training else 0.0,
+            enable_gqa,
+            is_causal,
+            self.scale,
+        )  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
