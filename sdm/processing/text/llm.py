@@ -47,9 +47,9 @@ class LLM(torch.nn.Module):
         self,
         text: pa.Array,
         batch_size: int = 64,
+        max_length: int | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        max_length: int | None = None,
     ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]:
 
         encodings = self.model.tokenizer(
@@ -65,12 +65,13 @@ class LLM(torch.nn.Module):
         length = np.fromiter(map(len, encodings), dtype=np.int64)
         length = torch.from_numpy(length)
         if len(text) > batch_size:
-            perm = torch.argsort(-length)
+            perm_cpu = length.argsort()
         else:
-            perm = torch.arange(length.numel())
+            perm_cpu = torch.arange(length.numel())
+        perm = perm_cpu.to(device or self.model.device)
 
         for start in range(0, len(text), batch_size):
-            index = perm[start : start + batch_size]
+            index = perm_cpu[start : start + batch_size]
             batch = [encodings[i] for i in index]
             width = int(length[index].max())
 
@@ -84,30 +85,30 @@ class LLM(torch.nn.Module):
                 )
 
             inputs = {
-                "input_ids": torch.as_tensor(
+                "input_ids": np.asarray(
                     [e.ids for e in batch],
-                    dtype=torch.int64,
+                    dtype=np.int64,
                 ),
-                "attention_mask": torch.as_tensor(
+                "attention_mask": np.asarray(
                     [e.attention_mask for e in batch],
-                    dtype=torch.bool,
+                    dtype=np.bool,
                 ),
-                "offset_mapping": torch.as_tensor(
+                "offset_mapping": np.asarray(
                     [e.offsets for e in batch],
-                    dtype=torch.int64,
+                    dtype=np.int64,
                 ),
             }
             if "token_type_ids" in self.model.tokenizer.model_input_names:
-                inputs["token_type_ids"] = torch.as_tensor(
+                inputs["token_type_ids"] = np.asarray(
                     [e.type_ids for e in batch],
-                    dtype=torch.int64,
+                    dtype=np.int64,
                 )
 
             inputs = {
-                key: value.to(self.model.device)
+                key: torch.from_numpy(value).to(self.model.device)
                 for key, value in inputs.items()
             }
-            inputs["use_cache"] = False
+            inputs["use_cache"] = False  # type: ignore
 
             with torch.inference_mode():
                 emb = self.model(inputs)["token_embeddings"]
@@ -116,4 +117,4 @@ class LLM(torch.nn.Module):
             offset = inputs["offset_mapping"].to(emb.device)
             attn_mask = inputs["attention_mask"].to(emb.device)
 
-            yield index.to(emb.device), emb, offset, attn_mask
+            yield perm[start : start + batch_size], emb, offset, attn_mask
