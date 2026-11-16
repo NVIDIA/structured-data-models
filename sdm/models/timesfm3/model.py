@@ -77,7 +77,7 @@ class TimesFM3(ICLModel):
     (which must also be present in ``x_context``).
 
     .. note::
-        :class:`TimesFM` model weights are distributed under the
+        :class:`TimesFM3` model weights are distributed under the
         `TimesFM Non-Commercial License v1.0 <https://huggingface.co/google/
         timesfm-3.0-pytorch/blob/main/LICENSE>`__.
         Before downloading pretrained weights, users must accept the license

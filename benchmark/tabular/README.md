@@ -52,7 +52,7 @@ python -m benchmark.tabular.tabarena.main \
 
 ### Fine-tuning
 
-`--model tabiclv2-ft`, `--model kumo-tabular-large-ft`, `--model kumo-tabular-small-ft`, and `--model tabfm-ft` full fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`):
+`--model tabiclv2-ft`, `--model kumo-tabular-large-ft`, `--model kumo-tabular-small-ft`, and `--model tabfm-ft` fine-tune every parameter of the model on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`):
 
 ```bash
 python -m benchmark.tabular.tabarena.main \

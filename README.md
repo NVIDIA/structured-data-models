@@ -51,13 +51,13 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 - **[`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
-**Times Series Forecasting Foundation Models:**
+**Time Series Forecasting Foundation Models:**
 
 - **[`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2)** from Ansari *et al.*: [Chronos-2: From Univariate to Universal Forecasting](https://arxiv.org/abs/2510.15821) (CoRR '25)
 - **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Gautam *et al.*: [Memory-Augmented Forecasting: Scalability and Generalization Across Temporal Domains](https://ieeexplore.ieee.org/abstract/document/11402442) (IEEE BigData '25)
 - **[`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3)** from Jain *et al.*: [TimesFM-3: A Zero-Shot Foundation Model for Multivariate Forecasting](https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting) ('26)
 
-**Times Series Anomaly Detection Foundation Models:**
+**Time Series Anomaly Detection Foundation Models:**
 
 - **[`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly)** from Gautam *et al.*: [NV-Tesseract-AD: Curriculum-Enhanced Conditional Diffusion for Multivariate Time-Series Anomaly Detection](https://arxiv.org/abs/2610.12754) (CoRR '26)
 
