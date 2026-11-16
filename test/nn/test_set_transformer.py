@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from functools import partial
+
 import pytest
 import torch
 
@@ -62,7 +64,10 @@ def test_induced_transformer_block(
     torch.testing.assert_close(out_seqused, out_cross)
 
 
-def test_induced_transformer_block_kv_cache() -> None:
+@pytest.mark.parametrize("output_dtype", [None, torch.float64])
+def test_induced_transformer_block_kv_cache(
+    output_dtype: torch.dtype | None,
+) -> None:
     batch_size = 2
     set_size = 6
     context_size = 5
@@ -81,44 +86,55 @@ def test_induced_transformer_block_kv_cache() -> None:
             channels=channels,
             num_query_heads=num_heads,
             mlp=torch.nn.Identity(),
+            dtype=output_dtype,
         ),
     )
+
+    forward = partial(module, output_dtype=output_dtype)
 
     query = torch.randn(batch_size, set_size, channels)
     key_value = torch.randn(batch_size, context_size, channels)
     seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
 
-    direct_out = module(
+    direct_out = forward(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
     )
-    cache_out, kv = module(
+    cache_out, kv = forward(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
         return_key_value=True,
     )
-    cached_out = module(query=query, key_value=kv)
+    cached_out = forward(query=query, key_value=kv)
     with torch.no_grad():
-        chunked_out = module(
+        buffer = torch.empty_like(query, dtype=output_dtype)
+        chunked_out = forward(
             query=query,
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             batch_size_limit=1,
+            out=buffer,
         )
-        chunked_cache_out, chunked_kv = module(
+        chunked_cache_out, chunked_kv = forward(
             query=query,
             key_value=key_value,
             seqused_key_value=seqused_key_value,
             return_key_value=True,
             batch_size_limit=1,
         )
-        chunked_cached_out = module(
+        chunked_cached_out = forward(
             query=query,
             key_value=chunked_kv,
             batch_size_limit=1,
         )
+        if output_dtype is not None:
+            with pytest.raises(ValueError, match="'out' has dtype"):
+                forward(query=query, key_value=kv, out=torch.empty_like(query))
+    assert chunked_out is buffer
+    assert direct_out.dtype == (output_dtype or query.dtype)
+    assert kv.key.dtype == direct_out.dtype
     assert kv.key.size() == (
         batch_size,
         num_inducing_points,
@@ -137,18 +153,18 @@ def test_induced_transformer_block_kv_cache() -> None:
     # The cache encodes only the context, so an unrelated query reuses it and
     # matches a full forward of that query over the same context.
     other_query = torch.randn(batch_size, set_size, channels)
-    other_direct_out = module(
+    other_direct_out = forward(
         query=other_query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
     )
-    other_cached_out = module(query=other_query, key_value=kv)
+    other_cached_out = forward(query=other_query, key_value=kv)
     torch.testing.assert_close(other_cached_out, other_direct_out)
 
     # Self-attention reuses the same cached key/value path.
-    self_out = module(query=query)
-    self_cache_out, self_kv = module(query=query, return_key_value=True)
-    self_cached_out = module(query=query, key_value=self_kv)
+    self_out = forward(query=query)
+    self_cache_out, self_kv = forward(query=query, return_key_value=True)
+    self_cached_out = forward(query=query, key_value=self_kv)
     assert self_kv.key.size() == (
         batch_size,
         num_inducing_points,

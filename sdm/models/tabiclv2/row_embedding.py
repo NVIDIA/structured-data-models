@@ -152,12 +152,30 @@ class RowEmbedding(torch.nn.Module):
             else:
                 x = self.lin(x, out=buffer[..., K:, :])  # [..., R, C, D]
 
+        stabilize_amp = (
+            x.is_cuda
+            and x.dtype in (torch.float16, torch.bfloat16)
+            and self.lin.weight.dtype == torch.float32
+        )
+        if stabilize_amp:
+            # Keep residuals in FP32 during both recording and replay.
+            if buffer is None:
+                x = x.float()
+            else:
+                buffer = buffer.float()
+                x = buffer[..., K:, :]
+
         if y.numel() > 0:
             if self.y_emb is not None:
                 y_emb = self.y_emb(y).unsqueeze(-2)  # [..., R_train, 1, D]
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
+                if stabilize_amp:
+                    with torch.amp.autocast(x.device.type, enabled=False):
+                        y_emb = self.y_lin(y.float().unsqueeze(-1))
+                else:
+                    y_emb = self.y_lin(y.unsqueeze(-1))
+                y_emb = y_emb.unsqueeze(-2)
 
             x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
@@ -181,13 +199,15 @@ class RowEmbedding(torch.nn.Module):
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
+                output_dtype=torch.float32 if stabilize_amp else None,
                 batch_size_limit="auto",
                 out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
             del key_value
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
+                x, key_value = result
+                cache[key] = key_value
             else:
                 x = result
             del result
