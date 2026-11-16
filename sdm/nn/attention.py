@@ -27,9 +27,7 @@ def _sdpa(
     is_causal: bool,
     scale: float | None,
 ) -> Tensor:  # [B, Q, Hq, C]
-    # CUDA attention kernels accept at most 65,535 batch entries per call, so
-    # a larger batch is sliced. A batch that provably fits is not split:
-    # splitting a dynamic size would add a guard to a compiled graph.
+    # CUDA attention kernels accept at most 65,535 batch entries per call.
     queries = _split_tensor(query, 65_535, dim=0)
     masks = (
         (None,) * len(queries)
@@ -69,8 +67,11 @@ def _sdpa_operator(
     is_causal: bool,
     scale: float | None,
 ) -> Tensor:
-    """Slice the batch when the operator runs, not when a graph is traced."""
-    # The memory layout of a single slice depends on the attention kernel.
+    """Run `_sdpa` as one operator that `torch.compile` does not trace.
+
+    Tracing its loop would recompile whenever the number of slices changes.
+    """
+    # Compiled code expects a contiguous output, as the fake below declares.
     return _sdpa(
         query, key, value, attn_mask, dropout_p, enable_gqa, is_causal, scale
     ).contiguous()
@@ -258,11 +259,8 @@ class SDPA(torch.nn.Module):
         key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
         value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
 
-        # Under `torch.compile`, the slicing loop of `_sdpa` is unrolled into
-        # the graph, which then serves only batches with that many slices.
-        # `_sdpa_operator` runs the same loop but is traced as one call, so
-        # one graph serves any batch size. It is skipped with gradients, which
-        # it lacks, and when the batch provably fits one kernel call.
+        # The operator avoids a recompile when the number of slices changes.
+        # It has no gradients, and a batch known to need no slicing skips it.
         sdpa = _sdpa
         if not torch.is_grad_enabled() and not statically_known_true(
             query.size(0) <= 65_535
@@ -270,11 +268,8 @@ class SDPA(torch.nn.Module):
             sdpa = _sdpa_operator
             device_type = query.device.type
             if torch.is_autocast_enabled(device_type):
-                # Autocast converts the inputs of the attention kernel to its
-                # 16-bit dtype. `torch.compile` applies autocast while it
-                # traces and does not trace into the operator, so the kernel
-                # inside it would get unconverted inputs. They are converted
-                # here instead. As in autocast, 64-bit inputs stay as they are.
+                # Compiled code skips autocast inside the operator, so
+                # convert the inputs here. Autocast never converts float64.
                 dtype = torch.get_autocast_dtype(device_type)
                 query, key, value = (
                     x if x.dtype == torch.float64 else x.to(dtype)
@@ -726,8 +721,6 @@ class TransformerBlock(torch.nn.Module):
                 "already cached"
             )
 
-        # Autograd keeps the memory of every chunk. A compiled graph records
-        # the number of chunks, so it only chunks by an explicit limit.
         if torch.is_grad_enabled() or (
             not isinstance(batch_size_limit, int)
             and torch.compiler.is_dynamo_compiling()

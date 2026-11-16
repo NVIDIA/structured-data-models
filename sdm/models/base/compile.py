@@ -66,6 +66,7 @@ def compile_predict(
     kwargs = {"isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
     shapes = model._dynamic_shapes
+    # A model without declared dynamic shapes needs none of the steps below.
     if shapes == DynamicShapes():
         return compiled
 

@@ -62,9 +62,9 @@ def split_size(num_items: int, item_bytes: int, device: torch.device) -> int:
     r"""Split size of balanced chunks of items of ``item_bytes`` bytes each.
 
     On CUDA devices, chunks fit :func:`chunk_memory_limit`, unless a single
-    item exceeds the limit. Autograd keeps the memory of every chunk, and a
-    compiled graph records the number of chunks, so one chunk holds all items
-    elsewhere, while gradients are enabled or in compiled code.
+    item exceeds the limit. Autograd keeps the memory of every chunk, so one
+    chunk holds all items elsewhere or while gradients are enabled. Compiled
+    code also uses one chunk: a new number of chunks would force a recompile.
     """
     if (
         device.type != "cuda"
