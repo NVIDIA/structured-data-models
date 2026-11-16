@@ -90,7 +90,7 @@ class ICLModel(Model):
     def forward(
         self,
         x_context: Tensor | TableTensor,  # [..., R_context, D]
-        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        y_context: Tensor | TableTensor,  # [..., R_context, Y]
         x_query: Tensor | TableTensor,  # [..., R_query, D]
         related_context_tables: RelatedTables | None = None,
         related_query_tables: RelatedTables | None = None,
@@ -109,7 +109,8 @@ class ICLModel(Model):
                 ``[..., R_context, D]`` with ``R_context`` rows and ``D``
                 columns.
             y_context: The targets of in-context examples with shape
-                ``[..., R_context, 1]``.
+                ``[..., R_context, Y]``, where ``Y`` is the number of target
+                columns. Models without multi-target support require ``Y=1``.
             x_query: The feature tensor of query examples with shape
                 ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
             related_context_tables: Related context for in-context examples.
@@ -215,7 +216,7 @@ class ICLModel(Model):
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R, D]
-        y: Tensor | TableTensor,  # [..., R, 1]
+        y: Tensor | TableTensor,  # [..., R, Y]
         related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
@@ -233,9 +234,10 @@ class ICLModel(Model):
 
         Args:
             x: The feature tensor of in-context examples with shape
-                ``[..., R, D]`` with ``R`` rows and ``C`` columns.
+                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
             y: The targets of in-context examples with shape
-                ``[..., R, 1]``.
+                ``[..., R, Y]``, where ``Y`` is the number of target columns.
+                Models without multi-target support require ``Y=1``.
             related_tables: Related context for in-context examples.
             recipe: The custom recipe for pre- and post-processing.
             num_estimators: The number of estimators ``E`` for ensembling.

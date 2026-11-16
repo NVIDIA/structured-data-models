@@ -60,7 +60,7 @@ Its weights are not bundled with this project and may be downloaded only after t
 - Optional pretrained weights: https://huggingface.co/collections/mistralai/timestral
 - Weights license: [Modified MIT License](https://huggingface.co/mistralai/Timestral-209M/blob/main/LICENSE)
 
-The [`sdm/models/timestral/`](sdm/models/timestral/) implementation contain code derived from [`Timestral`](https://github.com/mistralai/timestral).
+The [`sdm/models/timestral/`](sdm/models/timestral/) implementation contains code derived from [`Timestral`](https://github.com/mistralai/timestral).
 
 ## DPM-Solver
 
@@ -76,7 +76,7 @@ The [`sdm/models/kumo/timeseries/anomaly`](sdm/models/kumo/timeseries/anomaly) i
 - License: Apache License 2.0
 - License terms: [`third_party/tabpfn-extensions/LICENSE`](third_party/tabpfn-extensions/LICENSE)
 
-The [`sdm/models/ecoc.py`](sdm/models/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
+The [`sdm/models/base/ecoc.py`](sdm/models/base/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
 
 ## PyTorch Contribution Guide
 

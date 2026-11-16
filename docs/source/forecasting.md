@@ -4,7 +4,7 @@ Time series foundation models (TSFMs) predict future values of a series from its
 While many forecasting foundation models originally focused on predicting a single variable from its own history (**univariate forecasting**), newer models such as [Chronos-2](https://arxiv.org/abs/2510.15821) and [TimesFM-3](https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting) extend this paradigm to multiple targets (**multivariate forecasting**) and **covariates**: additional variables that inform the forecast (*e.g.*, historical temperature or planned promotions).
 These capabilities allow models to draw on relationships between targets, past observations of external factors, and known future information.
 
-Time series forecasting shares a central principle with tabular [in-context learning](icl/): a pretrained model conditions its predictions on observed examples, without requiring training on each new dataset.
+Time series forecasting shares a central principle with tabular [in-context learning](icl): a pretrained model conditions its predictions on observed examples, without requiring training on each new dataset.
 In tabular prediction, the context consists of labeled rows and the queries are new rows.
 In forecasting, the context is the observed past and the queries are future time steps.
 In both settings, attention across columns captures relationships between variables within a row or time step, while attention across rows captures relationships between observations or time steps.

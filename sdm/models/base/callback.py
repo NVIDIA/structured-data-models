@@ -33,7 +33,8 @@ class Callback:
             model: The model receiving the callback.
             x: The feature tensor of in-context examples with shape
                 ``[..., R, D]`` with ``R`` rows and ``D`` columns.
-            y: The targets of in-context examples with shape ``[..., R, 1]``.
+            y: The targets of in-context examples with shape ``[..., R, Y]``,
+                where ``Y`` is the number of target columns.
             x_context_only: The feature tensor available only in context with
                 shape ``[..., R, D_only]``, or ``None`` when absent.
             related_tables: Related context for in-context examples.
