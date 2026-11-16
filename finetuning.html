@@ -175,6 +175,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.Model.html">Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.ICLModel.html">ICLModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.ECOC.html">ECOC</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TabICLv2.html">TabICLv2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.TabFM.html">TabFM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoTabular.html">KumoTabular</a></li>
@@ -333,7 +334,7 @@ Some processors are random.
 For example, <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a> reorders feature columns, and <a class="reference internal" href="api/generated/sdm.processing.categorical.ShuffleCategories.html#sdm.processing.categorical.ShuffleCategories" title="sdm.processing.categorical.ShuffleCategories"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleCategories</span></code></a> relabels classes.
 Keep these processors to use their transformations as data augmentation during fine-tuning, or remove them if those invariances are not desired for your task.</p>
 <p>For regression tasks with <a class="reference internal" href="api/generated/sdm.models.KumoTabular.html#sdm.models.KumoTabular" title="sdm.models.KumoTabular"><code class="xref py py-class docutils literal notranslate"><span class="pre">KumoTabular</span></code></a>, additionally remove the random <a class="reference internal" href="api/generated/sdm.processing.numerical.FlipSign.html#sdm.processing.numerical.FlipSign" title="sdm.processing.numerical.FlipSign"><code class="xref py py-class docutils literal notranslate"><span class="pre">FlipSign</span></code></a> from the target pipeline.
-The default recipe inverts the sign flip via <a class="reference internal" href="api/generated/sdm.processing.output.SortQuantiles.html#sdm.processing.output.SortQuantiles" title="sdm.processing.output.SortQuantiles"><code class="xref py py-class docutils literal notranslate"><span class="pre">SortQuantiles</span></code></a>, but the <a class="reference internal" href="api/generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-class docutils literal notranslate"><span class="pre">Identity</span></code></a> output will not:</p>
+The default recipe restores quantile order via <a class="reference internal" href="api/generated/sdm.processing.output.SortQuantiles.html#sdm.processing.output.SortQuantiles" title="sdm.processing.output.SortQuantiles"><code class="xref py py-class docutils literal notranslate"><span class="pre">SortQuantiles</span></code></a>, but the <a class="reference internal" href="api/generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-class docutils literal notranslate"><span class="pre">Identity</span></code></a> output will not:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">recipe</span><span class="o">.</span><span class="n">target</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">StypeDispatch</span><span class="p">(</span>  <span class="c1"># Default target pipeline without FlipSign.</span>
 </span><span data-line="2">    <span class="n">categorical</span><span class="o">=</span><span class="p">[</span>
 </span><span data-line="3">        <span class="n">sp</span><span class="o">.</span><span class="n">AlignCategories</span><span class="p">(</span><span class="n">sort_by</span><span class="o">=</span><span class="s2">"value"</span><span class="p">),</span>
@@ -432,7 +433,7 @@ Reserve the test set for evaluating the final selected configuration.</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=24e2271c"></script>
+      <script src="_static/documentation_options.js?v=1e7561c4"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>

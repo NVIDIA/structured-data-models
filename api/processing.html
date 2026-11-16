@@ -175,6 +175,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.Model.html">Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.ICLModel.html">ICLModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.ECOC.html">ECOC</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.TabICLv2.html">TabICLv2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.TabFM.html">TabFM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.models.KumoTabular.html">KumoTabular</a></li>
@@ -255,13 +256,13 @@ data-aria-dark="Switch to auto color mode">
 <td><p>Base processor for tensor-aware table transformations.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p></td>
-<td><p>Extend a <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> by an inverse transformation.</p></td>
+<td><p>Extend a <a class="reference internal" href="generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> by an inverse transformation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p></td>
 <td><p>Base processor for ensemble-aware table transformations.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p></td>
-<td><p>Extend a <code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code> by an inverse transformation.</p></td>
+<td><p>Extend a <a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a> by an inverse transformation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.target.TargetAwareEnsembleProcessor.html#sdm.processing.target.TargetAwareEnsembleProcessor" title="sdm.processing.target.TargetAwareEnsembleProcessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TargetAwareEnsembleProcessor</span></code></a></p></td>
 <td><p>Base processor with access to unprocessed targets.</p></td>
@@ -285,7 +286,7 @@ data-aria-dark="Switch to auto color mode">
 <td><p>Return inputs unchanged.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.Callable.html#sdm.processing.common.Callable" title="sdm.processing.common.Callable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Callable</span></code></a></p></td>
-<td><p>Adapt a stateless callable to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> interface.</p></td>
+<td><p>Adapt a stateless callable to the <a class="reference internal" href="generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> interface.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Sequential.html#sdm.processing.common.Sequential" title="sdm.processing.common.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sequential</span></code></a></p></td>
 <td><p>Apply processors and callables to a table in sequence.</p></td>
@@ -420,7 +421,7 @@ data-aria-dark="Switch to auto color mode">
 <td><p>Encode text columns as character n-gram TF-IDF vectors.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.text.SentenceTransformer.html#sdm.processing.text.SentenceTransformer" title="sdm.processing.text.SentenceTransformer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SentenceTransformer</span></code></a></p></td>
-<td><p>Transform text columns with a <code class="xref py py-class docutils literal notranslate"><span class="pre">sentence_transformers.SentenceTransformer</span></code> model.</p></td>
+<td><p>Transform text columns with a <a class="reference external" href="https://sbert.net/docs/package_reference/sentence_transformer/model.html#sentence_transformers.sentence_transformer.model.SentenceTransformer" title="(in Sentence Transformers)"><code class="xref py py-class docutils literal notranslate"><span class="pre">sentence_transformers.SentenceTransformer</span></code></a> model.</p></td>
 </tr>
 </tbody>
 </table>
@@ -485,7 +486,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=24e2271c"></script>
+      <script src="../_static/documentation_options.js?v=1e7561c4"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

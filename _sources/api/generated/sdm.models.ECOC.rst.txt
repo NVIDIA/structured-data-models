@@ -1,0 +1,8 @@
+﻿ECOC
+====
+
+.. currentmodule:: sdm.models
+
+.. autoclass:: ECOC
+   :members:
+   :show-inheritance:

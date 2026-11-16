@@ -175,6 +175,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.Model.html">Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.ICLModel.html">ICLModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.models.ECOC.html">ECOC</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.TabICLv2.html">TabICLv2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.TabFM.html">TabFM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.KumoTabular.html">KumoTabular</a></li>
@@ -257,7 +258,7 @@ a scaled query</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[\tilde{q}_{hi} = q_{hi} \cdot
-  \mathrm{MLP}_{\mathrm{base}}(\log n)_{hi} \cdot
+  \mathrm{MLP}_{\mathrm{base}}(\log(\max(n, 1)))_{hi} \cdot
   \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),\]</div>
 </div>
 <p>where <span class="math notranslate nohighlight">\(h\)</span> indexes attention heads, <span class="math notranslate nohighlight">\(i\)</span> indexes head channels,
@@ -308,7 +309,7 @@ queries.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=24e2271c"></script>
+      <script src="../../_static/documentation_options.js?v=1e7561c4"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

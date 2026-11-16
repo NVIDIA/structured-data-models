@@ -175,6 +175,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.Model.html">Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.ICLModel.html">ICLModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.models.ECOC.html">ECOC</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.TabICLv2.html">TabICLv2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.TabFM.html">TabFM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.KumoTabular.html">KumoTabular</a></li>
@@ -269,16 +270,17 @@ if its timestamp does not exceed the query timestamp.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>num_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.15)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em>) – Number of neighbors to sample per hop.</p></li>
 <li><p><strong>task_table</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Task table whose rows define the sampling queries.</p></li>
 <li><p><strong>task_link</strong> (<a class="reference internal" href="sdm.relational.TaskLink.html#sdm.relational.TaskLink" title="sdm.relational.task.TaskLink"><em>TaskLink</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.15)"><em>Mapping</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.15)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>]</em><em>]</em>) – Link from <code class="docutils literal notranslate"><span class="pre">task_table</span></code> rows to a table in the
 relational data.</p></li>
+<li><p><strong>num_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.15)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em>) – Number of neighbors to sample per hop.</p></li>
 <li><p><strong>task_time_column</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> | </em><em>None</em>) – Datetime column in <code class="docutils literal notranslate"><span class="pre">task_table</span></code> used as the
 query timestamp for temporal sampling.</p></li>
 <li><p><strong>temporal_strategy</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><em>Literal</em></a><em>[</em><em>'last'</em><em>, </em><em>'uniform'</em><em>]</em>) – How temporal neighbors are selected. <code class="docutils literal notranslate"><span class="pre">&quot;last&quot;</span></code>
 selects the most recent neighbors before each seed timestamp.
 <code class="docutils literal notranslate"><span class="pre">&quot;uniform&quot;</span></code> samples uniformly from neighbors before each seed
-timestamp.</p></li>
+timestamp. CUDA sampling currently falls back from <code class="docutils literal notranslate"><span class="pre">&quot;last&quot;</span></code>
+to <code class="docutils literal notranslate"><span class="pre">&quot;uniform&quot;</span></code> with a warning.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -315,7 +317,7 @@ timestamp.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=24e2271c"></script>
+      <script src="../../_static/documentation_options.js?v=1e7561c4"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

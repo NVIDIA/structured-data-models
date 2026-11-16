@@ -175,6 +175,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.Model.html">Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.ICLModel.html">ICLModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.ECOC.html">ECOC</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.TabICLv2.html">TabICLv2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.TabFM.html">TabFM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../generated/sdm.models.KumoTabular.html">KumoTabular</a></li>
@@ -259,8 +260,8 @@ data-aria-dark="Switch to auto color mode">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>categorical</strong> (<a class="reference internal" href="#sdm.stype.CategoricalConfig" title="sdm.stype.CategoricalConfig"><em>CategoricalConfig</em></a>) – Thresholds for inferring numeric columns as
-<code class="xref py py-attr docutils literal notranslate"><span class="pre">categorical</span></code>.</p></li>
-<li><p><strong>text</strong> (<a class="reference internal" href="#sdm.stype.TextConfig" title="sdm.stype.TextConfig"><em>TextConfig</em></a>) – Thresholds for inferring string columns as <code class="xref py py-attr docutils literal notranslate"><span class="pre">text</span></code>.</p></li>
+<a class="reference internal" href="../generated/sdm.Stype.html#sdm.Stype.categorical" title="sdm.Stype.categorical"><code class="xref py py-attr docutils literal notranslate"><span class="pre">categorical</span></code></a>.</p></li>
+<li><p><strong>text</strong> (<a class="reference internal" href="#sdm.stype.TextConfig" title="sdm.stype.TextConfig"><em>TextConfig</em></a>) – Thresholds for inferring string columns as <a class="reference internal" href="../generated/sdm.Stype.html#sdm.Stype.text" title="sdm.Stype.text"><code class="xref py py-attr docutils literal notranslate"><span class="pre">text</span></code></a>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -272,7 +273,7 @@ data-aria-dark="Switch to auto color mode">
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.stype.CategoricalConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.stype.</span></span><span class="sig-name descname"><span class="pre">CategoricalConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">min_rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">151</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_unique</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.stype.CategoricalConfig" title="Link to this definition">#</a></dt>
-<dd><p>Thresholds for inferring numeric columns as <code class="xref py py-attr docutils literal notranslate"><span class="pre">categorical</span></code>.</p>
+<dd><p>Thresholds for inferring numeric columns as <a class="reference internal" href="../generated/sdm.Stype.html#sdm.Stype.categorical" title="sdm.Stype.categorical"><code class="xref py py-attr docutils literal notranslate"><span class="pre">categorical</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -289,7 +290,7 @@ data-aria-dark="Switch to auto color mode">
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.stype.TextConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.stype.</span></span><span class="sig-name descname"><span class="pre">TextConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">min_unique</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_unique_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_avg_words</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.stype.TextConfig" title="Link to this definition">#</a></dt>
-<dd><p>Thresholds for inferring string columns as <code class="xref py py-attr docutils literal notranslate"><span class="pre">text</span></code>.</p>
+<dd><p>Thresholds for inferring string columns as <a class="reference internal" href="../generated/sdm.Stype.html#sdm.Stype.text" title="sdm.Stype.text"><code class="xref py py-attr docutils literal notranslate"><span class="pre">text</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -313,7 +314,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=24e2271c"></script>
+      <script src="../../_static/documentation_options.js?v=1e7561c4"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

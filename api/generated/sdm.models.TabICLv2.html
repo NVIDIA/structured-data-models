@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TabICLv2 - Structured Data Models</title><link rel="shortcut icon" href="../../_static/nvidia.svg"/><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="TabFM" href="sdm.models.TabFM.html" /><link rel="prev" title="Callback" href="sdm.models.Callback.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TabICLv2 - Structured Data Models</title><link rel="shortcut icon" href="../../_static/nvidia.svg"/><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="TabFM" href="sdm.models.TabFM.html" /><link rel="prev" title="ECOC" href="sdm.models.ECOC.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -175,6 +175,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.Model.html">Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.ICLModel.html">ICLModel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.Callback.html">Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.models.ECOC.html">ECOC</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">TabICLv2</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.TabFM.html">TabFM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.KumoTabular.html">KumoTabular</a></li>
@@ -350,7 +351,7 @@ classification or quantile predictions for regression.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>task</strong> (<em>TaskLike</em><em> | </em><em>Iterable</em><em>[</em><em>TaskLike</em><em>] </em><em>| </em><em>None</em>) – The tasks to initialize. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, all tasks supported by this
+<li><p><strong>task</strong> (<a class="reference internal" href="../sdm.html#sdm.TaskLike" title="sdm.TaskLike"><em>TaskLike</em></a><em> | </em><em>Iterable</em><em>[</em><a class="reference internal" href="../sdm.html#sdm.TaskLike" title="sdm.TaskLike"><em>TaskLike</em></a><em>] </em><em>| </em><em>None</em>) – The tasks to initialize. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, all tasks supported by this
 model are initialized.</p></li>
 <li><p><strong>pretrained</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – Whether to load the pretrained checkpoint.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.15)"><em>torch.device</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> | </em><em>None</em>) – The device.</p></li>
@@ -463,10 +464,10 @@ model are initialized.</p></li>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.models.Callback.html">
+    <a href="sdm.models.ECOC.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Callback</div></div>
+        <span>Previous</span><div class="title">ECOC</div></div>
     </a>
   </div><div class="navigation-next">
     <a href="sdm.models.TabFM.html">
@@ -481,7 +482,7 @@ model are initialized.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=24e2271c"></script>
+      <script src="../../_static/documentation_options.js?v=1e7561c4"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

@@ -24,10 +24,8 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 - {py:class}`~sdm.tensor.VarLenTensor`: A tensor whose logical elements have variable-length payloads, *e.g.*, for multi-categorical data.
 - {py:class}`~sdm.tensor.StringTensor`: A specialized {py:class}`~sdm.tensor.VarLenTensor` for representing UTF-8 strings.
 - {py:class}`~sdm.tensor.NullableTensor`: A tensor for nullable integer or boolean values.
-- {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.
-  Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
-- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless table representation whose columns are grouped by semantic type.
-  It is the main user-facing interface for model inputs and outputs.
+- {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values. Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
+- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless table representation whose columns are grouped by semantic type. It is the main user-facing interface for model inputs and outputs.
 
 ## Working with {py:class}`~sdm.tensor.TableTensor`
 
@@ -85,9 +83,9 @@ print(table.columns)
 # {
 #   Stype.numerical: ("age", "income"),
 #   Stype.categorical: ("country",),
-#   Stype.datetime: (),
 #   Stype.text: ("title",),
 #   Stype.id: ("user_id",),
+#   Stype.datetime: (),
 # }
 
 print(table.numerical.size())
@@ -99,7 +97,7 @@ print(table.numerical_columns)
 print(table.categorical.code)
 # tensor([[0],
 #         [1],
-#         [0]])
+#         [0]], dtype=torch.int32)
 
 print(table.categorical.categories[0].tolist())
 # ["US", "DE"]
@@ -107,7 +105,7 @@ print(table.categorical.categories[0].tolist())
 
 ```{note}
 The mapping from categories to integer codes is not a stable API guarantee and may depend on the input data or backend.
-For fully deterministic category mappings, align categories at the processing level via {py:class}`~sdm.processing.categorical.AlignCategories`.
+To give context and query tables a shared mapping, fit {py:class}`~sdm.processing.categorical.AlignCategories` on the context and reuse it for the queries.
 ```
 
 ### Column Semantics
