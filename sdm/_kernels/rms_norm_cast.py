@@ -48,6 +48,14 @@ def rms_norm_cast(
         _triton_rms_norm_cast is not None
         and x.is_cuda
         and x.dtype in {torch.float16, torch.bfloat16, torch.float32}
+        # Without autocast, RMSNorm rounds to the input dtype before the
+        # output cast. A direct cast from the kernel's float32 accumulator
+        # would skip that rounding when changing the output dtype.
+        and (
+            torch.is_autocast_enabled("cuda")
+            or x.dtype == torch.float32
+            or x.dtype == torch.get_autocast_dtype("cuda")
+        )
         and x.size(-1) in {32, 64, 128, 256, 512}
         and (
             weight is None

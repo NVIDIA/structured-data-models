@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -10,6 +11,29 @@ import torch.nn.functional as F
 from sdm._kernels import rms_norm_cast
 from sdm.nn import RotaryEmbedding
 from sdm.testing import onlyCUDA, withCUDA
+
+
+def reference(
+    x: torch.Tensor,
+    weight: torch.Tensor | None,
+    eps: float,
+    dtype: torch.dtype,
+    rope: tuple[torch.Tensor, torch.Tensor] | None = None,
+) -> torch.Tensor:
+    if rope is not None:
+        cos, sin = (table.double().unsqueeze(-2) for table in rope)
+        x1, x2 = x.double().chunk(2, dim=-1)
+        # Preserve eager RoPE's rounding after each product and sum.
+        first = (x1 * cos).to(x.dtype).double()
+        first -= (x2 * sin).to(x.dtype).double()
+        second = (x2 * cos).to(x.dtype).double()
+        second += (x1 * sin).to(x.dtype).double()
+        x = torch.cat((first, second), dim=-1).to(x.dtype)
+    out = x.double()
+    out = out * (out.square().mean(-1, keepdim=True) + eps).rsqrt()
+    if weight is not None:
+        out = out * weight.double()
+    return out.to(dtype)
 
 
 @onlyCUDA
@@ -24,6 +48,7 @@ def test_rms_norm_cast(
     affine: bool,
     strided: bool,
     channels: int,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
 ) -> None:
     current_device = torch.cuda.current_device()
     device = torch.device(
@@ -60,8 +85,17 @@ def test_rms_norm_cast(
         actual = rms_norm_cast(x, weight, eps)
 
     assert torch.cuda.current_device() == current_device
+    # Native CUDA and CuTeDSL use different float32 reduction orders.
+    # Validate both against float64, allowing one output rounding step.
+    oracle = reference(x, weight, eps, output_dtype)
+    assert_close_ulp(actual, oracle)
+    assert_close_ulp(expected, oracle)
     torch.testing.assert_close(
-        actual, expected, rtol=0, atol=0, equal_nan=True
+        actual[0, [0, 2, 3]],
+        oracle[0, [0, 2, 3]],
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
 
 
@@ -128,6 +162,7 @@ def test_rms_norm_cast_rope(
     dtype: torch.dtype,
     channels: int,
     strided: bool,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
 ) -> None:
     rope = RotaryEmbedding(
         channels=channels,
@@ -157,7 +192,61 @@ def test_rms_norm_cast_rope(
             torch.float16
         )
 
-    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    oracle = reference(x, weight, 1e-6, torch.float16, rope=tables)
+    assert_close_ulp(actual, oracle)
+    assert_close_ulp(expected, oracle)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("dtype", "output_dtype"),
+    [
+        (torch.float16, torch.bfloat16),
+        (torch.bfloat16, torch.float16),
+        (torch.float16, torch.float32),
+        (torch.bfloat16, torch.float32),
+    ],
+)
+@pytest.mark.parametrize(
+    "weight_dtype", [None, torch.float16, torch.bfloat16, torch.float32]
+)
+@pytest.mark.parametrize("rope_enabled", [False, True])
+@pytest.mark.parametrize("strided", [False, True])
+def test_rmsnorm_cast_without_autocast(
+    dtype: torch.dtype,
+    output_dtype: torch.dtype,
+    weight_dtype: torch.dtype | None,
+    rope_enabled: bool,
+    strided: bool,
+) -> None:
+    x = torch.randn(
+        2, 257, 4, 128 if strided else 64, device="cuda", dtype=dtype
+    )
+    if strided:
+        x = x[..., ::2]
+    weight = (
+        None
+        if weight_dtype is None
+        else torch.randn(64, device=x.device, dtype=weight_dtype)
+    )
+    tables = None
+    rotated = x
+    if rope_enabled:
+        phase = torch.randn(257, 32, device=x.device)
+        tables = (phase.cos().to(dtype), phase.sin().to(dtype))
+        cos, sin = (table.unsqueeze(-2) for table in tables)
+        first, second = x.chunk(2, dim=-1)
+        rotated = torch.cat(
+            (first * cos - second * sin, second * cos + first * sin), dim=-1
+        )
+    with (
+        torch.inference_mode(),
+        torch.autocast("cuda", dtype=output_dtype, enabled=False),
+    ):
+        native = F.rms_norm(rotated, (64,), weight, 1e-6)
+        actual = rmsnorm_cast(x, weight, 1e-6, rope=tables)
+    assert native.dtype == dtype
+    torch.testing.assert_close(actual, native.to(output_dtype), rtol=0, atol=0)
 
 
 @withCUDA
