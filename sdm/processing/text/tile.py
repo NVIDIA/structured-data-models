@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from typing import cast
 
 import numpy as np
 import pyarrow as pa
@@ -9,7 +10,19 @@ import pyarrow.compute as pc
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
+from sdm.processing.text.llm import LLM
+
+MODELS: dict[str, tuple[str, int]] = {  # (model_name, num_layers)
+    "llama-3.1-8b": ("meta-llama/Llama-3.1-8B", 14),
+    "llama-3.1-70b": ("meta-llama/Llama-3.1-70B", 32),
+    "llama-3.2-1b": ("meta-llama/Llama-3.2-1B", 10),
+    "llama-3.2-3b": ("meta-llama/Llama-3.2-3B", 11),
+    "qwen3-0.6b": ("Qwen/Qwen3-0.6B-Base", 16),
+    "qwen3-4b": ("Qwen/Qwen3-4B-Base", 20),
+    "qwen3-8b": ("Qwen/Qwen3-8B-Base", 19),
+}
 
 
 def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
@@ -54,3 +67,107 @@ def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
         pa.scalar(" ", dtype),
     )
     return array.combine_chunks(), span
+
+
+class TILE(Processor):
+    requires_fit = False
+    handles_stypes = (Stype.text,)
+
+    def __init__(
+        self,
+        model: str,
+        postprocess: Processor | None = None,
+        *,
+        batch_size: int = 64,
+        max_length: int | None = None,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype = torch.bfloat16,
+    ) -> None:
+        super().__init__()
+
+        if model not in MODELS:
+            raise ValueError(
+                f"Unsupported model {model!r}. Supported models: "
+                f"{', '.join(MODELS)}"
+            )
+
+        from sentence_transformers import SentenceTransformer
+        from transformers import AutoConfig
+
+        model, num_layers = MODELS[model]
+        config_kwargs: dict[str, object] = {
+            "num_hidden_layers": num_layers,
+        }
+        config = AutoConfig.from_pretrained(model)
+        if getattr(config, "layer_types", None) is not None:
+            config_kwargs["layer_types"] = config.layer_types[:num_layers]
+
+        llm = SentenceTransformer(
+            model,
+            device=str(device) if device is not None else None,
+            config_kwargs=config_kwargs,
+            model_kwargs={"dtype": dtype},
+        )
+        cast(torch.nn.Module, llm.transformers_model).set_submodule(
+            target="norm",
+            module=torch.nn.Identity(),
+        )
+
+        self.llm = LLM(model)
+        self.postprocess = postprocess
+        self.batch_size = batch_size
+        self.max_length = max_length
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        columns = tuple(
+            column for columns in table.columns.values() for column in columns
+        )
+        positions = [columns.index(column) for column in table.text_columns]
+
+        text, span = textify(table)
+        span = span.view(len(text), table.size(-1), 2)[:, positions]
+        span = span.to(self.llm.model.device)
+
+        D = self.llm.model.transformers_model.config.hidden_size  # type: ignore
+        out = table.numerical.new_empty(
+            (len(text), len(positions), D),
+            device=self.llm.model.device,
+        )
+        for (  # Mean pool embeddings for each text cell:
+            index,  # [R]
+            emb,  # [R, T, D]
+            offset,  # [R, T, 2]
+            mask,  # [R, T]
+        ) in self.llm(text, self.batch_size, self.max_length):
+            emb = emb.to(out.dtype)
+            start, end = span[index].unbind(dim=-1)
+            mask = mask & (offset[..., 1] > offset[..., 0])
+            weight = (  # Match tokens to text cells:
+                mask[:, None, :]
+                & (offset[:, None, :, 0] < end[:, :, None])
+                & (offset[:, None, :, 1] > start[:, :, None])
+            ).to(out.dtype)  # [R, C, T]
+            weight /= weight.sum(dim=-1, keepdim=True).clamp(min=1)
+            out[index] = weight.bmm(emb)  # [R, C, D]
+        out = out.view(*table.size()[:-1], *out.size()[-2:])  # [..., R, C, D]
+
+        if self.postprocess is not None:
+            out = self.postprocess.transform(
+                TableTensor.from_tensor(out.movedim(-2, -3))
+            ).numerical.movedim(-2, -3)  # [..., R, C, D]
+
+        out = TableTensor(
+            columns={
+                Stype.numerical: tuple(
+                    f"{column}__emb{i}"
+                    for column in table.text_columns
+                    for i in range(out.size(-1))
+                )
+            },
+            numerical=out.flatten(-2).to(table.device),
+        )
+
+        return cast(
+            TableTensor,
+            torch.cat([table.drop_stypes(Stype.text), out], dim=-1),
+        )
