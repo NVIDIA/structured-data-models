@@ -45,9 +45,10 @@ class KumoForecastMissingness(ICLModel):
     The default recipe fits observed-value statistics on all supplied context
     rows and freezes them during forecasting. Supply only past data. Custom
     recipes must preserve gaps and channel order. Frozen reference statistics
-    can be supplied through :meth:`~sdm.processing.Standardize.with_state`;
-    this checkpoint contains no dataset standardizer. DARR and interpretability
-    are not supported by this model.
+    can be supplied through
+    :meth:`~sdm.processing.numerical.Standardize.with_state`; this checkpoint
+    contains no dataset standardizer. DARR and interpretability are not
+    supported by this model.
 
     Args:
         pretrained: Whether to load the released pretrained checkpoint.
