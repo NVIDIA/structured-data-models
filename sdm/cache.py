@@ -9,8 +9,9 @@ from collections.abc import (
     Mapping,
     MutableMapping,
 )
+from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import NamedTuple, Self, cast
+from typing import Self, cast
 
 import torch
 from torch import Tensor
@@ -19,12 +20,8 @@ from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
 
 
-class _KVCacheEntry(NamedTuple):
-    key: Tensor
-    value: Tensor
-
-
-class KVCacheEntry(_KVCacheEntry, DeviceMixin):
+@dataclass
+class KVCacheEntry(DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
     Args:
@@ -32,16 +29,104 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
+    key: Tensor
+    value: Tensor
+
+    def dequantize(self) -> "KVCacheEntry":
+        r"""Return the key/value projections in their floating-point dtype."""
+        return self
+
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
         yield self.value
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        return self.__class__(key=fn(self.key), value=fn(self.value))
+        return replace(self, key=fn(self.key), value=fn(self.value))
+
+
+@dataclass
+class QuantizedKVCacheEntry(KVCacheEntry):
+    r"""Cached key/value projections stored in a low-precision dtype.
+
+    Every key and value vector of a token and head is scaled by its absolute
+    maximum, so ``key.to(dtype) * key_scale`` approximates the original key.
+
+    Args:
+        key: Quantized key projections with shape ``[..., KV, H, C]``.
+        value: Quantized value projections with shape ``[..., KV, H, C]``.
+        key_scale: FP32 key scales with shape ``[..., KV, H, 1]``.
+        value_scale: FP32 value scales with shape ``[..., KV, H, 1]``.
+        dtype: Floating-point dtype of the dequantized projections.
+    """
+
+    key_scale: Tensor
+    value_scale: Tensor
+    dtype: torch.dtype
+
+    @classmethod
+    def from_entry(cls, entry: KVCacheEntry, dtype: torch.dtype) -> Self:
+        r"""Quantize floating-point key/value projections.
+
+        Args:
+            entry: Key/value projections with shape ``[..., KV, H, C]``.
+            dtype: Storage dtype, *e.g.*, ``torch.int8`` or
+                ``torch.float8_e4m3fn``.
+        """
+        key, key_scale = _quantize(entry.key, dtype)
+        value, value_scale = _quantize(entry.value, dtype)
+        return cls(
+            key=key,
+            value=value,
+            key_scale=key_scale,
+            value_scale=value_scale,
+            dtype=entry.value.dtype,
+        )
+
+    def dequantize(self) -> KVCacheEntry:
+        r"""Return the key/value projections in their floating-point dtype."""
+        return KVCacheEntry(
+            key=self.key.to(self.dtype).mul_(self.key_scale),
+            value=self.value.to(self.dtype).mul_(self.value_scale),
+        )
+
+    def _tensors(self) -> Iterator[Tensor]:
+        yield from super()._tensors()
+        yield self.key_scale
+        yield self.value_scale
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return replace(
+            super()._apply_tensor(fn),
+            key_scale=fn(self.key_scale),
+            value_scale=fn(self.value_scale),
+        )
+
+
+def _quantize(tensor: Tensor, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
+    bound = (
+        torch.finfo(dtype) if dtype.is_floating_point else torch.iinfo(dtype)
+    ).max
+    scale = tensor.abs().amax(-1, keepdim=True).float()  # [..., KV, H, 1]
+    scale = scale.div_(bound).masked_fill_(scale == 0, 1)
+    out = (tensor / scale).clamp_(-bound, bound)  # [..., KV, H, C]
+    if not dtype.is_floating_point:
+        out = out.round_()
+    return out.to(dtype), scale
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
-    r"""A mutable mapping of model cache values."""
+    r"""A mutable mapping of model cache values.
+
+    Args:
+        args: Initial cache data as a mapping or iterable of key/value pairs.
+        kv_cache_dtype: Storage dtype for recorded :class:`KVCacheEntry`
+            values, *e.g.*, ``torch.int8`` or ``torch.float8_e4m3fn``, which
+            stores them as :class:`QuantizedKVCacheEntry`. If ``None``,
+            entries keep the dtype of their projections.
+        kwargs: Additional initial cache data.
+    """
+
+    kv_cache_dtype: torch.dtype | None = None
 
     class Mode(StrEnum):
         r"""The operating mode of a :class:`Cache`.
@@ -62,10 +147,13 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def __init__(
         self,
         *args: Mapping[Hashable, object] | Iterable[tuple[Hashable, object]],
+        kv_cache_dtype: torch.dtype | None = None,
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        self._items: dict[Hashable, object] = dict(*args, **kwargs)
+        self.kv_cache_dtype = kv_cache_dtype
+        self._items: dict[Hashable, object] = {}
+        self.update(*args, **kwargs)
 
     @property
     def is_recording(self) -> bool:
@@ -106,6 +194,10 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         if not self.is_recording:
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
+            )
+        if self.kv_cache_dtype is not None and type(value) is KVCacheEntry:
+            value = QuantizedKVCacheEntry.from_entry(
+                entry=value, dtype=self.kv_cache_dtype
             )
         self._items[key] = value
 
@@ -194,7 +286,8 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             return value
 
         out = self.__class__(
-            {key: _apply(value) for key, value in self.items()}
+            {key: _apply(value) for key, value in self.items()},
+            kv_cache_dtype=self.kv_cache_dtype,
         )
         out._mode = self._mode
         return out

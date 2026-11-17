@@ -225,6 +225,7 @@ class ICLModel(Model):
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
         generator: torch.Generator | None = None,
+        kv_cache_dtype: torch.dtype | None = None,
         **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -257,6 +258,11 @@ class ICLModel(Model):
             callbacks: Callbacks applied in sequence to this model call.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
+            kv_cache_dtype: Storage dtype for cached key/value projections,
+                *e.g.*, ``torch.int8`` or ``torch.float8_e4m3fn``. Each key and
+                value vector is stored with an FP32 scale and dequantized
+                before attention, so predictions are approximate. If ``None``,
+                projections are cached in their computed dtype.
             kwargs: Additional keyword arguments passed to the model.
         """
         if context_only_columns and not self.supports_context_only_columns:
@@ -308,6 +314,7 @@ class ICLModel(Model):
                 context = _stack_context(contexts[batch])
                 categorical_mask = _categorical_mask(contexts[batch])
                 batch_cache = Cache(
+                    kv_cache_dtype=kv_cache_dtype,
                     x_schemas=tuple(
                         context.x.schema for context in contexts[batch]
                     ),

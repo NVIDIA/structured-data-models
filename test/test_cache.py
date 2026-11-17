@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 import torch
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache, KVCacheEntry, QuantizedKVCacheEntry
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -117,4 +117,71 @@ def test_cache_serialization_without_cuda(
     assert not restored.is_pinned()
     torch.testing.assert_close(
         restored["tensor"], cache["tensor"], rtol=0, atol=0
+    )
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    ("dtype", "tolerance"),
+    [
+        (torch.int8, 0.5 / 127),
+        (torch.float8_e4m3fn, 2**-4),
+        (torch.float8_e5m2, 2**-3),
+    ],
+)
+def test_quantized_kv_cache_entry(
+    device: torch.device, dtype: torch.dtype, tolerance: float
+) -> None:
+    entry = KVCacheEntry(
+        key=torch.randn(2, 5, 3, 8, device=device) * 100,
+        value=torch.randn(2, 5, 3, 8, device=device),
+    )
+    entry.key[0, 0, 0] = 0
+
+    quantized = QuantizedKVCacheEntry.from_entry(entry, dtype)
+    assert quantized.key.dtype == quantized.value.dtype == dtype
+    assert quantized.key_scale.size() == (2, 5, 3, 1)
+
+    restored = quantized.dequantize()
+    assert restored.dequantize() is restored
+    for actual, expected in (
+        (restored.key, entry.key),
+        (restored.value, entry.value),
+    ):
+        assert actual.dtype == torch.float32
+        absmax = expected.abs().amax(-1, keepdim=True)
+        assert ((actual - expected).abs() <= tolerance * absmax).all()
+    assert (restored.key[0, 0, 0] == 0).all()
+
+
+@withCUDA
+def test_cache_kv_cache_dtype(device: torch.device) -> None:
+    entry = KVCacheEntry(
+        key=torch.randn(4, 2, 8, device=device, dtype=torch.float16),
+        value=torch.randn(4, 2, 8, device=device, dtype=torch.float16),
+    )
+    cache = Cache(entry=entry, kv_cache_dtype=torch.int8)
+    cache["tensor"] = entry.key
+    cache["nested"] = Cache(entry=entry)
+
+    assert isinstance(cache["entry"], QuantizedKVCacheEntry)
+    assert cache["tensor"] is entry.key
+    # INT8 payloads and FP32 scales, plus the uncompressed tensor and entry.
+    assert cache.size() == 2 * (64 + 4 * 8) + 64 * 2 + 2 * 64 * 2
+
+    cache = cache.cpu()
+    assert cache.kv_cache_dtype == torch.int8
+    assert cast(QuantizedKVCacheEntry, cache["entry"]).key_scale.is_cpu
+    cache["other"] = entry
+    assert isinstance(cache["other"], QuantizedKVCacheEntry)
+
+    stream = io.BytesIO()
+    torch.save(cache.freeze(), stream)
+    stream.seek(0)
+    restored = torch.load(stream, weights_only=False)
+    torch.testing.assert_close(
+        cast(KVCacheEntry, restored["entry"]).dequantize().key,
+        cast(KVCacheEntry, cache["entry"]).dequantize().key,
+        rtol=0,
+        atol=0,
     )

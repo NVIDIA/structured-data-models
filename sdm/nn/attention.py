@@ -396,6 +396,7 @@ class Attention(torch.nn.Module):
             key_pos = query_pos
 
         if isinstance(key_value, KVCacheEntry):
+            key_value = key_value.dequantize()
             query = F.linear(
                 query,
                 weight=self.qkv_lin.weight[: self.q_dim],
@@ -947,9 +948,8 @@ def _chunk(
         return None
 
     if isinstance(tensor, KVCacheEntry):
-        return KVCacheEntry(
-            key=_chunk(tensor.key, batch_shape, 3, start, end),
-            value=_chunk(tensor.value, batch_shape, 3, start, end),
+        return tensor._apply_tensor(
+            lambda t: _chunk(t, batch_shape, 3, start, end)
         )
 
     trailing_shape = tensor.size()[-trailing_dims:] if trailing_dims else ()

@@ -324,3 +324,29 @@ def test_compile(dtype: torch.dtype) -> None:
     predicted = model.predict(x_query)
     assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
+
+
+@withCUDA
+@pytest.mark.parametrize("kv_cache_dtype", [torch.int8, torch.float8_e4m3fn])
+def test_kv_cache_dtype(
+    device: torch.device, kv_cache_dtype: torch.dtype
+) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(64, 6, device=device)
+    y_context = torch.randint(0, 3, (64, 1), device=device)
+    x_query = torch.randn(16, 6, device=device)
+
+    model.fit(x_context, y_context, num_estimators=2)
+    assert model._cache is not None
+    size = model._cache.size()
+    expected = model.predict(x_query)
+
+    model.fit(
+        x_context, y_context, num_estimators=2, kv_cache_dtype=kv_cache_dtype
+    )
+    assert model._cache is not None
+    # One-byte payloads with one FP32 scale per head vector.
+    assert model._cache.size() < size / 2
+    out = model.predict(x_query)
+    assert out.size() == expected.size()
+    assert out.numerical.dtype == expected.numerical.dtype

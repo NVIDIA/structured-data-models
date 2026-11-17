@@ -256,6 +256,14 @@ def test_forward(
             task_links=related_tables.task_links[::-1],
         ),
     ).allclose(out, atol=1e-4, rtol=1e-4)
+
+    # Nested table caches also store quantized key/value projections:
+    assert model._cache is not None
+    size = model._cache.size()
+    model.fit(x, y, related_tables, kv_cache_dtype=torch.int8)
+    assert model._cache is not None
+    assert model._cache.size() < size / 2
+    assert model.predict(x, related_tables).size() == out.size()
     model.clear()
 
 

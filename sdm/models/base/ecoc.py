@@ -107,7 +107,9 @@ class ECOC(torch.nn.Module):
             )
         if cache is not None and not cache.is_replaying:
             cache["ecoc_codebook"] = codebook
-            kwargs["cache"] = cache["ecoc_model"] = Cache()
+            kwargs["cache"] = cache["ecoc_model"] = Cache(
+                kv_cache_dtype=cache.kv_cache_dtype
+            )
 
         T = codebook.size(-2)
         if codebook.dim() == 2:
