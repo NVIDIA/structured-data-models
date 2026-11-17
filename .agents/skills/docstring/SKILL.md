@@ -48,9 +48,6 @@ class MyClass:
         Returns:
             Tensor with shape ``[..., S, C]``.
         """
-
-    def citation(self) -> str:
-        """Return the key from :func:`sdm.refs.resolve_default_citation_key`."""  # noqa: E501
 ```
 
 ## Sphinx Cross-Referencing Reference
@@ -75,12 +72,12 @@ in `docs/source/conf.py`).
 ```python
 r"""
 - :mod:`sdm.nn`: Module reference.
-- :class:`~sdm.nn.Module`: Class reference. External targets use the same
+- :class:`~sdm.nn.Attention`: Class reference. External targets use the same
   role: :class:`pandas.DataFrame`, :class:`torch.nn.Module`, :class:`dict`,
   :class:`TypeError`, :class:`collections.abc.Mapping`.
 - :class:`~pyarrow.Array`: Leading ``~`` renders only ``Array``. Use it in
   summary lines; keep the full path in ``Args:`` entries.
-- :meth:`~sdm.nn.Module.forward`: Method reference.
+- :meth:`~sdm.nn.Attention.forward`: Method reference.
 - :func:`torch.nn.functional.scaled_dot_product_attention`: Function
   reference. Use :func: for free functions and :meth: only for methods.
 - :attr:`attribute`: Attribute reference.
@@ -99,5 +96,5 @@ r"""
 
 ## Verification
 
-Run `uv run ruff check`. This is a structural backstop only: it flags missing public class/method/function docstrings, capitalization, end punctuation, `r"""` for backslashes, and `Args:`/signature mismatches.
+Run `uvx ruff check`. This is a structural backstop only: it flags missing public class/method/function docstrings, capitalization, end punctuation, `r"""` for backslashes, and `Args:`/signature mismatches.
 It does **not** require an `Args:` section to exist, or verify citations, shape notation, or behavior notes — confirm those by hand against the principles above.

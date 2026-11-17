@@ -50,7 +50,7 @@ python -m benchmark.tabular.talent.main \
 
 ## Fine-tuning
 
-Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked. `--model kumo-tabular-small-ft` is `kumo-tabular-small` capped at 10 classes, for fine-tuning stability on multiclass datasets:
+Add `--finetune` to fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked. `--model kumo-tabular-small-ft` is `kumo-tabular-small` capped at 10 classes, for fine-tuning stability on multiclass datasets:
 
 ```bash
 python -m benchmark.tabular.talent.main \

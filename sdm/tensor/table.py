@@ -191,7 +191,9 @@ class TableTensor(Tensor):
         columns: Column names grouped by semantic type.
         numerical: The numerical column block of shape ``[..., C_num]``.
         categorical: The categorical column block of shape ``[..., C_cat]``.
-        datetime: The ``datetime64[us]`` column block of shape ``[..., C_dt]``.
+        datetime: The :external+torch:ref:`torch.int64 <dtype-doc>` column
+            block of shape ``[..., C_dt]``, storing microseconds since the
+            Unix epoch.
         text: The text column block of shape ``[..., C_text]``.
         id: The identifier column block of shape ``[..., C_id]``.
         device: The device.

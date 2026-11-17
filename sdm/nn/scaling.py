@@ -64,7 +64,7 @@ class QASSMax(QueryScaling):
     .. math::
 
         \tilde{q}_{hi} = q_{hi} \cdot
-          \mathrm{MLP}_{\mathrm{base}}(\log n)_{hi} \cdot
+          \mathrm{MLP}_{\mathrm{base}}(\log(\max(n, 1)))_{hi} \cdot
           \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),
 
     where :math:`h` indexes attention heads, :math:`i` indexes head channels,

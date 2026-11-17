@@ -11,7 +11,7 @@ python main.py --dataset=rel-f1 --task=driver-dnf
 ## Options
 
 - `--num_estimators`: Number of estimators (default: `1`).
-- `--context_size`: Maximum number of context rows (default: `10_000`).
+- `--context_size`: Maximum number of context rows per estimator (default: `10_000`).
 - `--context_mode`: Context selection strategy, either `last` or `rnd` (default: `last`).
 - `--num_neighbors`: The number of neighbors to sample for each hop (default: `[16, 16]`).
 - `--num_lags`: The number of lag targets to use as additional input (default: `20`).

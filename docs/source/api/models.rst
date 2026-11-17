@@ -48,6 +48,7 @@ Model API
    ~sdm.models.Model
    ~sdm.models.ICLModel
    ~sdm.models.Callback
+   ~sdm.models.ECOC
 
 Models
 ------
