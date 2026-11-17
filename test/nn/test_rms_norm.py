@@ -78,6 +78,9 @@ def test_rms_norm(
     ):
         expected = expected.to(torch.bfloat16)
         assert_close_ulp(actual, expected)
+        torch.testing.assert_close(
+            actual[0, 0], expected[0, 0], rtol=0, atol=0
+        )
     else:
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
