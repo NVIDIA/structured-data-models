@@ -19,7 +19,7 @@
 .. autoclass:: {{ objname }}
    :members:
    :show-inheritance:
-   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, default_recipe, paper, source, release_date, parameter_count, code_license, weights_license, metadata
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supported_tasks, supports_multi_target, supports_context_only_columns, supports_related_tables, supports_seqused, default_recipe, paper, source, release_date, parameter_count, code_license, weights_license, metadata
 
 Capabilities
 ------------
@@ -53,6 +53,11 @@ Capabilities
 {% if cls.supports_related_tables is defined %}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
+{% endif %}
+
+{% if cls.supports_seqused is defined %}
+   * - **Padded Input Support**
+     - {{ "✅" if cls.supports_seqused else "❌" }}
 {% endif %}
 
 {% if cls.metadata %}

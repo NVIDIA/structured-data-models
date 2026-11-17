@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from typing import Any
+
+import pytest
 import torch
 
 from sdm import TableTensor
@@ -39,3 +42,22 @@ def test_forward() -> None:
         context_only_columns=["x1", "x3"],
     )
     torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)
+
+
+@pytest.mark.parametrize("key", ["seqused_train", "seqused_cols"])
+def test_seqused_rejected_before_preprocessing(key: str) -> None:
+    model = TimesFM3(pretrained=False)
+    x = torch.ones(5, 2)
+    y = torch.ones(5, 1)
+    query = torch.ones(3, 2)
+    model.fit(x, y)
+    expected = model.predict(query)
+    kwargs: dict[str, Any] = {key: torch.tensor(2, dtype=torch.int32)}
+    # The scalar cannot be converted to a table: padding rejection must
+    # precede that conversion, and a rejected fit must preserve the cache.
+    invalid = torch.tensor(1.0)
+    with pytest.raises(ValueError, match="padding keywords"):
+        model(invalid, y, query, **kwargs)
+    with pytest.raises(ValueError, match="padding keywords"):
+        model.fit(invalid, y, **kwargs)
+    assert model.predict(query).allclose(expected)
