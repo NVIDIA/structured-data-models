@@ -106,6 +106,7 @@ jobs:
       - name: Benchmark import smoke
         run: |
           PYTHONPATH=examples python -c 'import benchmark_tabiclv2'
+          PYTHONPATH=examples python -c 'import benchmark_tabiclv2_multinode'
 
       - name: Run tests
         env:

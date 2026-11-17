@@ -1,0 +1,479 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+import importlib
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+import torch
+
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
+
+NAN = float("nan")
+INF = float("inf")
+
+
+@pytest.fixture(scope="module")
+def multinode() -> ModuleType:
+    # The benchmark is a script, not a package module; import it the way
+    # the GPU workflow's import smoke does (``PYTHONPATH=examples``).
+    sys.path.insert(0, str(EXAMPLES))
+    try:
+        return importlib.import_module("benchmark_tabiclv2_multinode")
+    finally:
+        sys.path.remove(str(EXAMPLES))
+
+
+def test_agreement_input_failure(
+    multinode: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("Input allocation failed")
+
+    monkeypatch.setattr(multinode, "make_table", fail)
+    assert multinode.rank_agreement_gate(
+        model=None, rank=0, world=1, device=torch.device("cpu")
+    ) == (False, [])
+
+
+@pytest.mark.parametrize(
+    argnames="operation",
+    argvalues=["clone", "topk", "zeros_like", "tolist"],
+)
+def test_agreement_local_failure(
+    multinode: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    x, y = torch.ones(5, 2), torch.tensor([0, 1, 0])
+    logits = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+    monkeypatch.setattr(
+        target=multinode,
+        name="make_table",
+        value=lambda *args, **kwargs: (x, y),
+    )
+    monkeypatch.setattr(
+        target=multinode,
+        name="pad_to_buckets",
+        value=lambda x, y: (
+            x,
+            y,
+            {"seqused_train": torch.tensor(3, dtype=torch.int32)},
+            2,
+        ),
+    )
+    monkeypatch.setattr(
+        target=multinode, name="call", value=lambda *args, **kwargs: logits
+    )
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise torch.OutOfMemoryError(f"Injected {operation} failure")
+
+    monkeypatch.setattr(
+        target=torch if operation == "zeros_like" else torch.Tensor,
+        name=operation,
+        value=fail,
+    )
+    assert multinode.rank_agreement_gate(
+        model=None, rank=0, world=1, device=torch.device("cpu")
+    ) == (False, [])
+
+
+@pytest.mark.parametrize(
+    ("spread", "expected"),
+    [
+        # Rank 0 is its own reference; a finite, on-margin rank passes.
+        ([[0.0, 0.0, 1.0], [0.125, 0.0025, 1.0]], True),
+        # Margin ratio or top-1 out of range fails.
+        ([[0.0, 0.0, 1.0], [0.5, 0.06, 1.0]], False),
+        ([[0.0, 0.0, 1.0], [0.5, 0.01, 0.99]], False),
+        # A NaN rank keeps top-1 above the threshold on its remaining rows
+        # and Python's ``max([0.0, nan]) == 0.0`` would hide the NaN margin.
+        ([[0.0, 0.0, 1.0], [NAN, NAN, 0.999]], False),
+        # A single inf row leaves the median margin ratio at 0.0.
+        ([[0.0, 0.0, 1.0], [INF, 0.0, 1.0]], False),
+    ],
+)
+def test_agreement_verdict(
+    multinode: ModuleType,
+    spread: list[list[float]],
+    expected: bool,
+) -> None:
+    assert multinode.agreement_verdict(torch.tensor(spread)) is expected
+
+
+def test_phase_summary_reports_per_rank_throughput(
+    multinode: ModuleType,
+) -> None:
+    # world=4 with two active ranks; inactive ranks gather zeros. Rank 1
+    # served one table less over a longer window, so its throughput is
+    # lower than its count alone suggests.
+    counts = [98.0, 97.0, 0.0, 0.0]
+    elapsed = [4.02, 4.04, 0.0, 0.0]
+    phase = multinode.phase_summary(counts, elapsed, active=2)
+    assert phase["tables_total"] == 195.0
+    assert phase["tables_per_s"] == pytest.approx(195.0 / 4.04)
+    assert phase["per_rank_tables"] == [98.0, 97.0]
+    assert phase["per_rank_elapsed_s"] == [4.02, 4.04]
+    assert phase["per_rank_tables_per_s"] == pytest.approx(
+        [98.0 / 4.02, 97.0 / 4.04]
+    )
+    # The aggregate never exceeds the sum of per-rank rates.
+    assert phase["tables_per_s"] <= sum(phase["per_rank_tables_per_s"])
+    # Spread is the slowest rank's gap relative to the fastest one.
+    fastest, slowest = 98.0 / 4.02, 97.0 / 4.04
+    assert phase["per_rank_spread"] == pytest.approx(
+        (fastest - slowest) / fastest
+    )
+
+
+def test_phase_summary_flags_lagging_rank(multinode: ModuleType) -> None:
+    # One rank at 90% of the others: spread 10%, above the 5% print flag.
+    counts = [90.0, 100.0, 100.0, 100.0]
+    elapsed = [4.0, 4.0, 4.0, 4.0]
+    phase = multinode.phase_summary(counts, elapsed, active=4)
+    assert phase["per_rank_spread"] == pytest.approx(0.1)
+
+
+def test_phase_summary_zero_window(multinode: ModuleType) -> None:
+    phase = multinode.phase_summary([0.0], [0.0], active=1)
+    assert phase["tables_per_s"] == 0.0
+    assert phase["per_rank_tables_per_s"] == [0.0]
+    assert phase["per_rank_spread"] == 0.0
+
+
+@pytest.mark.parametrize(
+    argnames="operation", argvalues=["tensor", "zeros_like", "item"]
+)
+def test_gather_stats_local_failure(
+    multinode: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    ready = torch.ones(())
+    target = torch.Tensor if operation == "item" else torch
+    original = getattr(target, operation)
+    destroyed = []
+
+    def fail(*args: object, **kwargs: object) -> object:
+        tensor = args[0] if args else None
+        if operation != "item" or (
+            isinstance(tensor, torch.Tensor) and tensor.shape == (1,)
+        ):
+            raise torch.OutOfMemoryError(f"Injected {operation} failure")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(target=target, name=operation, value=fail)
+    monkeypatch.setattr(
+        target=multinode.dist, name="get_rank", value=lambda: 0
+    )
+    monkeypatch.setattr(
+        target=multinode.dist, name="all_reduce", value=lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        target=multinode.dist, name="all_gather", value=lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        target=multinode.dist,
+        name="destroy_process_group",
+        value=lambda: destroyed.append(True),
+    )
+    with pytest.raises(SystemExit, match="1"):
+        multinode.gather_stats(
+            value=1.0, world=2, device=torch.device("cpu"), ready=ready
+        )
+    assert destroyed
+
+
+@pytest.mark.parametrize(
+    argnames="operation", argvalues=["all_reduce", "all_gather"]
+)
+def test_gather_stats_transport_failure(
+    multinode: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    trace = []
+
+    def reduce(*args: object, **kwargs: object) -> None:
+        trace.append("all_reduce")
+        if operation == "all_reduce":
+            raise RuntimeError("Transport failed")
+
+    def gather(*args: object, **kwargs: object) -> None:
+        trace.append("all_gather")
+        raise RuntimeError("Transport failed")
+
+    monkeypatch.setattr(
+        target=multinode.dist, name="get_rank", value=lambda: 0
+    )
+    monkeypatch.setattr(target=multinode.dist, name="all_reduce", value=reduce)
+    monkeypatch.setattr(target=multinode.dist, name="all_gather", value=gather)
+    with pytest.raises(RuntimeError, match="Transport failed"):
+        multinode.gather_stats(
+            value=1.0,
+            world=2,
+            device=torch.device("cpu"),
+            ready=torch.ones(()),
+        )
+    assert trace == (
+        ["all_reduce"]
+        if operation == "all_reduce"
+        else ["all_reduce", "all_gather"]
+    )
+
+
+@pytest.fixture
+def main_setup(
+    multinode: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> tuple[Path, torch.Tensor, dict[str, float]]:
+    x, y = torch.ones(5, 2), torch.tensor([0, 1, 0])
+    logits = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+    timings = {"load_s": 1.0, "compile_s": 2.0}
+    monkeypatch.setattr(
+        target=multinode,
+        name="init_distributed",
+        value=lambda duration: (0, 1, torch.device("cpu")),
+    )
+    monkeypatch.setattr(
+        target=multinode,
+        name="prepare_model",
+        value=lambda *a, **kw: (object(), timings),
+    )
+    monkeypatch.setattr(
+        target=multinode,
+        name="make_table",
+        value=lambda *a, **kw: (x, y),
+    )
+    monkeypatch.setattr(
+        target=multinode,
+        name="pad_to_buckets",
+        value=lambda x, y: (
+            x,
+            y,
+            {"seqused_train": torch.tensor(3, dtype=torch.int32)},
+            2,
+        ),
+    )
+    monkeypatch.setattr(
+        target=multinode, name="call", value=lambda *a, **kw: logits
+    )
+    monkeypatch.setattr(
+        target=multinode, name="serve_tables", value=lambda **kw: (2, 1.0)
+    )
+    monkeypatch.setattr(
+        target=torch.cuda, name="get_device_name", value=lambda device: "test"
+    )
+    monkeypatch.setattr(
+        target=torch, name="set_float32_matmul_precision", value=lambda p: None
+    )
+    monkeypatch.setattr(
+        target=multinode.atexit, name="register", value=lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        target=multinode.signal, name="signal", value=lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        target=multinode.tempfile,
+        name="mkdtemp",
+        value=lambda **kw: str(tmp_path),
+    )
+    monkeypatch.setenv("TORCHINDUCTOR_CACHE_DIR", str(tmp_path))
+    path = tmp_path / "report.json"
+    argv = ["benchmark", "--out", str(path)]
+    monkeypatch.setattr(target=sys, name="argv", value=argv)
+    return path, logits, timings
+
+
+@pytest.mark.parametrize(
+    argnames=("value", "varlen_graphs", "expect_exit"),
+    argvalues=[
+        (NAN, None, True),
+        (INF, None, True),
+        (-INF, None, True),
+        (1.0, None, False),
+        (1.0, 1, False),
+        (1.0, 0, True),
+    ],
+)
+def test_main_writes_strict_json(
+    multinode: ModuleType,
+    main_setup: tuple[Path, torch.Tensor, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch,
+    value: float,
+    varlen_graphs: int | None,
+    expect_exit: bool,
+) -> None:
+    path, logits, timings = main_setup
+    logits[0, 0] = value
+    if varlen_graphs is not None:
+        timings.update(
+            varlen_active=1.0,
+            varlen_graphs_built=float(varlen_graphs),
+            varlen_build_failures=0.0,
+        )
+        frontend = ModuleType("cudnn")
+        frontend.__dict__["__version__"] = "test"
+        monkeypatch.setitem(sys.modules, "cudnn", frontend)
+        monkeypatch.setattr(
+            target=sys, name="argv", value=[*sys.argv, "--use-varlen"]
+        )
+    if expect_exit:
+        with pytest.raises(SystemExit, match="1"):
+            multinode.main()
+    else:
+        multinode.main()
+    if varlen_graphs == 0:
+        assert not path.exists()
+        return
+    report = json.loads(path.read_text())
+    json.dumps(report, allow_nan=False)
+    assert report["rank_agreement"] == (value == 1.0)
+    assert report["startup"]["load_s"] == [1.0]
+    assert report["use_varlen"] == (varlen_graphs is not None)
+    if value != 1.0:
+        assert None in report["rank_agreement_stats"][0]
+        assert "phases" not in report
+
+
+@pytest.mark.parametrize(
+    argnames=("operation", "next_stage"),
+    argvalues=[
+        ("prepare_model", "rank_agreement_gate"),
+        ("serve_tables", "phase_summary"),
+    ],
+)
+def test_main_aborts_after_local_failure(
+    multinode: ModuleType,
+    main_setup: tuple[Path, torch.Tensor, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    next_stage: str,
+) -> None:
+    path, _, _ = main_setup
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError(f"Injected {operation} failure")
+
+    def unexpected(*args: object, **kwargs: object) -> None:
+        pytest.fail(f"Execution reached {next_stage} after {operation} failed")
+
+    monkeypatch.setattr(target=multinode, name=operation, value=fail)
+    monkeypatch.setattr(target=multinode, name=next_stage, value=unexpected)
+    with pytest.raises(SystemExit, match="1"):
+        multinode.main()
+    assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    argnames="peer_failure",
+    argvalues=["prepare", "serve", None],
+    ids=["peer-prepare", "peer-serve", "healthy"],
+)
+def test_main_coordinates_peer_failure(
+    multinode: ModuleType,
+    main_setup: tuple[Path, torch.Tensor, dict[str, float]],
+    monkeypatch: pytest.MonkeyPatch,
+    peer_failure: str | None,
+) -> None:
+    path, _, _ = main_setup
+    prepare_model = multinode.prepare_model
+    serve_tables = multinode.serve_tables
+    phase_summary = multinode.phase_summary
+    trace = []
+    completed = []
+    stage = None
+    failed = False
+
+    def record(event: str) -> None:
+        assert not failed, f"Reached {event} after a peer failed"
+        if stage is not None and stage == peer_failure:
+            assert event == "reduce", f"Reached {event} before checking peers"
+        trace.append(event)
+
+    def prepare(*args: object, **kwargs: object) -> object:
+        nonlocal stage
+        record("prepare")
+        result = prepare_model(*args, **kwargs)
+        completed.append("prepare")
+        stage = "prepare"
+        return result
+
+    def serve(**kwargs: object) -> object:
+        nonlocal stage
+        record("serve")
+        result = serve_tables(**kwargs)
+        completed.append("serve")
+        stage = "serve"
+        return result
+
+    def reduce(tensor: torch.Tensor, op: object) -> None:
+        nonlocal stage, failed
+        record("reduce")
+        if stage is not None and stage == peer_failure:
+            # Local work succeeded; only the peer contributes a zero.
+            assert op == multinode.dist.ReduceOp.MIN
+            assert tensor.numel() == 1
+            assert tensor.item() == 1
+            tensor.zero_()
+            failed = True
+            trace.append("peer_failure")
+        stage = None
+
+    def gather(out: list[torch.Tensor], tensor: torch.Tensor) -> None:
+        record("gather")
+        for value in out:
+            value.copy_(tensor)
+
+    def broadcast(*args: object, **kwargs: object) -> None:
+        record("broadcast")
+
+    def barrier(**kwargs: object) -> None:
+        record("barrier")
+
+    def summarize(*args: object, **kwargs: object) -> object:
+        record("phase_summary")
+        return phase_summary(*args, **kwargs)
+
+    monkeypatch.setattr(
+        target=multinode,
+        name="init_distributed",
+        value=lambda duration: (0, 2, torch.device("cpu")),
+    )
+    for name, value in (
+        ("prepare_model", prepare),
+        ("serve_tables", serve),
+        ("phase_summary", summarize),
+    ):
+        monkeypatch.setattr(target=multinode, name=name, value=value)
+    for name, value in (
+        ("get_rank", lambda: 0),
+        ("all_reduce", reduce),
+        ("all_gather", gather),
+        ("broadcast", broadcast),
+        ("barrier", barrier),
+        ("destroy_process_group", lambda: trace.append("destroy")),
+    ):
+        monkeypatch.setattr(target=multinode.dist, name=name, value=value)
+    if peer_failure is not None:
+        with pytest.raises(SystemExit) as exc:
+            multinode.main()
+        assert exc.value.code == 1
+        assert peer_failure in completed
+        assert trace[-2:] == ["peer_failure", "destroy"]
+        assert not path.exists()
+    else:
+        assert multinode.main() is None
+        assert trace[-1] == "destroy"
+        report = json.loads(path.read_text())
+        json.dumps(report, allow_nan=False)
+        assert report["world_size"] == 2
+        assert report["rank_agreement"] is True
+        assert report["startup"]["load_s"] == [1.0, 1.0]
+        assert report["phases"]["2"]["per_rank_tables"] == [2.0, 2.0]
