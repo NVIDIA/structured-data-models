@@ -451,6 +451,41 @@ def test_compile_predict(
         assert counter.frame_count == graphs
 
 
+@pytest.mark.usefixtures("compilation")
+def test_compile_predict_query_categories() -> None:
+    def table(categories: list[str]) -> TableTensor:
+        code = torch.arange(6, dtype=torch.int32)
+        code = code % len(categories) if categories else code.fill_(-1)
+        return TableTensor(
+            columns={
+                Stype.numerical: ("x", "y"),
+                Stype.categorical: ("color",),
+            },
+            numerical=torch.randn(6, 2),
+            categorical=CategoricalTensor(
+                code=code.unsqueeze(-1),
+                categories=(StringTensor.from_list(categories),),
+            ),
+        )
+
+    model = _build("regression", "small")
+    model.fit(table(["a", "b"]), torch.randn(6, 1))
+
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter)
+    # Every query has its own categories; "c" is not a fitted one. A query
+    # with an empty list is predicted without the graph.
+    for categories in (["b", "a"], ["a", "c", "b"], ["c"], []):
+        query = table(categories)
+        torch.testing.assert_close(
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
 @onlyMPS
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_default_recipe_on_mps(

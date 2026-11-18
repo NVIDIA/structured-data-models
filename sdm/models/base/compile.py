@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import torch
+import torch.fx.experimental._config as fx_config
 from torch import Tensor
 
 from sdm import TableTensor
@@ -55,7 +56,8 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares. Empty queries are predicted without the graph.
+    that ``model`` declares, with any lists of categories. A query that is
+    empty or holds an empty list of categories is predicted without the graph.
 
     Args:
         model: The model.
@@ -76,6 +78,9 @@ def compile_predict(
     # Without dynamic shapes, none of the steps below are needed.
     if shapes == DynamicShapes():
         return compiled
+    # With this option PyTorch does not specialize every marked size of zero
+    # or one, which lets one graph serve a list of a single category.
+    compiled = fx_config.patch(backed_size_oblivious=True)(compiled)  # ty: ignore[unresolved-attribute]
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -83,21 +88,23 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
-        if rows == 0:
+        if rows == 0 or (
+            isinstance(x, TableTensor)
+            and any(c.size(0) == 0 for c in x.categorical.categories)
+        ):
             return model.predict(x, *args, **kwargs)
-        # A graph specializes on sizes of zero and one, so a single row is
+        # Operations on the rows still specialize on a single row, so it is
         # repeated if the rows are dynamic, unless callbacks see the rows.
         # Without a copy, queries that are different slices of one table, such
-        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
+        # as `table[40:]` and `table[41:44]`, recompile or fail to compile. The
+        # copy also keeps the marks off the tensors of the caller.
         dims = {dim % x.dim() for dim in shapes.query}
         repeat = (
             rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
         )
-        x = (
-            torch.cat([x, x], dim=-2)
-            if repeat
-            else x.clone(memory_format=torch.contiguous_format)
-        )
+        if repeat:
+            x = torch.cat([x, x], dim=-2)
+        x = x.clone(memory_format=torch.contiguous_format)
         _mark_dynamic(x, dims)
         out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if repeat else out

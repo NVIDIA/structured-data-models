@@ -19,7 +19,12 @@ from torch import Tensor
 from typing_extensions import override
 
 from sdm import NaT, Stype, StypeLike
-from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm.tensor import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    VarLenTensor,
+)
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _record_compiled_stream, _resolve_device
 
@@ -976,6 +981,12 @@ class TableTensor(Tensor):
         torch._dynamo.mark_dynamic(self, dim)
         self._text._mark_dynamic(dim)
         self._id._mark_dynamic(dim)
+        # A table of other rows brings other lists of categories.
+        for categories in self._categorical.categories:
+            if isinstance(categories, VarLenTensor):
+                categories._mark_dynamic(0)
+            else:
+                torch._dynamo.maybe_mark_dynamic(categories, 0)
 
     def is_same_schema(self, other: TableTensor) -> bool:
         r"""Whether ``other`` has the same schema layout.
