@@ -84,7 +84,7 @@ The [`sdm/models/base/ecoc.py`](sdm/models/base/ecoc.py) implementation contains
 - License: BSD 3-Clause License
 - License terms: [`third_party/tile/LICENSE`](third_party/tile/LICENSE)
 
-The [`sdm/processing/text/tile.py`](sdm/models/processing/text/tile.py) implementation contains code derived from [`TILE`](https://github.com/soda-inria/tile).
+The [`sdm/processing/text/tile.py`](sdm/processing/text/tile.py) implementation contains code derived from [`TILE`](https://github.com/soda-inria/tile).
 
 ## PyTorch Contribution Guide
 
