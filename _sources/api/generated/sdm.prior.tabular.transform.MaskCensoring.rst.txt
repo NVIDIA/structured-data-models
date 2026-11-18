@@ -1,0 +1,8 @@
+﻿MaskCensoring
+=============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskCensoring
+   :members:
+   :show-inheritance:

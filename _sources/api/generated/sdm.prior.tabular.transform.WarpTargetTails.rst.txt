@@ -1,0 +1,8 @@
+﻿WarpTargetTails
+===============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: WarpTargetTails
+   :members:
+   :show-inheritance:

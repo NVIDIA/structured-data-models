@@ -1,0 +1,8 @@
+﻿MixtureFunction
+===============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureFunction
+   :members:
+   :show-inheritance:

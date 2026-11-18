@@ -1,0 +1,8 @@
+﻿RandomLinear
+============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomLinear
+   :members:
+   :show-inheritance:

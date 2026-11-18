@@ -1,0 +1,8 @@
+﻿MaskRows
+========
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskRows
+   :members:
+   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿PriorTransform
+==============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: PriorTransform
+   :members:
+   :show-inheritance:

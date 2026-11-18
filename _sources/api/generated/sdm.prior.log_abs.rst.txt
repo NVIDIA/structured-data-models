@@ -1,0 +1,6 @@
+﻿log\_abs
+========
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: log_abs

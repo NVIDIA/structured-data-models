@@ -1,0 +1,8 @@
+﻿RandomDiscretization
+====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomDiscretization
+   :members:
+   :show-inheritance:

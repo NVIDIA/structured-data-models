@@ -1,0 +1,8 @@
+﻿Schema
+======
+
+.. currentmodule:: sdm.prior.tabular
+
+.. autoclass:: Schema
+   :members:
+   :show-inheritance:

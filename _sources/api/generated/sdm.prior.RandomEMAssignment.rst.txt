@@ -1,0 +1,8 @@
+﻿RandomEMAssignment
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomEMAssignment
+   :members:
+   :show-inheritance:

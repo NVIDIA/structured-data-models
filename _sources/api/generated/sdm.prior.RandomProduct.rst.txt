@@ -1,0 +1,8 @@
+﻿RandomProduct
+=============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomProduct
+   :members:
+   :show-inheritance:

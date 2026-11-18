@@ -1,0 +1,8 @@
+﻿SCMPrior
+========
+
+.. currentmodule:: sdm.prior.tabular
+
+.. autoclass:: SCMPrior
+   :members:
+   :show-inheritance:

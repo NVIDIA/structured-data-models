@@ -1,0 +1,8 @@
+﻿MixtureParentMerger
+===================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureParentMerger
+   :members:
+   :show-inheritance:

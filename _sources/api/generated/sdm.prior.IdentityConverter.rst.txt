@@ -1,0 +1,8 @@
+﻿IdentityConverter
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: IdentityConverter
+   :members:
+   :show-inheritance:

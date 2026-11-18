@@ -1,0 +1,8 @@
+﻿Coarsen
+=======
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: Coarsen
+   :members:
+   :show-inheritance:

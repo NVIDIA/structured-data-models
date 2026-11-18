@@ -1,0 +1,8 @@
+﻿SignPowActivation
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: SignPowActivation
+   :members:
+   :show-inheritance:

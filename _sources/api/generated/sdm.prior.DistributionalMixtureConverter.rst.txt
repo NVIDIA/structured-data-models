@@ -1,0 +1,8 @@
+﻿DistributionalMixtureConverter
+==============================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: DistributionalMixtureConverter
+   :members:
+   :show-inheritance:

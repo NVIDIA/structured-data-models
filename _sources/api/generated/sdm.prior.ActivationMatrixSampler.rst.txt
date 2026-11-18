@@ -1,0 +1,8 @@
+﻿ActivationMatrixSampler
+=======================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: ActivationMatrixSampler
+   :members:
+   :show-inheritance:

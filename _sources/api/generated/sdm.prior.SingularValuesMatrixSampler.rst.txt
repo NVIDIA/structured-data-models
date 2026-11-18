@@ -1,0 +1,8 @@
+﻿SingularValuesMatrixSampler
+===========================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: SingularValuesMatrixSampler
+   :members:
+   :show-inheritance:

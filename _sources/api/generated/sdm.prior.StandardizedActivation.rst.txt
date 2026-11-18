@@ -1,0 +1,8 @@
+﻿StandardizedActivation
+======================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: StandardizedActivation
+   :members:
+   :show-inheritance:

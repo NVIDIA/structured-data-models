@@ -1,0 +1,8 @@
+﻿RecodeHighCardinality
+=====================
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: RecodeHighCardinality
+   :members:
+   :show-inheritance:

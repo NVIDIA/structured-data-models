@@ -1,0 +1,6 @@
+﻿heaviside
+=========
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: heaviside

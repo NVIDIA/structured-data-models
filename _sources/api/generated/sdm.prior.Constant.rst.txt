@@ -1,0 +1,8 @@
+﻿Constant
+========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: Constant
+   :members:
+   :show-inheritance:

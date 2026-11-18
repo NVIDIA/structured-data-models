@@ -1,0 +1,8 @@
+﻿CategoricalConverter
+====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: CategoricalConverter
+   :members:
+   :show-inheritance:

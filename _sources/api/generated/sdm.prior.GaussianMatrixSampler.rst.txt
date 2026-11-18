@@ -1,0 +1,8 @@
+﻿GaussianMatrixSampler
+=====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: GaussianMatrixSampler
+   :members:
+   :show-inheritance:

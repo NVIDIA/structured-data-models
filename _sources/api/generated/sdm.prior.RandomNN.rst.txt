@@ -1,0 +1,8 @@
+﻿RandomNN
+========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomNN
+   :members:
+   :show-inheritance:

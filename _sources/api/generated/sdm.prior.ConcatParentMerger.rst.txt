@@ -1,0 +1,8 @@
+﻿ConcatParentMerger
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: ConcatParentMerger
+   :members:
+   :show-inheritance:

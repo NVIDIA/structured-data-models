@@ -1,0 +1,8 @@
+﻿MaskLatent
+==========
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskLatent
+   :members:
+   :show-inheritance:

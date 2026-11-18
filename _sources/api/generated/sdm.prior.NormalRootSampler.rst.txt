@@ -1,0 +1,8 @@
+﻿NormalRootSampler
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: NormalRootSampler
+   :members:
+   :show-inheritance:

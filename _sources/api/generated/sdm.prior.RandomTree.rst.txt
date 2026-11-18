@@ -1,0 +1,8 @@
+﻿RandomTree
+==========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomTree
+   :members:
+   :show-inheritance:

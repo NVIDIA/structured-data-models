@@ -1,0 +1,8 @@
+﻿Relabel
+=======
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: Relabel
+   :members:
+   :show-inheritance:

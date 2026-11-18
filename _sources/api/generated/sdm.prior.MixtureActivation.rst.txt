@@ -1,0 +1,8 @@
+﻿MixtureActivation
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureActivation
+   :members:
+   :show-inheritance:

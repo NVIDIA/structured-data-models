@@ -1,0 +1,8 @@
+﻿MaskCategorical
+===============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskCategorical
+   :members:
+   :show-inheritance:

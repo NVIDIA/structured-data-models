@@ -1,0 +1,6 @@
+﻿one\_hot\_argmax
+================
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: one_hot_argmax

@@ -1,0 +1,8 @@
+﻿DAGSampler
+==========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: DAGSampler
+   :members:
+   :show-inheritance:

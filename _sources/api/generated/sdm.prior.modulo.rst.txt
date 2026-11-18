@@ -1,0 +1,6 @@
+﻿modulo
+======
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: modulo

@@ -1,0 +1,8 @@
+﻿RandomFunction
+==============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomFunction
+   :members:
+   :show-inheritance:

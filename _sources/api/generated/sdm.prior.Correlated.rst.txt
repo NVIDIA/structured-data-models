@@ -1,0 +1,8 @@
+﻿Correlated
+==========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: Correlated
+   :members:
+   :show-inheritance:

@@ -1,0 +1,6 @@
+﻿should\_drop
+============
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: should_drop

@@ -1,0 +1,8 @@
+﻿Uniform
+=======
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: Uniform
+   :members:
+   :show-inheritance:

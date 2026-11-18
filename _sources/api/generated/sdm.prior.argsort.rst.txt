@@ -1,0 +1,6 @@
+﻿argsort
+=======
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: argsort

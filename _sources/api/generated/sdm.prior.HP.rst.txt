@@ -1,0 +1,8 @@
+﻿HP
+==
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: HP
+   :members:
+   :show-inheritance:

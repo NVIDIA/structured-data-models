@@ -1,0 +1,8 @@
+﻿MaskRandom
+==========
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskRandom
+   :members:
+   :show-inheritance:

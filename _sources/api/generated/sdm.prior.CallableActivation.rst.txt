@@ -1,0 +1,8 @@
+﻿CallableActivation
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: CallableActivation
+   :members:
+   :show-inheritance:

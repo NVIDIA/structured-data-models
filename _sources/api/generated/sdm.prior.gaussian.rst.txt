@@ -1,0 +1,6 @@
+﻿gaussian
+========
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: gaussian

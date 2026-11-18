@@ -1,0 +1,6 @@
+﻿identity
+========
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: identity

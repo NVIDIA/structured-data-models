@@ -1,0 +1,8 @@
+﻿ReduceParentMerger
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: ReduceParentMerger
+   :members:
+   :show-inheritance:

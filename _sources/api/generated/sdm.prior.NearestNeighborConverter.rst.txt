@@ -1,0 +1,8 @@
+﻿NearestNeighborConverter
+========================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: NearestNeighborConverter
+   :members:
+   :show-inheritance:

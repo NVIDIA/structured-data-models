@@ -1,0 +1,8 @@
+﻿CorrelateColumns
+================
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: CorrelateColumns
+   :members:
+   :show-inheritance:

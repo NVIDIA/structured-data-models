@@ -1,0 +1,8 @@
+﻿IntegerPowActivation
+====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: IntegerPowActivation
+   :members:
+   :show-inheritance:

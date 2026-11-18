@@ -1,0 +1,8 @@
+﻿CorrelatedContext
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: CorrelatedContext
+   :members:
+   :show-inheritance:

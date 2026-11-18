@@ -1,0 +1,8 @@
+﻿MaskNearEmpty
+=============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskNearEmpty
+   :members:
+   :show-inheritance:

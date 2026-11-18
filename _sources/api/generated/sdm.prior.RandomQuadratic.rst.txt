@@ -1,0 +1,8 @@
+﻿RandomQuadratic
+===============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomQuadratic
+   :members:
+   :show-inheritance:

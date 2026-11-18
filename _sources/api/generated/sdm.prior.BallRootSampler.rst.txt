@@ -1,0 +1,8 @@
+﻿BallRootSampler
+===============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: BallRootSampler
+   :members:
+   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿MixtureMatrixSampler
+====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureMatrixSampler
+   :members:
+   :show-inheritance:

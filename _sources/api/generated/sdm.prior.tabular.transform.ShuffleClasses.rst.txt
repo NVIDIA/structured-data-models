@@ -1,0 +1,8 @@
+﻿ShuffleClasses
+==============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: ShuffleClasses
+   :members:
+   :show-inheritance:

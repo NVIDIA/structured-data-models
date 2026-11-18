@@ -1,0 +1,8 @@
+﻿MixtureConverter
+================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureConverter
+   :members:
+   :show-inheritance:

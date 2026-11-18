@@ -1,0 +1,8 @@
+﻿LogUniformInt
+=============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: LogUniformInt
+   :members:
+   :show-inheritance:

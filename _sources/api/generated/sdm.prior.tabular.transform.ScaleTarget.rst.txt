@@ -1,0 +1,8 @@
+﻿ScaleTarget
+===========
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: ScaleTarget
+   :members:
+   :show-inheritance:

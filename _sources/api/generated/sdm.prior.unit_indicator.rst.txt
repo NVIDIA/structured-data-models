@@ -1,0 +1,6 @@
+﻿unit\_indicator
+===============
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: unit_indicator

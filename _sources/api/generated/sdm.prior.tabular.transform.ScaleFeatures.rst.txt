@@ -1,0 +1,8 @@
+﻿ScaleFeatures
+=============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: ScaleFeatures
+   :members:
+   :show-inheritance:

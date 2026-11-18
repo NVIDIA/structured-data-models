@@ -1,0 +1,8 @@
+﻿MixtureDAGSampler
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureDAGSampler
+   :members:
+   :show-inheritance:

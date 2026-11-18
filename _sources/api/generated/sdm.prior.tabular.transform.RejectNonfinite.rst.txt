@@ -1,0 +1,8 @@
+﻿RejectNonfinite
+===============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: RejectNonfinite
+   :members:
+   :show-inheritance:

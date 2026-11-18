@@ -1,0 +1,8 @@
+﻿SoftmaxCategoricalConverter
+===========================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: SoftmaxCategoricalConverter
+   :members:
+   :show-inheritance:

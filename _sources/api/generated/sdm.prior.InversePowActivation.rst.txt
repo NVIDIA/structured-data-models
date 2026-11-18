@@ -1,0 +1,8 @@
+﻿InversePowActivation
+====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: InversePowActivation
+   :members:
+   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿ReLUPowActivation
+=================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: ReLUPowActivation
+   :members:
+   :show-inheritance:

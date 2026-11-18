@@ -1,0 +1,8 @@
+﻿KernelMatrixSampler
+===================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: KernelMatrixSampler
+   :members:
+   :show-inheritance:

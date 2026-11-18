@@ -1,0 +1,8 @@
+﻿MaskStructured
+==============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskStructured
+   :members:
+   :show-inheritance:

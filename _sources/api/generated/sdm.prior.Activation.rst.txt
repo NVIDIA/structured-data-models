@@ -1,0 +1,8 @@
+﻿Activation
+==========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: Activation
+   :members:
+   :show-inheritance:

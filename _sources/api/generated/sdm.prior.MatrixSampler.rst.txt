@@ -1,0 +1,8 @@
+﻿MatrixSampler
+=============
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MatrixSampler
+   :members:
+   :show-inheritance:

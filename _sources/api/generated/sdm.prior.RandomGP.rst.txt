@@ -1,0 +1,8 @@
+﻿RandomGP
+========
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomGP
+   :members:
+   :show-inheritance:

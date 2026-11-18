@@ -1,0 +1,8 @@
+﻿KumaraswamyNumericalConverter
+=============================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: KumaraswamyNumericalConverter
+   :members:
+   :show-inheritance:

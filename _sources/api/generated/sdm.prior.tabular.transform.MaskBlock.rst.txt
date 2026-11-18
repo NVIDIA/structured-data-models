@@ -1,0 +1,8 @@
+﻿MaskBlock
+=========
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskBlock
+   :members:
+   :show-inheritance:

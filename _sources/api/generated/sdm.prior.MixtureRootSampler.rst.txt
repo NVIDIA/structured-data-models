@@ -1,0 +1,8 @@
+﻿MixtureRootSampler
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: MixtureRootSampler
+   :members:
+   :show-inheritance:

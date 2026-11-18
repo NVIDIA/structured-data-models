@@ -1,0 +1,8 @@
+﻿UniformRootSampler
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: UniformRootSampler
+   :members:
+   :show-inheritance:

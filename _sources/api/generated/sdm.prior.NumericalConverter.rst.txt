@@ -1,0 +1,8 @@
+﻿NumericalConverter
+==================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: NumericalConverter
+   :members:
+   :show-inheritance:

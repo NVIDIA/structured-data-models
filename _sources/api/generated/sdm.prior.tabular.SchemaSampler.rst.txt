@@ -1,0 +1,8 @@
+﻿SchemaSampler
+=============
+
+.. currentmodule:: sdm.prior.tabular
+
+.. autoclass:: SchemaSampler
+   :members:
+   :show-inheritance:

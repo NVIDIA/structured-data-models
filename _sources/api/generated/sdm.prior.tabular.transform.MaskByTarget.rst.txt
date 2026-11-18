@@ -1,0 +1,8 @@
+﻿MaskByTarget
+============
+
+.. currentmodule:: sdm.prior.tabular.transform
+
+.. autoclass:: MaskByTarget
+   :members:
+   :show-inheritance:

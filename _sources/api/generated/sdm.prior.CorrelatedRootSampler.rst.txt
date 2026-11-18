@@ -1,0 +1,8 @@
+﻿CorrelatedRootSampler
+=====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: CorrelatedRootSampler
+   :members:
+   :show-inheritance:

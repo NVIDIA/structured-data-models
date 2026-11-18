@@ -1,0 +1,8 @@
+﻿DAG
+===
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: DAG
+   :members:
+   :show-inheritance:

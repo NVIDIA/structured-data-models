@@ -1,0 +1,8 @@
+﻿PowerLawMatrixSampler
+=====================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: PowerLawMatrixSampler
+   :members:
+   :show-inheritance:

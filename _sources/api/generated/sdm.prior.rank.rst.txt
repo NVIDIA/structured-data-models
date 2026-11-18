@@ -1,0 +1,6 @@
+﻿rank
+====
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: rank

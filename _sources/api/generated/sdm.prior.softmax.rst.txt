@@ -1,0 +1,6 @@
+﻿softmax
+=======
+
+.. currentmodule:: sdm.prior
+
+.. autofunction:: softmax

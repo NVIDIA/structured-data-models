@@ -1,0 +1,8 @@
+﻿RandomCauchyDAGSampler
+======================
+
+.. currentmodule:: sdm.prior
+
+.. autoclass:: RandomCauchyDAGSampler
+   :members:
+   :show-inheritance:
