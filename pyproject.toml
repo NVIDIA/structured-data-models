@@ -237,6 +237,11 @@ banned-module-level-imports = [
     "T201",  # Allow print.
     "TID253",  # Example dependencies should be imported at module scope.
 ]
+"train/**/*.py" = [
+    "D101",  # Ignore "Missing docstring in public class"
+    "D102",  # Ignore "Missing docstring in public method"
+    "D103",  # Ignore "Missing docstring in public function"
+]
 "benchmark/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"

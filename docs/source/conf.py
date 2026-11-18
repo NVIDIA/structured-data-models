@@ -189,6 +189,9 @@ _reference_aliases = {
     "SDPA": "sdm.nn.SDPA",
     "Stype.categorical": "sdm.Stype.categorical",
     "Stype.text": "sdm.Stype.text",
+    "Activation": "sdm.prior.Activation",
+    "Schema": "sdm.prior.tabular.Schema",
+    "T | MixtureConverter[T]": "sdm.prior.MixtureConverter",
     "sdm.processing.AlignCategories": (
         "sdm.processing.categorical.AlignCategories"
     ),
