@@ -75,13 +75,13 @@ def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
 
 
 class TILE(Processor):
-    r"""The text cell embedding module from the `"TILE: Bridging LLMs and Table
-    Foundation Models for Tabular Learning with Strings"
+    r"""The text cell embedding processor from the `"TILE: Bridging LLMs and
+    Table Foundation Models for Tabular Learning with Strings"
     <https://arxiv.org/abs/2610.17065>`_ paper.
 
-    Each row is serialized as one sentence per cell. An LLM embeds the row,
-    and token embeddings are mean-pooled for each text cell. Optional
-    postprocessing transforms these embeddings independently per text
+    Each row is serialized as one text, one sentence per cell. An LLM embeds
+    this text, and token embeddings are mean-pooled for each text cell.
+    Optional postprocessing transforms these embeddings independently per text
     column, for example to reduce dimensionality.
 
     Args:
@@ -112,29 +112,35 @@ class TILE(Processor):
     ) -> None:
         super().__init__()
 
-        if model not in MODELS:
+        self.model = model
+        if self.model not in MODELS:
             raise ValueError(
-                f"Unsupported model {model!r}. Supported models: "
+                f"Unsupported model {self.model!r}. Supported models: "
                 f"{', '.join(MODELS)}"
             )
 
-        from sentence_transformers import SentenceTransformer
-        from transformers import AutoConfig
+        import sentence_transformers
+        import transformers
 
-        model, num_layers = MODELS[model]
+        model, num_layers = MODELS[self.model]
         config_kwargs: dict[str, object] = {
             "num_hidden_layers": num_layers,
         }
-        config = AutoConfig.from_pretrained(model)
+        config = transformers.AutoConfig.from_pretrained(model)
         if getattr(config, "layer_types", None) is not None:
             config_kwargs["layer_types"] = config.layer_types[:num_layers]
 
-        llm = SentenceTransformer(
-            model,
-            device=str(device) if device is not None else None,
-            config_kwargs=config_kwargs,
-            model_kwargs={"dtype": dtype},
-        )
+        verbosity = transformers.utils.logging.get_verbosity()  # type: ignore
+        transformers.utils.logging.set_verbosity_error()  # type: ignore
+        try:
+            llm = sentence_transformers.SentenceTransformer(
+                model,
+                device=str(device) if device is not None else None,
+                config_kwargs=config_kwargs,
+                model_kwargs={"dtype": dtype},
+            )
+        finally:
+            transformers.utils.logging.set_verbosity(verbosity)  # type: ignore
         cast(torch.nn.Module, llm.transformers_model).set_submodule(
             target="norm",
             module=torch.nn.Identity(),
@@ -253,4 +259,18 @@ class TILE(Processor):
         return cast(
             TableTensor,
             torch.cat([table.drop_stypes(Stype.text), out], dim=-1),
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.postprocess is None:
+            return (
+                f"{' ' * indent}{self.__class__.__name__}("
+                f"model={self.model!r})"
+            )
+        return (
+            f"{' ' * indent}{self.__class__.__name__}(\n"
+            f"{' ' * (indent + 2)}model={self.model!r},\n"
+            f"{' ' * (indent + 2)}postprocess="
+            f"{self.postprocess.__repr__(indent=indent + 2)[indent + 2 :]},\n"
+            f"{' ' * indent})"
         )
