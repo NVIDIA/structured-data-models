@@ -12,6 +12,7 @@ from torch import Tensor
 from torch.fx.experimental.symbolic_shapes import statically_known_true
 from torch.nn import Linear
 
+from sdm._kernels.flash_attention import flash_attention
 from sdm._memory import _split_tensor, chunk_memory_limit
 from sdm.cache import KVCacheEntry
 from sdm.nn import QueryScaling
@@ -106,6 +107,9 @@ class SDPA(torch.nn.Module):
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
         dropout: Attention dropout probability.
+        backend: ``"sdpa"`` (default) or ``"fa3"`` for FlashAttention-3 on
+            Hopper with FP16/BF16 inputs. General masks, causal attention,
+            and attention dropout use SDPA with either setting.
     """
 
     def __init__(
@@ -115,6 +119,7 @@ class SDPA(torch.nn.Module):
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
+        backend: Literal["sdpa", "fa3"] = "sdpa",
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -130,6 +135,7 @@ class SDPA(torch.nn.Module):
         self.query_scaling = query_scaling
         self.scale = scale
         self.dropout = dropout
+        self.backend = backend
 
     def forward(
         self,
@@ -238,6 +244,22 @@ class SDPA(torch.nn.Module):
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
+
+        if (
+            self.backend == "fa3"
+            and attn_mask is None
+            and not is_causal
+            and (not self.training or self.dropout == 0.0)
+        ):
+            lengths = (
+                None
+                if seqused_key_value is None
+                else seqused_key_value.expand(batch_shape).reshape(-1)
+            )
+            out = flash_attention(
+                query, key, value, lengths=lengths, scale=self.scale
+            )
+            return out.view(batch_shape + out.size()[-3:])
 
         if attn_mask is not None:
             attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])

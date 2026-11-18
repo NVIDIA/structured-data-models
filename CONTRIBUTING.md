@@ -6,11 +6,8 @@ into three categories:
 1. You want to report a bug, feature request, or documentation issue
    - File an [issue](https://github.com/NVIDIA/structured-data-models/issues/new/choose)
      describing what you encountered or what you want to see changed.
-   - Please run and paste the output of the `structured-data-models/print_env.sh` script while
-     reporting a bug to gather and report relevant environment details.
-   - The RAPIDS team will evaluate the issues and triage them, scheduling
-     them for a release. If you believe the issue needs priority attention
-     comment on the issue to notify the team.
+   - Please run and paste the output of `python -m torch.utils.collect_env` while reporting a bug to gather and report relevant environment details.
+   - The project maintainers will evaluate the issues and triage them, scheduling them for a release. If you believe the issue needs priority attention, comment on the issue to notify the team.
 2. You want to propose a new Feature and implement it
    - Post about your intended feature, and we shall discuss the design and
      implementation.
@@ -26,18 +23,16 @@ into three categories:
 ### Your first issue
 
 1. Read the project's [README.md](https://github.com/NVIDIA/structured-data-models/blob/main/README.md)
-   to learn how to set up the development environment.
+   to learn how to install the package.
 2. Find an issue to work on. The best way is to look for the [good first issue](https://github.com/NVIDIA/structured-data-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
    or [help wanted](https://github.com/NVIDIA/structured-data-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) labels
 3. Comment on the issue saying you are going to work on it.
-4. Get familiar with the developer guide relevant for you:
-   - For C++ developers it is available here [DEVELOPER_GUIDE.md](https://github.com/jarmak-nv/rapids-repo-template/blob/main/Maintainers/DEVELOPER_GUIDE.md)
-   - For Python developers, a [cuDF SAMPLE Python DEVELOPER_GUIDE.md](https://docs.rapids.ai/api/cudf/stable/developer_guide/index.html) is available as well.
+4. Get familiar with the [project guidelines](AGENTS.md).
 5. Code! Make sure to update unit tests!
 6. When done, [create your pull request](https://github.com/NVIDIA/structured-data-models/compare?template=default.md) and fill in the template it loads.
 7. Verify that CI passes all [status checks](https://help.github.com/articles/about-status-checks/), or fix if needed.
 8. Wait for other developers to review your code and update code as needed.
-9. Once reviewed and approved, a RAPIDS developer will merge your pull request.
+9. Once reviewed and approved, a project maintainer will merge your pull request.
 
 Remember, if you are unsure about anything, don't hesitate to comment on issues and ask for clarifications!
 
@@ -103,8 +98,7 @@ Remember, if you are unsure about anything, don't hesitate to comment on issues 
 Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using GitHub labels). This is used to highlight changes that users should know about when upgrading.
 
 For structured-data-models, a "breaking" change is one that modifies the public, non-experimental, Python API in a
-non-backward-compatible way. The C++ API does not have an expectation of backward compatibility at this
-time, so changes to it are not typically considered breaking. Backward-compatible API changes to the Python
+non-backward-compatible way. Backward-compatible API changes to the Python
 API (such as adding a new keyword argument to a function) do not need to be labeled.
 
 Additional labels must be applied to indicate whether the change is a feature, improvement, bugfix, or documentation change. See the shared RAPIDS documentation for these labels: https://github.com/NVIDIA/kb/issues/42.
@@ -124,18 +118,11 @@ implementation of the issue, ask them in the issue instead of the PR.
 
 ### Branches and Versions
 
-The structured-data-models repository has two main branches:
-
-1. `main` branch: it contains the last released version. Only hotfixes are targeted and merged into it.
-2. `release/X.Y`: it is the development branch which contains the upcoming release. All the new features should be based on this branch and Merge/Pull request should target this branch (with the exception of hotfixes).
+Development targets `main` by default. Maintainers may request a `release/X.Y` branch for release-specific changes.
 
 ### Additional details
 
-For every new version `X.Y` of structured-data-models there is a corresponding branch called `release/X.Y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by GitHub users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
-
 For all development, your changes should be pushed into a branch (created using the naming instructions below) in your own fork of structured-data-models and then create a pull request when the code is ready.
-
-A few days before releasing version `X.Y` the code of the current development branch (`release/X.Y`) will be frozen and a new branch for the next version (for example, `release/0.3` after `release/0.2`) will be created to continue development.
 
 ### Branch naming
 

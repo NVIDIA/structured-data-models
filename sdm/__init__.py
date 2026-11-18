@@ -30,6 +30,7 @@ from sdm.relational import (
     RelatedTables,
 )
 from sdm.processing import Recipe
+from sdm import prior
 import sdm.models as models
 import sdm.evaluation as evaluation
 import sdm.explain as explain
@@ -61,6 +62,7 @@ __all__ = [
     "TaskLink",
     "RelatedTables",
     "Recipe",
+    "prior",
     "models",
     "evaluation",
     "explain",

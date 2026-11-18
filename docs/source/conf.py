@@ -3,17 +3,22 @@
 
 import importlib
 import inspect
+import sys
 from datetime import date
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
+from typing import TypeVar
 
 from docutils import nodes
 from docutils.nodes import Node
+from sphinx.addnodes import pending_xref
 from sphinx.application import Sphinx
+from sphinx.environment import BuildEnvironment
 from sphinx.ext.autodoc import AttributeDocumenter, PropertyDocumenter
 from sphinx.ext.autosummary import generate
 from sphinx.ext.autosummary.generate import AutosummaryEntry
+from sphinx.ext.intersphinx import missing_reference
 
 project = "Structured Data Models"
 author = "NVIDIA"
@@ -173,8 +178,69 @@ def _run_on_doctree_read(
         node["test"] = code.replace("'cuda'", "'cpu'")
 
 
+_reference_aliases = {
+    "Tensor": "torch.Tensor",
+    "pd.DataFrame": "pandas.DataFrame",
+    "pa.Table": "pyarrow.Table",
+    "StypeLike": "sdm.StypeLike",
+    "TaskLike": "sdm.TaskLike",
+    "Processor": "sdm.processing.base.Processor",
+    "EnsembleProcessor": "sdm.processing.ensemble.EnsembleProcessor",
+    "SDPA": "sdm.nn.SDPA",
+    "Stype.categorical": "sdm.Stype.categorical",
+    "Stype.text": "sdm.Stype.text",
+    "Activation": "sdm.prior.Activation",
+    "Schema": "sdm.prior.tabular.Schema",
+    "T | MixtureConverter[T]": "sdm.prior.MixtureConverter",
+    "sdm.processing.AlignCategories": (
+        "sdm.processing.categorical.AlignCategories"
+    ),
+    "sdm.processing.ToNumerical": "sdm.processing.common.ToNumerical",
+    "sdm.processing.StypeDispatch": "sdm.processing.common.StypeDispatch",
+    "sdm.processing.AverageEstimators": (
+        "sdm.processing.output.AverageEstimators"
+    ),
+    "sentence_transformers.SentenceTransformer": "sentence_transformers.sentence_transformer.model.SentenceTransformer",  # noqa: E501
+    "sentence_transformers.SentenceTransformer.encode": "sentence_transformers.sentence_transformer.model.SentenceTransformer.encode",  # noqa: E501
+}
+
+
+def _resolve_reference_alias(
+    app: Sphinx,
+    env: BuildEnvironment,
+    node: pending_xref,
+    content: nodes.Element,
+) -> nodes.Element | None:
+    if node.get("refdomain") != "py":
+        return None
+    module_name, _, name = node["reftarget"].rpartition(".")
+    module = sys.modules.get(module_name or node.get("py:module"))
+    if not module_name:
+        cls = getattr(module, node.get("py:class") or "", None)
+        module = sys.modules.get(getattr(cls, "__module__", None), module)
+    if isinstance(getattr(module, name, None), TypeVar):
+        return content
+    target = _reference_aliases.get(node["reftarget"])
+    if target is None:
+        return None
+    node["reftarget"] = target
+    resolved = env.get_domain("py").resolve_xref(
+        env=env,
+        fromdocname=node["refdoc"],
+        builder=app.builder,
+        type=node["reftype"],
+        target=target,
+        node=node,
+        contnode=content,
+    )
+    if resolved is not None:
+        return resolved
+    return missing_reference(app, env, node, content)
+
+
 def setup(app: Sphinx) -> None:
     """Register Jinja rendering for dynamic autosummary lists."""
     app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
     app.connect("source-read", _render_jinja)
     app.connect("doctree-read", _run_on_doctree_read)
+    app.connect("missing-reference", _resolve_reference_alias, priority=400)

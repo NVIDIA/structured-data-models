@@ -18,8 +18,7 @@ pip install . fev==0.10.0
   python -m benchmark.timeseries.fev_bench.main --model chronos2
   ```
 
-  `Chronos2` follows official evaluation with cross-learning across batches, and contexts truncated to 8,192 time steps.
-  Unlike the official `float32` evaluation, we use `float16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
+  `Chronos2` follows official evaluation with cross-learning across examples within each batch, and contexts truncated to 8,192 time steps. Unlike the official `float32` evaluation, on CUDA we use `float16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
 
 - **`TimesFM3`**:
 
@@ -27,8 +26,7 @@ pip install . fev==0.10.0
   python -m benchmark.timeseries.fev_bench.main --model timesfm3
   ```
 
-  `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass.
-  Unlike the official `float32` evaluation, we use `bfloat16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
+  `TimesFM3` follows official evaluation with symmetric averaging over two estimators, contexts truncated to 15,360 time steps and up to 32 variates per forward pass. Unlike the official `float32` evaluation, on CUDA we use `bfloat16` mixed precision for improved efficiency with negligible differences in aggregate benchmark accuracy.
 
 > [!NOTE]
 > Weights of `TimesFM3` are distributed under the [TimesFM Non-Commercial License v1.0](https://huggingface.co/google/timesfm-3.0-pytorch/blob/main/LICENSE).

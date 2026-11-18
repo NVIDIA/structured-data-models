@@ -127,7 +127,6 @@ if len(context) > args.context_size:  # Sample different context per estimator:
     context = context[perm[:width]]
     if num_estimators > 1:
         context = context.unflatten(0, (num_estimators, args.context_size))
-        query = query.expand(num_estimators, *query.size())
         num_estimators = None  # Context provides ensemble dimension.
 
 
@@ -173,7 +172,7 @@ for batch in tqdm(query.split(args.batch_size, -2)[: args.max_test_steps]):
     x_query = batch.drop_columns(task.target_col)
     y_query = batch[task.target_col].to(device)
     if num_estimators is None:
-        y_query = y_query[0]
+        x_query = x_query.expand(args.num_estimators, *x_query.size())
     with torch.amp.autocast(device.type, torch.float16, enabled=True):
         out = model.predict(*sampler(x_query, **kwargs).to(device))
 

@@ -28,8 +28,7 @@ python -m benchmark.relational.relarena.kumo_relational \
 
 ## Results
 
-- **`KumoRelational`** uses a maximum of 20K context examples up to two hops, excluding text columns.
-  It achieves an Elo of 1832.2 (rank 3/12) on the models-only leaderboard, and an Elo of 1827.8 (rank 4/14) on the combined models-and-systems leaderboard (as of 2026-09-29).
+- **`KumoRelational`** uses a maximum of 20K context examples per estimator up to two hops, excluding text columns. It achieves an Elo of 1832.2 (rank 3/12) on the models-only leaderboard, and an Elo of 1827.8 (rank 4/14) on the combined models-and-systems leaderboard (as of 2026-09-29).
 
 | Classification Task (AUROC ⬆️) | `kumo-relational` | Regression Task (MAE ⬇️)    | `kumo-relational` |
 | :----------------------------- | ----------------: | :-------------------------- | ----------------: |

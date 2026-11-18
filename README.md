@@ -20,6 +20,7 @@
 - **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2), [`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3), [`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly), *etc*), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
+- **Synthetic data generation:** Distributions over synthetic training datasets, including SCM priors for `KumoTabular`.
 
 ## Installation
 
@@ -45,19 +46,19 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 - **[`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
 - **[`TabFM`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabFM)** from Kong *et al.*: [TabFM: A Zero-Shot Foundation Model for Tabular Data](https://arxiv.org/abs/2609.37959) (CoRR '26)
-- **[`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular Sets a New Accuracy-Efficiency Frontier for Tabular Prediction](https://huggingface.co/blog/nvidia/kumo-tabular) ('26)
+- **[`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular: Pushing the Accuracy–Efficiency Frontier for Tabular Prediction](https://arxiv.org/abs/2611.23001) (CoRR '26)
 
 **Relational Foundation Models:**
 
 - **[`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
 
-**Times Series Forecasting Foundation Models:**
+**Time Series Forecasting Foundation Models:**
 
 - **[`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2)** from Ansari *et al.*: [Chronos-2: From Univariate to Universal Forecasting](https://arxiv.org/abs/2510.15821) (CoRR '25)
 - **[`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast)** from Gautam *et al.*: [Memory-Augmented Forecasting: Scalability and Generalization Across Temporal Domains](https://ieeexplore.ieee.org/abstract/document/11402442) (IEEE BigData '25)
 - **[`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3)** from Jain *et al.*: [TimesFM-3: A Zero-Shot Foundation Model for Multivariate Forecasting](https://research.google/blog/timesfm-3-a-zero-shot-foundation-model-for-multivariate-forecasting) ('26)
 
-**Times Series Anomaly Detection Foundation Models:**
+**Time Series Anomaly Detection Foundation Models:**
 
 - **[`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly)** from Gautam *et al.*: [NV-Tesseract-AD: Curriculum-Enhanced Conditional Diffusion for Multivariate Time-Series Anomaly Detection](https://arxiv.org/abs/2610.12754) (CoRR '26)
 

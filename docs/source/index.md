@@ -46,6 +46,7 @@ api/tensor
 api/relational
 api/processing
 api/nn
+api/prior
 api/models
 api/explain
 api/evaluation

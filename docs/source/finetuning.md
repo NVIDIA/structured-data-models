@@ -94,7 +94,7 @@ For example, {py:class}`~sdm.processing.common.ShuffleColumns` reorders feature 
 Keep these processors to use their transformations as data augmentation during fine-tuning, or remove them if those invariances are not desired for your task.
 
 For regression tasks with {py:class}`~sdm.models.KumoTabular`, additionally remove the random {py:class}`~sdm.processing.numerical.FlipSign` from the target pipeline.
-The default recipe inverts the sign flip via {py:class}`~sdm.processing.output.SortQuantiles`, but the {py:class}`~sdm.processing.common.Identity` output will not:
+The default recipe restores quantile order via {py:class}`~sdm.processing.output.SortQuantiles`, but the {py:class}`~sdm.processing.common.Identity` output will not:
 
 ```python
 recipe.target = sp.StypeDispatch(  # Default target pipeline without FlipSign.

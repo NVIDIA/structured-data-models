@@ -22,9 +22,8 @@ class DeviceMixin(abc.ABC):
 
         Args:
             device: The device.
-            non_blocking: If ``True`` and the source is in pinned memory, the
-                copy will be asynchronous with respect to the host. Otherwise,
-                the argument has no effect.
+            non_blocking: If ``True``, attempt to perform the conversion
+                asynchronously with respect to the host when possible.
         """
         return self._apply_tensor(
             lambda x: x.to(device, non_blocking=non_blocking)

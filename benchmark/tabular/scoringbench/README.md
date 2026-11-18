@@ -48,7 +48,7 @@ Results are written under `benchmark/tabular/scoringbench_out/univariate/raw/` a
 
 ## Fine-tuning
 
-Add `--finetune` to full fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked:
+Add `--finetune` to fine-tune every parameter of the selected `--model` on each dataset's training split before evaluating (see `benchmark/tabular/finetune.py`). Unlike TabArena/BeyondArena's dedicated `-ft` model choices, this is a flag applied to whichever model you picked:
 
 ```bash
 python -m benchmark.tabular.scoringbench.main \
