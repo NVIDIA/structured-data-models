@@ -5,8 +5,10 @@
 
 from sdm.processing.text.tfidf import TFIDF
 from sdm.processing.text.sentence_transformer import SentenceTransformer
+from sdm.processing.text.tile import TILE
 
 __all__ = [
     "TFIDF",
     "SentenceTransformer",
+    "TILE",
 ]

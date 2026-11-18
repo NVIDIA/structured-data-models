@@ -78,6 +78,14 @@ The [`sdm/models/kumo/timeseries/anomaly`](sdm/models/kumo/timeseries/anomaly) i
 
 The [`sdm/models/base/ecoc.py`](sdm/models/base/ecoc.py) implementation contains code derived from [`TabPFN Extensions`](https://github.com/PriorLabs/tabpfn-extensions).
 
+## TILE
+
+- Source: https://github.com/soda-inria/tile
+- License: BSD 3-Clause License
+- License terms: [`third_party/tile/LICENSE`](third_party/tile/LICENSE)
+
+The [`sdm/processing/text/tile.py`](sdm/models/processing/text/tile.py) implementation contains code derived from [`TILE`](https://github.com/soda-inria/tile).
+
 ## PyTorch Contribution Guide
 
 Portions of [`CONTRIBUTING.md`](CONTRIBUTING.md) are adapted from the [PyTorch contribution guide](https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md), distributed under the BSD 3-Clause License. The complete copyright notices and license terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).

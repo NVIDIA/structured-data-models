@@ -1,5 +1,5 @@
 # Copyright (c) 2025, Félix Lefebvre
-# Licensed under the BSD 3-Clause License; see https://github.com/soda-inria/tile/blob/main/LICENSE
+# Licensed under the BSD 3-Clause License; see third_party/tile/LICENSE.
 
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
