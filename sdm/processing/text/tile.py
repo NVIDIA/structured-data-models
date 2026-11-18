@@ -4,6 +4,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# ruff: noqa: D205
+
 import math
 from typing import cast
 
@@ -73,11 +75,34 @@ def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
 
 
 class TILE(Processor):
+    r"""The text cell embedding module from the `"TILE: Bridging LLMs and Table
+    Foundation Models for Tabular Learning with Strings"
+    <https://arxiv.org/abs/2610.17065>`_ paper.
+
+    Each row is serialized as one sentence per cell. An LLM embeds the row,
+    and token embeddings are mean-pooled for each text cell. Optional
+    postprocessing transforms these embeddings independently per text
+    column, for example to reduce dimensionality.
+
+    Args:
+        model: The LLM, one of ``"llama-3.1-8b"``, ``"llama-3.1-70b"``,
+            ``"llama-3.2-1b"``, ``"llama-3.2-3b"``, ``"qwen3-0.6b"``,
+            ``"qwen3-4b"``, or ``"qwen3-8b"``.
+        postprocess: Optional postprocessing routine, applied independently for
+            each text column.
+        batch_size: The batch size of the LLM. Adjusting the batch size can
+            significantly improve processing speed. The optimal value depends
+            on your hardware, model size, precision, and input length.
+        max_length: Maximum number of tokens per row.
+        device: The LLM device.
+        dtype: The LLM dtype.
+    """
+
     handles_stypes = (Stype.text,)
 
     def __init__(
         self,
-        model: str,
+        model: str = "qwen3-0.6b",
         postprocess: object = None,
         *,
         batch_size: int = 64,
