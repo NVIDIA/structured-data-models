@@ -12,18 +12,18 @@ _RMSNormCast: TypeAlias = Callable[
     [Tensor, Tensor | None, float, tuple[Tensor, Tensor] | None], Tensor
 ]
 
-_triton_rmsnorm_cast: _RMSNormCast | None = None
+_triton_rms_norm_cast: _RMSNormCast | None = None
 try:
-    from sdm._kernels.triton.rmsnorm_cast import (
-        rmsnorm_cast as _triton_rmsnorm_cast_impl,
+    from sdm._kernels.triton.rms_norm_cast import (
+        rms_norm_cast as _triton_rms_norm_cast_impl,
     )
 except ImportError:
     pass
 else:
-    _triton_rmsnorm_cast = _triton_rmsnorm_cast_impl
+    _triton_rms_norm_cast = _triton_rms_norm_cast_impl
 
 
-def rmsnorm_cast(
+def rms_norm_cast(
     x: Tensor,
     weight: Tensor | None,
     eps: float,
@@ -45,7 +45,7 @@ def rmsnorm_cast(
             is the number of heads. Rotation rounds in the input dtype.
     """
     if (
-        _triton_rmsnorm_cast is not None
+        _triton_rms_norm_cast is not None
         and x.is_cuda
         and x.dtype in {torch.float16, torch.bfloat16, torch.float32}
         and x.size(-1) in {32, 64, 128, 256, 512}
@@ -82,7 +82,7 @@ def rmsnorm_cast(
             and torch.is_grad_enabled()
         )
     ):
-        return _triton_rmsnorm_cast(x, weight, eps, rope)
+        return _triton_rms_norm_cast(x, weight, eps, rope)
     if rope is not None:
         cos, sin = (table.unsqueeze(-2) for table in rope)
         x1, x2 = x.chunk(2, dim=-1)
