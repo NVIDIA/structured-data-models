@@ -1,3 +1,6 @@
+# Copyright (c) 2025, Félix Lefebvre
+# Licensed under the BSD 3-Clause License; see https://github.com/soda-inria/tile/blob/main/LICENSE
+
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -70,13 +73,12 @@ def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
 
 
 class TILE(Processor):
-    requires_fit = False
     handles_stypes = (Stype.text,)
 
     def __init__(
         self,
         model: str,
-        postprocess: Processor | None = None,
+        postprocess: object = None,
         *,
         batch_size: int = 64,
         max_length: int | None = None,
@@ -113,12 +115,18 @@ class TILE(Processor):
             module=torch.nn.Identity(),
         )
 
-        self.llm = LLM(model)
+        self.requires_fit = False
+        if postprocess is not None:
+            postprocess = Processor.as_processor(postprocess)
+            self.requires_fit = postprocess.requires_fit
+
+        self.llm = LLM(llm)
         self.postprocess = postprocess
         self.batch_size = batch_size
         self.max_length = max_length
+        self.skip_first = len(self.llm.model.tokenizer("")["input_ids"]) == 0
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _embed(self, table: TableTensor) -> Tensor:  # [..., R, C, D]
         columns = tuple(
             column for columns in table.columns.values() for column in columns
         )
@@ -142,6 +150,8 @@ class TILE(Processor):
             emb = emb.to(out.dtype)
             start, end = span[index].unbind(dim=-1)
             mask = mask & (offset[..., 1] > offset[..., 0])
+            if self.skip_first:
+                mask[..., 0] = False
             weight = (  # Match tokens to text cells:
                 mask[:, None, :]
                 & (offset[:, None, :, 0] < end[:, :, None])
@@ -149,11 +159,59 @@ class TILE(Processor):
             ).to(out.dtype)  # [R, C, T]
             weight /= weight.sum(dim=-1, keepdim=True).clamp(min=1)
             out[index] = weight.bmm(emb)  # [R, C, D]
-        out = out.view(*table.size()[:-1], *out.size()[-2:])  # [..., R, C, D]
+
+        return out.view(*table.size()[:-1], *out.size()[-2:])  # [..., R, C, D]
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        if self.postprocess is None:
+            return
+
+        self.postprocess.fit(
+            TableTensor.from_tensor(self._embed(table).movedim(-2, -3)),
+            generator=generator,
+        )
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        out = self._embed(table)
 
         if self.postprocess is not None:
             out = self.postprocess.transform(
                 TableTensor.from_tensor(out.movedim(-2, -3))
+            ).numerical.movedim(-2, -3)  # [..., R, C, D]
+
+        out = TableTensor(
+            columns={
+                Stype.numerical: tuple(
+                    f"{column}__emb{i}"
+                    for column in table.text_columns
+                    for i in range(out.size(-1))
+                )
+            },
+            numerical=out.flatten(-2).to(table.device),
+        )
+
+        return cast(
+            TableTensor,
+            torch.cat([table.drop_stypes(Stype.text), out], dim=-1),
+        )
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        out = self._embed(table)
+
+        if self.postprocess is not None:
+            out = self.postprocess.fit_transform(
+                TableTensor.from_tensor(out.movedim(-2, -3)),
+                generator=generator,
             ).numerical.movedim(-2, -3)  # [..., R, C, D]
 
         out = TableTensor(
