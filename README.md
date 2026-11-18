@@ -20,6 +20,7 @@
 - **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2), [`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3), [`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly), *etc*), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
+- **Synthetic data generation:** Distributions over synthetic training datasets, including SCM priors for `KumoTabular`.
 
 ## Installation
 
