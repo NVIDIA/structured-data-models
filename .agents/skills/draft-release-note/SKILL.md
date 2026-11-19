@@ -9,7 +9,7 @@ Draft researcher-facing SDM release notes for stable minor releases (`vX.Y.0`, w
 
 ## Establish the scope
 
-Read repository instructions and preserve existing draft edits. Use the maintainer's chosen destination and naming conventions; do not assume a local filename or gist.
+Read repository instructions and preserve existing draft edits. Use the maintainer's chosen destination and naming conventions.
 
 Identify the target tag or agreed commit and the preceding stable release, including its latest patch. Inspect the comparison, merged PRs, public APIs, examples, and documentation. Ground claims in that range. Verify each model's task, provenance, and whether it ships in SDM.
 
@@ -49,11 +49,7 @@ Link each new model's public API, paper/blog, upstream code, and weights inline 
 
 Code is optional; a figure or model list may suffice. Choose examples that directly demonstrate the headline capability and meaningful output, not adjacent low-level components. For training/building-block releases, show the distinctive reusable component and link the full training guide; avoid long launch commands. Use the simplest public API at the target revision, with imports and setup. Run examples when practical and report limits. Put printed output in Python comments immediately after each print call in the same fence, using the real display format. Identify representative output as illustrative or variable; do not seed randomness solely to match it.
 
-## Optional gist synchronization
-
-Once a maintainer authorizes gist synchronization, update it after every draft edit. Reuse the identified gist; locate the matching draft or clarify an ambiguous destination rather than assuming a gist ID. Read the remote file first, reconcile divergent edits, and preserve other files, metadata, and visibility. Upload the named file, then fetch it back and compare with the intended draft. After an uncertain write, read back before retrying; report failures without claiming synchronization.
-
-External actions, commits, and pushes require maintainer authorization and must follow repository policy. Briefly report the draft location, any gist link and verified sync status, and material verification gaps.
+Briefly report the draft location and any material verification gaps.
 
 ## Final checklist
 
@@ -61,4 +57,4 @@ External actions, commits, and pushes require maintainer authorization and must 
 - [ ] Required structure, variable highlight count, and conditional Breaking changes are correct.
 - [ ] Credits, migrations, links, examples, and output comments are checked; gaps are disclosed.
 - [ ] Latest edits and removals are preserved, contents links match headings, and no personal defaults are assumed.
-- [ ] Chosen destination and authorized gist sync are verified; actions stay within authorization.
+- [ ] The draft is available at the chosen destination.
