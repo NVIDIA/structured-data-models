@@ -50,12 +50,6 @@ class ICLBlock(torch.nn.Module):
             for _ in range(num_layers)
         )
 
-        # Keep final attention on SDPA to avoid FP8 overhead on small batches.
-        for layer in self.layers[:-1]:
-            cast(
-                KumoTabularTransformerBlock, layer
-            ).attn._supports_quantized_attention = True
-
         self.norm = RMSNorm(channels, **factory_kwargs)
         self.head = Sequential(
             Linear(channels, 2 * channels, **factory_kwargs),
@@ -115,19 +109,21 @@ class ICLBlock(torch.nn.Module):
                 )
 
                 if cache is not None and cache.is_recording:
-                    x, entry = result
-                    cache[cache_key] = (
-                        entry.select_heads(self.kv_heads)
-                        if self.kv_heads is not None
-                        else entry
-                    )
-                    del entry
+                    x, (key, value) = result
+                    kv_heads = self.kv_heads
+                    if kv_heads is not None and kv_heads < key.size(-2):
+                        key, value = _copy_key_value(
+                            key=key[..., :kv_heads, :],
+                            value=value[..., :kv_heads, :],
+                        )
+                    cache[cache_key] = KVCacheEntry(key, value)
+                    del key, value
                 else:
                     x = result
                 del result
                 continue
 
-            x_context, entry = layer(
+            x_context, (key, value) = layer(
                 query=x
                 if train_size is not None
                 else x[..., :0, :]
@@ -142,8 +138,11 @@ class ICLBlock(torch.nn.Module):
                 if last_layer
                 else x[..., :R_train, :],
             )
-            key_value = entry.select_heads(self.kv_heads)
-            del entry
+            key_value = KVCacheEntry(
+                key=key[..., : self.kv_heads, :].contiguous(),
+                value=value[..., : self.kv_heads, :].contiguous(),
+            )
+            del key, value
             x_query = layer(
                 query=x if train_size is not None else x[..., R_train:, :],
                 key_value=key_value,
@@ -160,3 +159,16 @@ class ICLBlock(torch.nn.Module):
                 x = torch.cat([x_context, x_query], -2)
 
         return self.head(self.norm(x))
+
+
+def _copy_key_value(key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
+    return (
+        key.clone(memory_format=torch.contiguous_format),
+        value.clone(memory_format=torch.contiguous_format),
+    )
+
+
+# Keep the guard for PyTorch 2.7; 2.8+ can use the decorator directly.
+if hasattr(torch.compiler, "nested_compile_region"):
+    # Compile cache copies separately to free each layer's full K/V tensors.
+    _copy_key_value = torch.compiler.nested_compile_region(_copy_key_value)
