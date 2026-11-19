@@ -279,6 +279,30 @@ def test_fit_predict(
     )
 
 
+def test_fit_predict_fp8_kv_cache() -> None:
+    model = _build("regression", "small")
+    x_context, x_query = _features(Stype.numerical)
+    target = _reg_target()
+
+    model.fit(x_context, target, recipe=_recipe())
+    expected = model.predict(x_query)
+    model.fit(
+        x=x_context,
+        y=target,
+        recipe=_recipe(),
+        kv_cache_dtype="fp8_per_head",
+    )
+    actual = model.predict(x_query)
+
+    assert not actual.numerical.equal(expected.numerical)
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=0.1,
+        rtol=0.01,
+    )
+
+
 def test_missing_values_pass_through_fit_predict(
     size: Literal["small", "medium", "large"],
 ) -> None:
