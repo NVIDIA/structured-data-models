@@ -5,10 +5,8 @@ import torch
 
 from sdm import EnsembleTable, TableTensor
 from sdm.processing import ClipNonnegative
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_clip_nonnegative(device: torch.device) -> None:
     target = torch.tensor(
         [[[0.0, -1.0], [1.0, 1.0]], [[1.0, 0.0], [2.0, 2.0]]],

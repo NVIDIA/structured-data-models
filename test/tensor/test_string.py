@@ -261,6 +261,9 @@ def test_allowed_dtype() -> None:
 
 @withCUDA
 def test_eq(device: torch.device) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+
     left = StringTensor.from_list(["a", "b", "a"], device=device)
     right = StringTensor.from_list(["a", "a", "b"], device=device)
 
@@ -329,6 +332,9 @@ def test_tolist() -> None:
 
 @withCUDA
 def test_sort(device: torch.device) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+
     tensor = StringTensor.from_list(["b", "aa", "a", "é", ""], device=device)
 
     out, perm = tensor.sort()

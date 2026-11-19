@@ -6,10 +6,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import ImputeConstant, ImputeMean
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [None, torch.float32, torch.float64])
 def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
     inp = torch.tensor(
@@ -56,7 +54,6 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
     )
 
 
-@withCUDA
 def test_impute_mean_infinite(device: torch.device) -> None:
     inp = torch.tensor(
         [
@@ -85,7 +82,6 @@ def test_impute_mean_infinite(device: torch.device) -> None:
     )
 
 
-@withCUDA
 @pytest.mark.parametrize("fill_value", [0.0, -5.0])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_impute_constant(

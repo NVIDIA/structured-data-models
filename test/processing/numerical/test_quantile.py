@@ -8,7 +8,7 @@ import torch
 
 from sdm import EnsembleTable, TableTensor
 from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
 def test_quantile_transform_rejects_nonpositive_n_quantiles() -> None:
@@ -21,7 +21,6 @@ def test_quantile_transform_rejects_nonpositive_subsample() -> None:
         QuantileTransform(subsample=0)
 
 
-@withCUDA
 def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
     device: torch.device,
 ) -> None:
@@ -60,7 +59,6 @@ def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
     )
 
 
-@withCUDA
 def test_quantile_transform_wide_inverse_round_trip(
     device: torch.device,
 ) -> None:
@@ -79,7 +77,6 @@ def test_quantile_transform_wide_inverse_round_trip(
     assert torch.allclose(inverse, inp, atol=1e-8)
 
 
-@withCUDA
 def test_quantile_transform_repeated_values_map_to_midpoint(
     device: torch.device,
 ) -> None:
@@ -102,7 +99,6 @@ def test_quantile_transform_repeated_values_map_to_midpoint(
     )
 
 
-@withCUDA
 def test_quantile_transform_constant_columns_round_trip(
     device: torch.device,
 ) -> None:
@@ -125,7 +121,6 @@ def test_quantile_transform_constant_columns_round_trip(
     )
 
 
-@withCUDA
 def test_quantile_transform_single_quantile_maps_to_zero(
     device: torch.device,
 ) -> None:
@@ -152,7 +147,6 @@ def test_quantile_transform_single_quantile_maps_to_zero(
     )
 
 
-@withCUDA
 def test_quantile_transform_normal_distribution_is_finite_at_bounds(
     device: torch.device,
 ) -> None:
@@ -206,7 +200,6 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
     assert first.equal(second)
 
 
-@withCUDA
 @pytest.mark.parametrize("subsample", [None, 32])
 def test_quantile_transform_adapter_matches_grouped_tables(
     device: torch.device,

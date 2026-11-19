@@ -7,10 +7,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing.text.tile import textify
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_textify(device: torch.device) -> None:
     table = TableTensor.from_columns(
         data={

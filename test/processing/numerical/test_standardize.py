@@ -6,10 +6,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import Standardize
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_standardize_with_state(device: torch.device) -> None:
     processor = Standardize().with_state(mean=2.0, scale=3.0).to(device)
     data = torch.randn(2, 3, 2, device=device)
@@ -56,7 +54,6 @@ def test_standardize_preserves_nonpersistent_buffers(name: str) -> None:
     assert name not in processor.state_dict()
 
 
-@withCUDA
 def test_standardize_fit_transform_and_inverse_round_trip(
     device: torch.device,
 ) -> None:
@@ -89,7 +86,6 @@ def test_standardize_fit_transform_and_inverse_round_trip(
     )
 
 
-@withCUDA
 def test_standardize(device: torch.device) -> None:
     inp = torch.tensor(
         [
@@ -122,7 +118,6 @@ def test_standardize(device: torch.device) -> None:
     )
 
 
-@withCUDA
 def test_standardize_ignores_non_finite_values_in_many_rows(
     device: torch.device,
 ) -> None:
@@ -142,7 +137,6 @@ def test_standardize_ignores_non_finite_values_in_many_rows(
     )
 
 
-@withCUDA
 def test_standardize_single_sample_uses_unit_scale(
     device: torch.device,
 ) -> None:
@@ -158,7 +152,6 @@ def test_standardize_single_sample_uses_unit_scale(
     )
 
 
-@withCUDA
 def test_standardize_fits_leading_batches_independently(
     device: torch.device,
 ) -> None:

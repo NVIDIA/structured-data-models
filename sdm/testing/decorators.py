@@ -8,7 +8,11 @@ import torch
 
 
 def onlyCUDA(func: Callable) -> Callable:
-    """Skip the test if CUDA is not available."""
+    """Mark a CUDA-only test and skip it when CUDA is unavailable.
+
+    Args:
+        func: Test function that sets up CUDA inputs or resources.
+    """
     import pytest
 
     func = pytest.mark.cuda(func)
@@ -19,7 +23,14 @@ def onlyCUDA(func: Callable) -> Callable:
 
 
 def withCUDA(func: Callable) -> Callable:
-    """Parametrize the test over ``cpu`` and ``cuda:0``."""
+    """Exercise distinct CPU and CUDA paths with the same assertions.
+
+    The test receives a ``device`` argument. Only the CUDA case receives
+    the ``cuda`` marker and is skipped when CUDA is unavailable.
+
+    Args:
+        func: Test function that accepts a ``device`` argument.
+    """
     import pytest
 
     devices = [
@@ -44,7 +55,6 @@ def onlyMPS(func: Callable) -> Callable:
     """Skip the test if MPS is not available."""
     import pytest
 
-    func = pytest.mark.cuda(func)
     return pytest.mark.skipif(
         not torch.backends.mps.is_available(),
         reason="MPS not available",

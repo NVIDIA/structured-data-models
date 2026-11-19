@@ -6,10 +6,9 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import ClipSigma
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
-@withCUDA
 def test_clip_sigma_two_stage_outlier_behavior(
     device: torch.device,
 ) -> None:
@@ -112,7 +111,6 @@ def test_clip_sigma_rejects_nonpositive_threshold() -> None:
         ClipSigma(threshold=0.0)
 
 
-@withCUDA
 def test_clip_sigma_fits_leading_batches_independently(
     device: torch.device,
 ) -> None:
@@ -151,7 +149,6 @@ def test_clip_sigma_fits_leading_batches_independently(
     )
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "missing", [float("nan"), float("inf"), -float("inf")]
 )

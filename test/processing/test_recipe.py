@@ -7,7 +7,6 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.models import KumoTabular, TabICLv2
-from sdm.testing import withCUDA
 
 
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -92,7 +91,6 @@ def test_recipe_rejects_task_dispatch_in_target() -> None:
         sp.Recipe(target=sp.TaskDispatch(regression=sp.Identity()))
 
 
-@withCUDA
 def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     recipe = TabICLv2.default_recipe()
 

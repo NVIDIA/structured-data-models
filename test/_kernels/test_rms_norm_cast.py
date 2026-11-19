@@ -160,8 +160,9 @@ def test_rms_norm_cast_rope(
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
-@withCUDA
-def test_rms_norm_cast_rope_grad_fallback(device: torch.device) -> None:
+@onlyCUDA
+def test_rms_norm_cast_rope_grad_fallback() -> None:
+    device = torch.device("cuda")
     x = torch.randn(2, 5, 3, 64, device=device)
     freq = torch.randn(5, 32, device=device, requires_grad=True)
     tables = (freq.cos(), freq.sin())

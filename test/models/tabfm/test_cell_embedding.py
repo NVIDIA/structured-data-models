@@ -5,10 +5,8 @@ import pytest
 import torch
 
 from sdm.models.tabfm.cell_embedding import CellEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_cell_embedding(device: torch.device) -> None:
     module = CellEmbedding(
         channels=8,
@@ -45,7 +43,6 @@ def test_cell_embedding(device: torch.device) -> None:
     assert module.cat_lin.weight.grad is not None
 
 
-@withCUDA
 @pytest.mark.parametrize("compiled", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_cell_embedding_mixed_dtype_output(

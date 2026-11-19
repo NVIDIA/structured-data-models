@@ -5,10 +5,8 @@ import pytest
 import torch
 
 from sdm.models.kumo.timeseries.anomaly.denoiser import DiffusionDenoiser
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("input_channels", [1, 2])
 @pytest.mark.parametrize(("features", "length"), [(3, 5), (1, 1)])
 def test_diffusion_denoiser(

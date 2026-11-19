@@ -5,10 +5,9 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import Cast
-from sdm.testing import onlyMPS, withCUDA
+from sdm.testing import onlyMPS
 
 
-@withCUDA
 def test_cast_converts_numerical_columns(device: torch.device) -> None:
     table = TableTensor(
         numerical=torch.tensor(

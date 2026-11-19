@@ -6,7 +6,6 @@ from textwrap import dedent
 import torch
 
 from sdm import RelationalData
-from sdm.testing import withCUDA
 
 
 def test_repr(relational_data: RelationalData) -> None:
@@ -44,7 +43,6 @@ def test_repr(relational_data: RelationalData) -> None:
         )""")
 
 
-@withCUDA
 def test_edge_indices(
     relational_data: RelationalData,
     device: torch.device,

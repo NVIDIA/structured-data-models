@@ -5,10 +5,8 @@ import pytest
 import torch
 
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("length", [9, 140])
 @pytest.mark.parametrize(("num_buckets", "max_distance"), [(4, 2), (32, 128)])
 def test_icl_block(

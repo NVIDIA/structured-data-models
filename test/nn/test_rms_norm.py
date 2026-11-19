@@ -122,7 +122,6 @@ def test_rms_norm_rope(
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
-@withCUDA
 def test_rms_norm_rope_grad(device: torch.device) -> None:
     rope = RotaryEmbedding(channels=32, layout="split_half", device=device)
     norm = RMSNorm(32, eps=1e-6, device=device)

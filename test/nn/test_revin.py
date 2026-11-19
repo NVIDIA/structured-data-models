@@ -7,10 +7,8 @@ import pytest
 import torch
 
 from sdm.nn import RevIN
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("affine_channels", [None, 2])
 def test_revin(device: torch.device, affine_channels: int | None) -> None:
     norm = RevIN(affine_channels, device=device)
@@ -25,7 +23,6 @@ def test_revin(device: torch.device, affine_channels: int | None) -> None:
     torch.testing.assert_close(norm.inverse(out, mean, std), x)
 
 
-@withCUDA
 def test_running_stats_update(device: torch.device) -> None:
     x = torch.tensor([[[1.0, 100.0, 2.0, 3.0]]], device=device)
     mask = torch.tensor([[[False, True, False, False]]], device=device)
@@ -47,7 +44,6 @@ def test_running_stats_update(device: torch.device) -> None:
     torch.testing.assert_close(std, std.new_tensor([[[2.0 / 3.0]]]).sqrt())
 
 
-@withCUDA
 def test_running_stats_fully_masked(device: torch.device) -> None:
     count = torch.tensor([[[3]]], device=device)
     mean = torch.tensor([[[2.0]]], device=device, dtype=torch.float64)
@@ -66,7 +62,6 @@ def test_running_stats_fully_masked(device: torch.device) -> None:
         torch.testing.assert_close(output, expected)
 
 
-@withCUDA
 def test_running_stats(device: torch.device) -> None:
     x = torch.tensor([[[[1.0, 3.0], [5.0, 99.0], [7.0, 9.0]]]], device=device)
     mask = torch.tensor(

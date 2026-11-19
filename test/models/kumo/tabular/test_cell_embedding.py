@@ -5,10 +5,8 @@ import torch
 
 from sdm.cache import Cache
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_cell_embedding(device: torch.device) -> None:
     module = CellEmbedding(
         channels=8,
@@ -45,7 +43,6 @@ def test_cell_embedding(device: torch.device) -> None:
     torch.testing.assert_close(chunked, expected)
 
 
-@withCUDA
 def test_cell_embedding_num_columns(device: torch.device) -> None:
     module = CellEmbedding(
         channels=8, group_size=3, num_frequencies=2, device=device
@@ -91,7 +88,6 @@ def test_cell_embedding_imputes_from_context_only() -> None:
     torch.testing.assert_close(out, expected + x.isnan().unsqueeze(-1))
 
 
-@withCUDA
 def test_cell_embedding_bfloat16_out_rounding(
     device: torch.device,
 ) -> None:

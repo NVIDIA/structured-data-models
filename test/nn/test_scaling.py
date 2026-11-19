@@ -8,10 +8,8 @@ import torch
 from torch import Tensor
 
 from sdm.nn import GatedLogScale, LogScale, QASSMax
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "key_len_fn",
     [
@@ -45,7 +43,6 @@ def test_qassmax(
     assert out.device == query.device
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "key_len_fn",
     [
@@ -81,7 +78,6 @@ def test_log_scale(
     )
 
 
-@withCUDA
 def test_gated_log_scale_forward(device: torch.device) -> None:
     module = GatedLogScale(
         channels=2,

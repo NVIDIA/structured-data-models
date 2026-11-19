@@ -4,10 +4,8 @@
 import torch
 
 from sdm.models import KumoAnomaly
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_forward(device: torch.device) -> None:
     model = KumoAnomaly(pretrained=False, device=device)
     x = torch.randn(2, 130, 3, device=device)

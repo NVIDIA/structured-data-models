@@ -7,7 +7,7 @@ from torch import Tensor
 
 from sdm import TableTensor
 from sdm.processing import RankGaussian
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
 def edge_query(context: Tensor) -> Tensor:
@@ -33,7 +33,6 @@ def edge_query(context: Tensor) -> Tensor:
     return values[:, None].expand(*context.shape[:-2], -1, context.size(-1))
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 )
@@ -71,7 +70,6 @@ def test_mid_ranks_and_interpolated_query(
     )
 
 
-@withCUDA
 def test_constants_and_missing_columns(device: torch.device) -> None:
     context = torch.tensor([[7.0, torch.nan]], device=device).expand(4, -1)
     processor = RankGaussian().fit(TableTensor.from_tensor(context))
@@ -88,7 +86,6 @@ def test_constants_and_missing_columns(device: torch.device) -> None:
     )
 
 
-@withCUDA
 def test_batched_missing_values_match_independent_columns(
     device: torch.device,
 ) -> None:
@@ -114,7 +111,6 @@ def test_batched_missing_values_match_independent_columns(
         torch.testing.assert_close(actual, expected, equal_nan=True)
 
 
-@withCUDA
 def test_few_distinct_values_match_all_knots(device: torch.device) -> None:
     context = torch.tensor(
         [
@@ -152,7 +148,6 @@ def test_few_distinct_values_match_all_knots(device: torch.device) -> None:
     )
 
 
-@withCUDA
 @pytest.mark.parametrize("max_knots", [2, 16])
 def test_many_distinct_values_stay_within_one_knot_spacing(
     max_knots: int, device: torch.device
@@ -203,7 +198,6 @@ def test_many_distinct_values_stay_within_one_knot_spacing(
     assert scores.diff(dim=-2).ge(0).all()
 
 
-@withCUDA
 @pytest.mark.parametrize("max_knots", [16, None])
 def test_nonfinite_context_does_not_change_fitted_ranks(
     max_knots: int | None,
@@ -232,7 +226,6 @@ def test_nonfinite_context_does_not_change_fitted_ranks(
     assert output[~query.isnan()].isfinite().all()
 
 
-@withCUDA
 def test_values_next_to_ties_stay_within_one_knot_spacing(
     device: torch.device,
 ) -> None:

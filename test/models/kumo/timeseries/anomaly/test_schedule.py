@@ -8,10 +8,8 @@ import pytest
 import torch
 
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("schedule", "num_steps", "beta_start", "beta_end", "dtype"),
     [
@@ -73,7 +71,6 @@ def test_diffusion_schedule(
         assert module.alpha_hat[0] > 1 - 1e-6
 
 
-@withCUDA
 def test_diffusion_schedule_conversion(device: torch.device) -> None:
     module = DiffusionSchedule(num_steps=10, beta_start=1e-4, beta_end=0.5)
     assert module.beta.dtype == torch.float64

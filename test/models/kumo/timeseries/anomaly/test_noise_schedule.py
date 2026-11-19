@@ -9,10 +9,8 @@ import torch
 
 from sdm.models.kumo.timeseries.anomaly.noise_schedule import NoiseScheduleVP
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("schedule", "dtype", "clipped_lambda"),
     [
@@ -80,7 +78,6 @@ def test_noise_schedule(
         torch.testing.assert_close(actual, target)
 
 
-@withCUDA
 def test_noise_schedule_extrapolation(device: torch.device) -> None:
     """Preserve boundary extrapolation and query-time gradients."""
     betas = torch.tensor(
@@ -114,7 +111,6 @@ def test_noise_schedule_extrapolation(device: torch.device) -> None:
     assert (gradient != 0).any()
 
 
-@withCUDA
 def test_noise_schedule_conversion(device: torch.device) -> None:
     """Move coefficients while keeping outputs and checkpoint contents."""
     betas = torch.tensor(

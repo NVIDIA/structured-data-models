@@ -6,10 +6,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import ClipQuantiles
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_clip_quantiles_bounds_and_transform(device: torch.device) -> None:
     inp = torch.tensor(
         [
@@ -38,7 +36,6 @@ def test_clip_quantiles_bounds_and_transform(device: torch.device) -> None:
     assert torch.equal(transformed, expected)
 
 
-@withCUDA
 def test_clip_quantiles_default_uses_min_max_bounds(
     device: torch.device,
 ) -> None:
@@ -61,7 +58,6 @@ def test_clip_quantiles_default_uses_min_max_bounds(
     assert torch.equal(transformed, inp)
 
 
-@withCUDA
 def test_clip_quantiles_constant_columns_are_exact(
     device: torch.device,
 ) -> None:
@@ -86,7 +82,6 @@ def test_clip_quantiles_rejects_invalid_quantiles() -> None:
         ClipQuantiles(q_low=0.75, q_high=0.25)
 
 
-@withCUDA
 def test_clip_quantiles_fits_leading_batches_independently(
     device: torch.device,
 ) -> None:

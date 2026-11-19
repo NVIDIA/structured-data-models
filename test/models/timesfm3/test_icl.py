@@ -6,10 +6,8 @@ import pytest
 import torch
 
 from sdm.models.timesfm3.icl import ICLBlock
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("masked", [False, True])
 def test_icl_block(device: torch.device, masked: bool) -> None:
     block = ICLBlock(

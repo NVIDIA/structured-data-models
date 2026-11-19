@@ -12,6 +12,9 @@ from sdm.testing import withCUDA
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.uint8, torch.int32])
 def test_join_index(dtype: torch.dtype, device: torch.device) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+
     left_table = right_table = TableTensor(
         columns={"id": ("id",)},
         id=ColumnarTensor((torch.arange(8, device=device),)),
@@ -54,7 +57,6 @@ def test_join_index_cast() -> None:
     assert right_index.equal(torch.tensor([0, 2]))
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
 def test_invalid_dtype(
     dtype: torch.dtype,
@@ -75,7 +77,6 @@ def test_invalid_dtype(
         )
 
 
-@withCUDA
 def test_overflow(device: torch.device) -> None:
     left_table = right_table = TableTensor(
         columns={"id": ("id",)},

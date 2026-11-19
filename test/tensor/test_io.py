@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+import sys
+from types import ModuleType
 
 import pyarrow as pa
 import pytest
@@ -84,8 +86,7 @@ def test_to_cudf_valid_mask() -> None:
     assert values == pytest.approx([0.0, math.nan, None, None], nan_ok=True)
 
 
-@onlyCUDA
-def test_to_cudf_requires_cuda() -> None:
-    pytest.importorskip("cudf")
+def test_to_cudf_requires_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "cudf", ModuleType("cudf"))
     with pytest.raises(ValueError, match="on a CUDA device"):
         to_cudf(torch.arange(3))

@@ -6,7 +6,6 @@ import torch
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.processing import AddCategoryCounts
-from sdm.testing import withCUDA
 
 
 def _table(
@@ -25,7 +24,6 @@ def _table(
     )
 
 
-@withCUDA
 def test_add_category_counts_appends_log1p_of_fitted_counts(
     device: torch.device,
 ) -> None:
@@ -57,7 +55,6 @@ def test_add_category_counts_appends_log1p_of_fitted_counts(
     )
 
 
-@withCUDA
 def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
     context = _table(
         [[0, 0], [0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [-1, 1]],
@@ -77,7 +74,6 @@ def test_add_category_counts_uses_fitted_counts(device: torch.device) -> None:
     )
 
 
-@withCUDA
 @pytest.mark.parametrize("min_cardinality", [0, 3])
 def test_add_category_counts_fits_leading_batches_independently(
     device: torch.device,
@@ -125,7 +121,6 @@ def test_add_category_counts_avoids_float16_count_overflow() -> None:
     )
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("min_cardinality", "columns"),
     [

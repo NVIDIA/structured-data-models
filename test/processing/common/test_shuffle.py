@@ -8,7 +8,6 @@ import torch
 
 from sdm import EnsembleTable, TableTensor
 from sdm.processing import ShuffleColumns
-from sdm.testing import withCUDA
 
 
 def _table() -> TableTensor:
@@ -79,7 +78,6 @@ def test_random_ensemble_matches_independent_shuffles() -> None:
         assert restored[member_id].equal(context)
 
 
-@withCUDA
 def test_latin_ensemble_couples_member_permutations(
     device: torch.device,
 ) -> None:

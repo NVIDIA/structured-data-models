@@ -11,10 +11,8 @@ from torch.nn import Linear, Sequential
 
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.nn import LogScale, RotaryEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_transformer_block(device: torch.device) -> None:
     block = KumoTabularTransformerBlock(
         channels=32,
@@ -30,7 +28,6 @@ def test_transformer_block(device: torch.device) -> None:
     torch.testing.assert_close(output, query, rtol=0, atol=0)
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("channels", [128, 256])
 def test_transformer_block_rope(

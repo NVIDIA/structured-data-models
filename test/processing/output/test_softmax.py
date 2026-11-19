@@ -6,10 +6,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import Softmax
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_softmax_controls_sharpness(
     device: torch.device,
 ) -> None:
@@ -30,7 +28,6 @@ def test_softmax_controls_sharpness(
     assert colder[0, 0] < warmer[0, 0]
 
 
-@withCUDA
 def test_softmax_is_numerically_stable(
     device: torch.device,
 ) -> None:

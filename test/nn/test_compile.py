@@ -17,7 +17,6 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = [
@@ -36,7 +35,6 @@ def fullgraph(module: torch.nn.Module) -> Callable[..., Tensor]:
     return torch.compile(module, fullgraph=True, backend="eager")
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "key_len_fn",
     [
@@ -60,7 +58,6 @@ def test_qassmax_compile(
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 @pytest.mark.parametrize("partial_rotary_factor", [1.0, 0.25])
 def test_rotary_embedding_compile(
     device: torch.device,
@@ -79,7 +76,6 @@ def test_rotary_embedding_compile(
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "masking"),
     [
@@ -140,7 +136,6 @@ def test_sdpa_compile(
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "kv_heads"),
     [(1, 1), (2, 2), (4, 4), (4, 1), (4, 2)],
@@ -242,7 +237,6 @@ def test_transformer_block_compile_dynamic_batch() -> None:
     assert counter.frame_count == 1
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("num_key_value_heads", "qassmax", "self_attn"),
     [
@@ -278,7 +272,6 @@ def test_attention_compile(
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 def test_attention_compile_key_value_cache(device: torch.device) -> None:
     module = Attention(channels=8, num_query_heads=2, device=device)
     query = torch.randn(2, 3, 8, device=device)
@@ -300,7 +293,6 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("qassmax", "masking"),
     [
@@ -351,7 +343,6 @@ def test_transformer_block_compile(
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 @pytest.mark.parametrize("self_attn", [False, True])
 def test_induced_transformer_block_compile(
     device: torch.device,

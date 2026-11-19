@@ -4,10 +4,8 @@
 import torch
 
 from sdm.models.timestral.icl import ICLBlock
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_icl_block(device: torch.device) -> None:
     block = ICLBlock(
         channels=16,

@@ -7,10 +7,8 @@ import torch
 import sdm.processing as sp
 from sdm import EnsembleTable, TableTensor
 from sdm.processing import AverageEstimators
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_average_estimators(device: torch.device) -> None:
     values = torch.arange(
         2 * 3 * 4 * 2,
@@ -38,7 +36,6 @@ def test_average_estimators_rejects_missing_ensemble_dimension() -> None:
         AverageEstimators().transform(table)
 
 
-@withCUDA
 def test_average_estimators_trimmed(device: torch.device) -> None:
     values = torch.tensor(
         [
@@ -60,7 +57,6 @@ def test_average_estimators_trimmed(device: torch.device) -> None:
     )
 
 
-@withCUDA
 def test_average_estimators_trimmed_reduces_members(
     device: torch.device,
 ) -> None:
@@ -83,7 +79,6 @@ def test_average_estimators_trimmed_reduces_members(
     )
 
 
-@withCUDA
 def test_average_estimators_trimmed_keeps_all_members_when_untrimmed(
     device: torch.device,
 ) -> None:
@@ -103,7 +98,6 @@ def test_average_estimators_trimmed_keeps_all_members_when_untrimmed(
     )
 
 
-@withCUDA
 def test_average_estimators_reduces_across_storage_groups(
     device: torch.device,
 ) -> None:
@@ -129,7 +123,6 @@ def test_average_estimators_reduces_across_storage_groups(
     )
 
 
-@withCUDA
 def test_average_estimators_composes_with_following_processor(
     device: torch.device,
 ) -> None:

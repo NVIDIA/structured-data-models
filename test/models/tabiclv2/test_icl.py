@@ -9,7 +9,6 @@ from torch import Tensor
 
 from sdm.cache import Cache
 from sdm.models.tabiclv2.icl import ICLBlock
-from sdm.testing import withCUDA
 
 
 class _StubICLBlock(ICLBlock):
@@ -72,7 +71,6 @@ def test_icl_block_grouping() -> None:
     )
 
 
-@withCUDA
 @pytest.mark.parametrize(
     (
         "total_num_classes",
@@ -249,7 +247,6 @@ def test_icl_block_rejects_one_class_hierarchy() -> None:
         )
 
 
-@withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2,)])
 @pytest.mark.parametrize("requires_grad", [False, True])
 def test_icl_block_hierarchical_cache(

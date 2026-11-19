@@ -7,10 +7,8 @@ import torch
 import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, TableTensor
 from sdm.models.kumo.tabular import KumoTabular
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
     features = TableTensor(
         numerical=torch.tensor(

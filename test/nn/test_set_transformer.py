@@ -5,10 +5,8 @@ import pytest
 import torch
 
 from sdm.nn import InducedTransformerBlock, TransformerBlock
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("num_key_value_heads", [None, 1])
 def test_induced_transformer_block(
     device: torch.device,

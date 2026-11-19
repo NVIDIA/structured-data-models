@@ -13,7 +13,6 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing import ShuffleCategories
-from sdm.testing import withCUDA
 
 
 def _table(
@@ -54,7 +53,6 @@ def test_shuffle_categories_shift_maps_single_target() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
-@withCUDA
 def test_shuffle_categories_random_permutes_each_categorical_column(
     device: torch.device,
 ) -> None:
@@ -210,7 +208,6 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
     assert output.equal(expected)
 
 
-@withCUDA
 def test_shuffle_categories_shift_uses_each_offset_before_reuse(
     device: torch.device,
 ) -> None:

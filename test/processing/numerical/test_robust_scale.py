@@ -6,10 +6,9 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import RobustScale
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
-@withCUDA
 def test_robust_scale_centers_and_scales_quantile_range(
     device: torch.device,
 ) -> None:
@@ -40,7 +39,6 @@ def test_robust_scale_centers_and_scales_quantile_range(
     )
 
 
-@withCUDA
 def test_robust_scale_uses_unit_scale_when_quantiles_coincide(
     device: torch.device,
 ) -> None:
@@ -60,7 +58,6 @@ def test_robust_scale_uses_unit_scale_when_quantiles_coincide(
     )
 
 
-@withCUDA
 def test_robust_scale_scales_values_outside_the_fitted_table(
     device: torch.device,
 ) -> None:
@@ -90,7 +87,6 @@ def test_robust_scale_scales_values_outside_the_fitted_table(
     )
 
 
-@withCUDA
 def test_robust_scale_preserves_nan_and_inf(device: torch.device) -> None:
     inp = torch.tensor(
         [
@@ -120,7 +116,6 @@ def test_robust_scale_preserves_nan_and_inf(device: torch.device) -> None:
     torch.testing.assert_close(out.numerical, expected, equal_nan=True)
 
 
-@withCUDA
 def test_robust_scale_fits_leading_batches_independently(
     device: torch.device,
 ) -> None:
@@ -146,7 +141,6 @@ def test_robust_scale_fits_leading_batches_independently(
     torch.testing.assert_close(out.numerical, expected)
 
 
-@withCUDA
 def test_robust_scale_uses_quantile_range(device: torch.device) -> None:
     inp = torch.arange(1, 5, dtype=torch.float64, device=device).unsqueeze(-1)
 
@@ -157,7 +151,6 @@ def test_robust_scale_uses_quantile_range(device: torch.device) -> None:
     torch.testing.assert_close(out.numerical, (inp - 2.5) / 3.0)
 
 
-@withCUDA
 def test_robust_scale_all_nonfinite_fit_yields_nan(
     device: torch.device,
 ) -> None:
@@ -177,7 +170,6 @@ def test_robust_scale_all_nonfinite_fit_yields_nan(
     assert out.numerical.isnan().all()
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 def test_robust_scale_fits_half_precision(
     device: torch.device,

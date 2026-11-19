@@ -9,10 +9,8 @@ import torch
 from sdm import CategoricalTensor, TableTensor
 from sdm.models import TabFM
 from sdm.models.tabfm import model as tabfm_module
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 @pytest.mark.parametrize("estimator_batch_size", [1, 2, None])
 def test_forward(
@@ -42,10 +40,7 @@ def test_forward(
     for parameter in model.parameters():
         if not parameter.any():
             torch.nn.init.normal_(parameter, std=0.02)
-    if device.type == "cpu":
-        assert repr(model) == "TabFM()"
-    else:
-        assert repr(model) == "TabFM(device=cuda:0)"
+    assert repr(model) == "TabFM()"
 
     x = TableTensor(
         numerical=torch.randn(8, 3, device=device),

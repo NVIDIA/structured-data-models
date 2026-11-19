@@ -15,8 +15,6 @@ from sdm.testing import onlyCUDA
 
 
 def _require_rapids() -> None:
-    if not torch.cuda.is_available():
-        cast(Any, pytest.skip)("CUDA is not available")
     pytest.importorskip("cudf")
     pytest.importorskip("pylibcugraph")
 

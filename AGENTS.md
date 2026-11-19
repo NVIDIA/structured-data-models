@@ -32,6 +32,7 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 
 - Tests should be sensitive to behavior changes and insensitive to structure changes. Prefer asserting public observable behavior over private state, helper layout, call counts, or incidental repr formatting.
 - Do not set seeds in tests unless they must require them.
+- Use CPU for shared code paths. Use `onlyCUDA` for behavior that requires CUDA, and `withCUDA` when the same assertions cover distinct CPU and CUDA paths.
 
 # PR / GitHub Metadata
 

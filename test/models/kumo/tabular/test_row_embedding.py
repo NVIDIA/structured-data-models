@@ -5,10 +5,8 @@ import torch
 
 from sdm.cache import Cache
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_row_embedding(device: torch.device) -> None:
     encoder = RowEmbedding(
         num_classes=0,

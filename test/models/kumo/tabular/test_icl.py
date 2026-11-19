@@ -6,10 +6,8 @@ import torch
 
 from sdm.cache import Cache
 from sdm.models.kumo.tabular.icl import ICLBlock
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("num_classes", "out_channels"),
     [(3, 4), (0, 5)],

@@ -9,10 +9,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import Clip
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_clip_clamps_fixed_bounds(
     device: torch.device,
 ) -> None:
@@ -40,7 +38,6 @@ def test_clip_rejects_invalid_configuration() -> None:
         Clip(1.0, -1.0)
 
 
-@withCUDA
 def test_clip_saturate_maps_finite_values(
     device: torch.device,
 ) -> None:
@@ -62,7 +59,6 @@ def test_clip_saturate_maps_finite_values(
     torch.testing.assert_close(out.numerical, expected)
 
 
-@withCUDA
 def test_clip_saturate_preserves_nan_and_maps_inf_to_bound(
     device: torch.device,
 ) -> None:
@@ -81,7 +77,6 @@ def test_clip_saturate_preserves_nan_and_maps_inf_to_bound(
     torch.testing.assert_close(out.numerical, expected, equal_nan=True)
 
 
-@withCUDA
 def test_clip_saturate_maps_overflow_to_bound(device: torch.device) -> None:
     inp = torch.tensor([[1e20], [-1e20]], dtype=torch.float32, device=device)
 

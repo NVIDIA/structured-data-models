@@ -19,7 +19,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
 def test_init() -> None:
@@ -572,10 +572,8 @@ def test_to_copy() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
-@withCUDA
-def test_to_dtype_preserves_empty_block_device(
-    device: torch.device,
-) -> None:
+def test_to_dtype_preserves_empty_block_device() -> None:
+    device = torch.device("meta")
     tensor = TableTensor.from_tensor(
         torch.ones(2, 1, dtype=torch.float16, device=device),
     )
@@ -991,8 +989,8 @@ def test_cat_stack() -> None:
         _ = torch.stack([tensor1, tensor1], dim=-1)
 
 
-@withCUDA
-def test_cat_all_column_empty(device: torch.device) -> None:
+def test_cat_all_column_empty() -> None:
+    device = torch.device("meta")
     tensor1 = TableTensor(size=(2,), device=device)
     tensor2 = TableTensor(size=(3,), device=device)
 
@@ -1011,9 +1009,9 @@ def test_cat_all_column_empty(device: torch.device) -> None:
     assert out.columns == tensor1.columns
 
 
-@withCUDA
 @pytest.mark.parametrize("dim", [0, -1])
-def test_cat_keeps_empty_block_dtype(device: torch.device, dim: int) -> None:
+def test_cat_keeps_empty_block_dtype(dim: int) -> None:
+    device = torch.device("meta")
     tensor = TableTensor(
         numerical=torch.empty(2, 0, dtype=torch.float64, device=device),
         categorical=CategoricalTensor(
@@ -1474,7 +1472,6 @@ def test_from_pandas_declared_categoricals() -> None:
     assert empty.categorical.code.is_contiguous()
 
 
-@withCUDA
 def test_from_pandas_nullable_and_categorical_dtypes(
     device: torch.device,
 ) -> None:

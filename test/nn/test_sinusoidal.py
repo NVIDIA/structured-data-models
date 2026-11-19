@@ -6,10 +6,8 @@ import math
 import torch
 
 from sdm.nn import SinusoidalEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_sinusoidal_embedding(device: torch.device) -> None:
     module = SinusoidalEmbedding()
     x = torch.ones(2, 3, 4, device=device)

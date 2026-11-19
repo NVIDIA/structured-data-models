@@ -6,10 +6,8 @@ import torch
 from torch.nn import ReLU
 
 from sdm.nn import ResidualMLP
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_residual_mlp(device: torch.device) -> None:
     block = ResidualMLP(
         in_channels=3,

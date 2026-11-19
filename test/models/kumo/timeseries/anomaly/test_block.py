@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from sdm.models.kumo.timeseries.anomaly.block import DiffusionBlock
-from sdm.testing import withCUDA
 
 
 @pytest.fixture(autouse=True)
@@ -67,7 +66,6 @@ def reference_block(
     return (x + residual.reshape_as(x)) / math.sqrt(2), skip.reshape_as(x)
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("features", "length", "diffusion_batch", "strategy_batch", "training"),
     [
@@ -109,7 +107,6 @@ def test_diffusion_block(
         torch.testing.assert_close(result, reference)
 
 
-@withCUDA
 def test_diffusion_block_grad_and_state_dict(device: torch.device) -> None:
     block = DiffusionBlock(
         channels=8,

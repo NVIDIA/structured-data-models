@@ -7,10 +7,8 @@ from sdm.models.timesfm3.util import (
     crossfade_patches,
     gather_future_patches,
 )
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_gather_future_patches(device: torch.device) -> None:
     x = torch.tensor(
         [
@@ -46,7 +44,6 @@ def test_gather_future_patches(device: torch.device) -> None:
     assert torch.equal(mask, expected_mask)
 
 
-@withCUDA
 def test_crossfade_patches(device: torch.device) -> None:
     x = torch.tensor(
         [

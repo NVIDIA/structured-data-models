@@ -10,10 +10,8 @@ import torch
 from sdm import TableTensor
 from sdm.models import KumoForecast
 from sdm.models.kumo.timeseries.forecast import model as forecasting
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("context_size", "horizon"),
     [(1, 120), (37, 600), (511, 120), (512, 120), (513, 600), (1200, 600)],

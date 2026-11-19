@@ -12,7 +12,6 @@ from sdm.nn import Attention
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 @pytest.mark.parametrize("shape", [(), (2,)])
 def test_forward(
@@ -21,10 +20,7 @@ def test_forward(
     shape: tuple[int, ...],
 ) -> None:
     model = TabICLv2(pretrained=False, device=device)
-    if device.type == "cpu":
-        assert repr(model) == "TabICLv2()"
-    else:
-        assert repr(model) == "TabICLv2(device=cuda:0)"
+    assert repr(model) == "TabICLv2()"
 
     R_context, R_query, C = 5, 3, 6
 
@@ -60,7 +56,6 @@ def test_forward(
     model.clear()
 
 
-@withCUDA
 @pytest.mark.parametrize("cached", [False, True])
 def test_autocast_output_is_float32(
     device: torch.device,
@@ -70,9 +65,7 @@ def test_autocast_output_is_float32(
     x_context = torch.randn(5, 6, device=device)
     y_context = torch.randn(5, 1, device=device)
     x_query = torch.randn(3, 6, device=device)
-    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
-
-    with torch.autocast(device_type=device.type, dtype=dtype):
+    with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
         if cached:
             model.fit(x_context, y_context, recipe=Recipe())
             out = model.predict(x_query)
@@ -82,7 +75,6 @@ def test_autocast_output_is_float32(
     assert out.numerical.dtype == torch.float32
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "y_context",
     [
@@ -99,9 +91,7 @@ def test_autocast_preserves_gradients_in_forward(
     x_context = torch.eye(2, device=device)
     y_context = y_context.to(device)
     x_query = torch.ones(1, 2, device=device)
-    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
-
-    with torch.autocast(device_type=device.type, dtype=dtype):
+    with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
         out = model(x_context, y_context, x_query)
 
     assert not torch.is_inference(out.numerical)
@@ -166,7 +156,6 @@ def test_num_estimators(
     model.clear()
 
 
-@withCUDA
 def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     row_embedding = RowEmbedding(
         num_classes=10,

@@ -7,11 +7,10 @@ import torch
 from sdm import TableTensor
 from sdm.processing import PowerTransform
 from sdm.processing.numerical import power as power_module
-from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+from sdm.testing import onlyFullTest
 
 
 @onlyFullTest
-@onlyCUDA
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_power_transform_accepts_caller_compiled_optimizer(
@@ -22,7 +21,6 @@ def test_power_transform_accepts_caller_compiled_optimizer(
         -3,
         3,
         steps=2 * 17 * 3,
-        device="cuda",
         dtype=dtype,
     ).view(2, 17, 3)
     table = TableTensor.from_tensor(inp)
@@ -31,6 +29,7 @@ def test_power_transform_accepts_caller_compiled_optimizer(
         eager = PowerTransform().fit_transform(table).numerical
         compiled_optimizer = torch.compile(
             power_module._optimize_lambdas,
+            backend="eager",
             fullgraph=True,
         )
         monkeypatch.setattr(
@@ -45,7 +44,6 @@ def test_power_transform_accepts_caller_compiled_optimizer(
     torch.testing.assert_close(compiled, eager, atol=1e-3, rtol=1e-3)
 
 
-@withCUDA
 def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
     device: torch.device,
 ) -> None:
@@ -86,7 +84,6 @@ def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
     )
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_power_transform_preserves_expanded_inputs_and_fitted_state(
     device: torch.device, dtype: torch.dtype
@@ -125,7 +122,6 @@ def test_power_transform_preserves_expanded_inputs_and_fitted_state(
     torch.testing.assert_close(processor.lambdas, lambdas)
 
 
-@withCUDA
 def test_power_transform_fits_strided_nonfinite_context(
     device: torch.device,
 ) -> None:
@@ -159,7 +155,6 @@ def test_power_transform_fits_strided_nonfinite_context(
     torch.testing.assert_close(values, before, equal_nan=True)
 
 
-@withCUDA
 def test_power_transform_wide_inverse_round_trip(device: torch.device) -> None:
     inp = torch.linspace(-3, 3, steps=32 * 40, device=device).view(32, 40)
 
@@ -172,7 +167,6 @@ def test_power_transform_wide_inverse_round_trip(device: torch.device) -> None:
     assert torch.allclose(inverse, inp, atol=1e-4, rtol=1e-4)
 
 
-@withCUDA
 def test_power_transform_without_standardization_is_near_identity(
     device: torch.device,
 ) -> None:
@@ -201,7 +195,6 @@ def test_power_transform_without_standardization_is_near_identity(
     )
 
 
-@withCUDA
 def test_power_transform_learns_skewed_lambda(
     device: torch.device,
 ) -> None:
@@ -227,7 +220,6 @@ def test_power_transform_learns_skewed_lambda(
     )
 
 
-@withCUDA
 def test_power_transform_constant_columns_use_identity_lambda(
     device: torch.device,
 ) -> None:
@@ -246,7 +238,6 @@ def test_power_transform_constant_columns_use_identity_lambda(
     )
 
 
-@withCUDA
 @pytest.mark.parametrize("standardize", [False, True])
 def test_power_transform_preserves_nan(
     device: torch.device,
@@ -276,7 +267,6 @@ def test_power_transform_preserves_nan(
     torch.testing.assert_close(inp, original, equal_nan=True)
 
 
-@withCUDA
 def test_power_transform_sparse_feature_uses_finite_count(
     device: torch.device,
 ) -> None:
@@ -293,7 +283,6 @@ def test_power_transform_sparse_feature_uses_finite_count(
     )
 
 
-@withCUDA
 def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
@@ -330,7 +319,6 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     )
 
 
-@withCUDA
 def test_power_transform_fits_leading_batches_independently(
     device: torch.device,
 ) -> None:
@@ -365,7 +353,6 @@ def test_power_transform_fits_leading_batches_independently(
     )
 
 
-@withCUDA
 def test_power_transform_fit_ignores_missing_cells(
     device: torch.device,
 ) -> None:
@@ -391,7 +378,6 @@ def test_power_transform_fit_ignores_missing_cells(
     )
 
 
-@withCUDA
 def test_power_transform_keeps_queries_beyond_the_fitted_range_finite(
     device: torch.device,
 ) -> None:
@@ -408,7 +394,6 @@ def test_power_transform_keeps_queries_beyond_the_fitted_range_finite(
     assert out.numerical.isfinite().all()
 
 
-@withCUDA
 def test_power_transform_inverse_beyond_the_fitted_bound_falls_back_to_max(
     device: torch.device,
 ) -> None:

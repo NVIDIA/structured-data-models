@@ -5,10 +5,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import MinMaxScale
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_min_max_scale(device: torch.device) -> None:
     data = torch.tensor([[1.0, 5.0], [3.0, 5.0]], device=device)
     processor = MinMaxScale()

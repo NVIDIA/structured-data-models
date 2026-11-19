@@ -10,7 +10,6 @@ from torch import Tensor
 
 from sdm.cache import Cache
 from sdm.models import ECOC
-from sdm.testing import withCUDA
 
 
 class MyModel(torch.nn.Module):
@@ -37,7 +36,6 @@ class MyModel(torch.nn.Module):
         ).log()
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("max_classes", "num_classes", "batch_shape"),
     [(10, 3, ()), (10, 11, ()), (10, 201, (2, 3)), (2, 12, ())],
@@ -98,7 +96,6 @@ def test_ecoc(
             )
 
 
-@withCUDA
 def test_ecoc_members(device: torch.device) -> None:
     model = MyModel(10)
     ecoc = ECOC(max_classes=10)

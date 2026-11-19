@@ -5,10 +5,8 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import SortQuantiles
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_sort_quantiles(device: torch.device) -> None:
     data = torch.randn(2, 3, device=device)
     table = TableTensor.from_tensor(data, columns=["q10", "q50", "q90"])
@@ -20,7 +18,6 @@ def test_sort_quantiles(device: torch.device) -> None:
     torch.testing.assert_close(out.numerical, data.sort(dim=-1).values)
 
 
-@withCUDA
 def test_sort_quantiles_group(device: torch.device) -> None:
     data = torch.randn(3, 2, 3, device=device)
     table = TableTensor.from_tensor(

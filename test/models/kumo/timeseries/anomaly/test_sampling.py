@@ -8,7 +8,6 @@ from torch import Tensor
 from sdm.models.kumo.timeseries.anomaly.noise_schedule import NoiseScheduleVP
 from sdm.models.kumo.timeseries.anomaly.sampling import DPMSolver
 from sdm.models.kumo.timeseries.anomaly.schedule import DiffusionSchedule
-from sdm.testing import withCUDA
 
 BETAS = DiffusionSchedule(500, 0.0001, 0.01, "linear").beta.float()
 
@@ -24,7 +23,6 @@ def test_dpm_solver_steps() -> None:
     torch.testing.assert_close(torch.cat(steps), torch.tensor([499, 333, 166]))
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_dpm_solver_constant_data(
     device: torch.device,

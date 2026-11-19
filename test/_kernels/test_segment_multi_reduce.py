@@ -251,18 +251,17 @@ def test_segment_multi_reduce_triton_noncontiguous_inputs(
     torch.testing.assert_close(actual, expected, equal_nan=True)
 
 
-@onlyCUDA
 def test_segment_multi_reduce_requires_matching_edge_attr() -> None:
-    module = importlib.import_module(
-        "sdm._kernels.triton.segment_multi_reduce"
+    module = pytest.importorskip(
+        "sdm._kernels.triton.segment_multi_reduce", exc_type=ImportError
     )
 
     with pytest.raises(ValueError, match="edge_attr must have shape"):
         module.segment_multi_reduce(
-            src=torch.empty(3, 2, device="cuda"),
-            index=torch.tensor([0, 1], device="cuda"),
-            edge_attr=torch.empty(2, 3, device="cuda"),
-            offsets=torch.tensor([0, 2], device="cuda"),
+            src=torch.empty(3, 2),
+            index=torch.tensor([0, 1]),
+            edge_attr=torch.empty(2, 3),
+            offsets=torch.tensor([0, 2]),
         )
 
 

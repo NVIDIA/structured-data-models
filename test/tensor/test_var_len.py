@@ -10,7 +10,7 @@ from torch import Tensor
 
 from sdm import StringTensor, VarLenTensor
 from sdm.tensor.var_len import _compact
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
 @pytest.mark.parametrize("tensor_type", [VarLenTensor, StringTensor])
@@ -117,7 +117,6 @@ def test_offset_dtype() -> None:
     assert out._offset.dtype == torch.int64
 
 
-@withCUDA
 @pytest.mark.parametrize("offset_dtype", [torch.int32, torch.int64])
 def test_repeated_index_select_preserves_offset_dtype(
     device: torch.device,

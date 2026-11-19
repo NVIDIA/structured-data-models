@@ -6,10 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from sdm.models.kumo.timeseries.anomaly.embedding import SideEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     ("is_unconditional", "time_channels", "shape", "dtype"),
     [
@@ -29,12 +27,6 @@ def test_side_embedding(
     shape: tuple[int, int, int],
     dtype: torch.dtype,
 ) -> None:
-    if (
-        device.type == "cuda"
-        and dtype == torch.bfloat16
-        and not torch.cuda.is_bf16_supported()
-    ):
-        pytest.skip("CUDA bfloat16 not supported")
     B, D, R = shape
     module = SideEmbedding(
         in_channels=D,

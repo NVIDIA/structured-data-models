@@ -6,7 +6,6 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.testing import withCUDA
 
 
 def _table(
@@ -29,7 +28,6 @@ def _table(
     )
 
 
-@withCUDA
 def test_impute_mode_uses_most_frequent_category(
     device: torch.device,
 ) -> None:
@@ -71,7 +69,6 @@ def test_impute_mode_uses_most_frequent_category(
         assert torch.equal(actual, expected)
 
 
-@withCUDA
 def test_impute_mode_tie_uses_lowest_code(
     device: torch.device,
 ) -> None:

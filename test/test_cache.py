@@ -11,8 +11,7 @@ from sdm.cache import Cache, KVCacheEntry
 from sdm.testing import onlyCUDA, withCUDA
 
 
-@withCUDA
-def test_cache(device: torch.device) -> None:
+def test_cache() -> None:
     cache = Cache(foo="foo")
     assert len(cache) == 1
     cache["entry"] = KVCacheEntry(key=torch.randn(5), value=torch.randn(5))
@@ -21,13 +20,20 @@ def test_cache(device: torch.device) -> None:
     assert cast(KVCacheEntry, cache["entry"]).key.is_cpu
     assert cast(KVCacheEntry, cache["entry"]).value.is_cpu
 
-    if device.type == "cuda":
-        cache = cache.pin_memory()
-        assert cast(KVCacheEntry, cache["entry"]).key.is_pinned()
-        assert cast(KVCacheEntry, cache["entry"]).value.is_pinned()
-        cache = cache.to(device, non_blocking=True)
-        assert cast(KVCacheEntry, cache["entry"]).key.is_cuda
-        assert cast(KVCacheEntry, cache["entry"]).value.is_cuda
+
+@onlyCUDA
+def test_pinned_cache_transfer() -> None:
+    entry = KVCacheEntry(key=torch.randn(5), value=torch.randn(5))
+    cache = Cache(entry=entry).pin_memory()
+    assert cast(KVCacheEntry, cache["entry"]).key.is_pinned()
+    assert cast(KVCacheEntry, cache["entry"]).value.is_pinned()
+
+    transferred = cache.to("cuda", non_blocking=True)
+    restored = cast(KVCacheEntry, transferred["entry"])
+    assert restored.key.is_cuda
+    assert restored.value.is_cuda
+    torch.testing.assert_close(restored.key.cpu(), entry.key)
+    torch.testing.assert_close(restored.value.cpu(), entry.value)
 
 
 def test_cache_size() -> None:
@@ -120,14 +126,14 @@ def test_cache_serialization_without_cuda(
     )
 
 
-@withCUDA
-def test_kv_cache_entry_scales(device: torch.device) -> None:
+def test_kv_cache_entry_scales() -> None:
     entry = KVCacheEntry(
         key=torch.ones(2, 3, dtype=torch.int8),
         value=torch.ones(2, 3, dtype=torch.int8),
         key_scale=torch.ones(2, 1),
         value_scale=torch.ones(2, 1),
     )
+    device = torch.device("meta")
     cache = Cache(entry=entry).to(device)
     assert cast(KVCacheEntry, cache["entry"]).device == device
     assert cache.size() == 2 * 6 * 1 + 2 * 2 * 4

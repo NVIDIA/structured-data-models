@@ -6,7 +6,6 @@ import copy
 import torch
 
 from sdm.nn._buffer import BufferList
-from sdm.testing import withCUDA
 
 
 class _TensorSubclass(torch.Tensor):
@@ -77,7 +76,6 @@ def test_buffer_list_loads_tensor_subclasses() -> None:
     assert original.equal(torch.tensor([1.0]))
 
 
-@withCUDA
 def test_buffer_list_preserves_existing_buffer_on_load(
     device: torch.device,
 ) -> None:
@@ -96,10 +94,8 @@ def test_buffer_list_preserves_existing_buffer_on_load(
     )
 
 
-@withCUDA
-def test_buffer_list_moves_device_and_dtype(
-    device: torch.device,
-) -> None:
+def test_buffer_list_moves_device_and_dtype() -> None:
+    device = torch.device("meta")
     buffers = BufferList(
         [
             torch.tensor([1.0]),

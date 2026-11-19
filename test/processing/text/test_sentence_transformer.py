@@ -12,7 +12,7 @@ import torch
 from sdm import StringTensor, TableTensor
 from sdm.processing import SentenceTransformer
 from sdm.processing.text.sentence_transformer import _CuDFTokenizer, _Encoder
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 MODEL_NAME = "sentence-transformers-testing/stsb-bert-tiny-safetensors"
 
@@ -240,7 +240,6 @@ def test_gpu_max_seq_length_truncates() -> None:
     assert torch.allclose(output, reference, atol=1e-5)
 
 
-@withCUDA
 def test_forward(device: torch.device) -> None:
     pytest.importorskip("sentence_transformers")
 

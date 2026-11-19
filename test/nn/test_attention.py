@@ -17,7 +17,6 @@ from sdm.nn import (
     SoftplusScale,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
 
 
 def reference_sdpa(
@@ -40,7 +39,6 @@ def reference_sdpa(
     ).transpose(-3, -2)
 
 
-@withCUDA
 def test_attention_transforms(device: torch.device) -> None:
     module = Attention(
         channels=4,
@@ -58,7 +56,6 @@ def test_attention_transforms(device: torch.device) -> None:
     assert module(query).shape == query.shape
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "num_key_value_heads",
     [
@@ -210,7 +207,6 @@ def test_sdpa(
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 def test_sdpa_scale(device: torch.device) -> None:
     channels = 4
     num_heads = 2
@@ -231,7 +227,6 @@ def test_sdpa_scale(device: torch.device) -> None:
     torch.testing.assert_close(out, expected)
 
 
-@withCUDA
 def test_sdpa_additive_bias(device: torch.device) -> None:
     module = SDPA(num_query_heads=2)
     query = torch.randn(2, 4, 2, 8, device=device)
@@ -252,7 +247,6 @@ def test_sdpa_additive_bias(device: torch.device) -> None:
     torch.testing.assert_close(gradient, expected_gradient)
 
 
-@withCUDA
 @pytest.mark.parametrize("value_channels", [8, 4])
 def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     # Empty key/value batches should give empty results, even with queries.
@@ -306,7 +300,6 @@ def test_sdpa_errors() -> None:
         SDPA(num_query_heads=4, num_key_value_heads=3)
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "num_key_value_heads",
     [
@@ -568,7 +561,6 @@ def test_return_key_value_positional_compatibility() -> None:
         assert len(result) == 2
 
 
-@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
 def test_transformer_block(device: torch.device, qassmax: bool) -> None:
     batch_size = 2

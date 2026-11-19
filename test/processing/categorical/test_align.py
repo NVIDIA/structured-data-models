@@ -30,7 +30,6 @@ def _table(
     )
 
 
-@withCUDA
 def test_align_categories_remaps_independent_vocabularies(
     device: torch.device,
 ) -> None:
@@ -65,6 +64,9 @@ def test_align_categories_keeps_string_vocabularies_column_local(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+
     context = _table(
         [[0, 0], [1, 1]],
         categories=(("shared", "left"), ("right", "shared")),
@@ -150,7 +152,6 @@ def test_align_categories_orders_joint_vocabulary(
         assert query.categorical.code.squeeze(-1).tolist() == [1]
 
 
-@withCUDA
 def test_align_categories_filters_rare_categories(
     device: torch.device,
 ) -> None:
@@ -194,7 +195,6 @@ def test_align_categories_filters_rare_categories(
     ]
 
 
-@withCUDA
 def test_align_categories_filters_per_ensemble_member(
     device: torch.device,
 ) -> None:
@@ -225,6 +225,9 @@ def test_align_categories_filters_per_ensemble_member(
 def test_align_categories_orders_values(
     device: torch.device,
 ) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+
     context = _table(
         [[0], [1], [2], [-1]],
         categories=(("zebra", "éclair", "ant", "unused"),),
@@ -255,7 +258,6 @@ def test_align_categories_orders_values(
     )
 
 
-@withCUDA
 def test_align_categories_numeric_values(device: torch.device) -> None:
     context = TableTensor(
         categorical=CategoricalTensor(
@@ -294,7 +296,6 @@ def test_align_categories_numeric_values(device: torch.device) -> None:
     )
 
 
-@withCUDA
 def test_align_categories_does_not_match_nan_category_values(
     device: torch.device,
 ) -> None:
@@ -457,7 +458,6 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
         processor.transform(query)
 
 
-@withCUDA
 def test_align_categories_ensemble_matches_member_fits(
     device: torch.device,
 ) -> None:

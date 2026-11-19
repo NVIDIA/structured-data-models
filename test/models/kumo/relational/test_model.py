@@ -23,7 +23,6 @@ from sdm.models.kumo.relational.model import (
 from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_invariant_gnn(
     relational_data: RelationalData,
     device: torch.device,
@@ -80,6 +79,9 @@ def test_invariant_gnn_autocast(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
+    if device.type == "cuda":
+        pytest.importorskip("cudf")
+
     # Float32 parameters under autocast, as in the RelBench example.
     related_tables = RelatedTables(
         tables={
@@ -109,7 +111,6 @@ def test_invariant_gnn_autocast(
     assert not out.isnan().any()
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "dtype",
     [torch.float16, torch.float32, torch.float64],
@@ -167,7 +168,6 @@ def test_invariant_gnn_cache(
     torch.testing.assert_close(replayed, expected)
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_forward(
     relational_data: RelationalData,
@@ -175,10 +175,7 @@ def test_forward(
     dtype: torch.dtype,
 ) -> None:
     model = KumoRelational(pretrained=False, device=device)
-    if device.type == "cpu":
-        assert repr(model) == "KumoRelational()"
-    else:
-        assert repr(model) == "KumoRelational(device=cuda:0)"
+    assert repr(model) == "KumoRelational()"
 
     related_tables = RelatedTables(
         tables=relational_data.tables,
@@ -259,7 +256,6 @@ def test_forward(
     model.clear()
 
 
-@withCUDA
 def test_many_classes_forward_and_cache(
     relational_data: RelationalData,
     device: torch.device,

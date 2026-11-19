@@ -8,10 +8,8 @@ import pytest
 import torch
 
 from sdm.nn import RotaryEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("layout", ["split_half", "interleaved"])
 def test_rope(
     device: torch.device,
@@ -61,7 +59,6 @@ def test_rope(
         RotaryEmbedding(channels=3, layout=layout, device=device)
 
 
-@withCUDA
 @pytest.mark.parametrize("layout", ["split_half", "interleaved"])
 def test_partial_rope(
     device: torch.device,

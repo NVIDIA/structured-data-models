@@ -6,10 +6,8 @@ import torch
 
 from sdm import EnsembleTable, TableTensor
 from sdm.processing import DropConstantColumns
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_unique_filter(device: torch.device) -> None:
     data = torch.tensor(
         [
@@ -32,7 +30,6 @@ def test_unique_filter(device: torch.device) -> None:
     assert output.numerical.equal(data[:, [1, 2, 3]])
 
 
-@withCUDA
 def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
     table = TableTensor.from_tensor(
         torch.tensor(
@@ -62,7 +59,6 @@ def test_drop_constant_columns_rejects_invalid_arguments() -> None:
         DropConstantColumns(threshold=0)
 
 
-@withCUDA
 def test_drop_constant_columns_ensemble_matches_member_fits(
     device: torch.device,
 ) -> None:
@@ -119,7 +115,6 @@ def test_drop_constant_columns_requires_fitted_member_count() -> None:
         )
 
 
-@withCUDA
 def test_unique_filter_nan(device: torch.device) -> None:
     data = torch.tensor(
         [

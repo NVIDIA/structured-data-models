@@ -6,10 +6,8 @@ import pytest
 import torch
 
 from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
 def test_cross_channel_attention(
     batch_shape: tuple[int, ...],

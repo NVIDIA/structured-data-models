@@ -10,7 +10,7 @@ import torch
 from torch._dynamo.testing import CompileCounterWithBackend
 
 from sdm import CategoricalTensor, ColumnarTensor, NullableTensor, StringTensor
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
 @pytest.mark.parametrize("device", ["cpu", "meta"])
@@ -75,7 +75,6 @@ def test_to_copy() -> None:
     assert out.dtype == torch.float32
 
 
-@withCUDA
 def test_decode(device: torch.device) -> None:
     tensor = CategoricalTensor(
         code=torch.tensor([[0, 1, 0], [-1, -1, -1], [1, 0, 1]], device=device),
@@ -219,7 +218,6 @@ def test_from_arrow_rejects_invalid_dtype(dtype: torch.dtype) -> None:
         CategoricalTensor.from_arrow(pa.array(["b", "a"]), dtype=dtype)
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
 def test_from_arrow_does_not_warn_on_readonly_numpy(
     device: torch.device,

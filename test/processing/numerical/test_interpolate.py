@@ -6,10 +6,8 @@ from torch import inf, nan
 
 from sdm import TableTensor
 from sdm.processing import Interpolate
-from sdm.testing import withCUDA
 
 
-@withCUDA
 def test_interpolate(device: torch.device) -> None:
     context = TableTensor.from_tensor(
         torch.tensor([[nan], [1.0], [nan], [9.0], [nan]], device=device),
@@ -32,7 +30,6 @@ def test_interpolate(device: torch.device) -> None:
     )
 
 
-@withCUDA
 def test_interpolate_with_leading_nan(device: torch.device) -> None:
     context = TableTensor.from_tensor(
         torch.tensor(
@@ -52,7 +49,6 @@ def test_interpolate_with_leading_nan(device: torch.device) -> None:
     )
 
 
-@withCUDA
 def test_interpolate_inf(device: torch.device) -> None:
     context = TableTensor.from_tensor(
         torch.tensor([[2], [nan], [nan], [inf], [nan]], device=device),

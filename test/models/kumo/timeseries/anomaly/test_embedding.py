@@ -6,10 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from sdm.models.kumo.timeseries.anomaly.embedding import DiffusionEmbedding
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("out_channels", [None, 12])
 @pytest.mark.parametrize("channels", [128, 256])
@@ -62,7 +60,6 @@ def test_diffusion_embedding(
     assert "embedding" not in module.state_dict()
 
 
-@withCUDA
 def test_diffusion_embedding_dtype_conversion(device: torch.device) -> None:
     module = DiffusionEmbedding(num_steps=10, channels=8).to(
         device=device, dtype=torch.float64

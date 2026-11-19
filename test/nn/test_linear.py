@@ -5,10 +5,8 @@ import pytest
 import torch
 
 from sdm.nn.linear import Linear
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize(
     "shape", [(2, 0, 3), (2, 4, 0, 3), (0, 4, 3), (2, 4, 3)]
 )

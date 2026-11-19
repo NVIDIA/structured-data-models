@@ -7,10 +7,8 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, TableTensor
-from sdm.testing import withCUDA
 
 
-@withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2, 3)])
 def test_one_hot(device: torch.device, batch_shape: tuple[int, ...]) -> None:
     codes = torch.tensor(
