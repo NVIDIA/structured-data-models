@@ -118,3 +118,38 @@ def test_cache_serialization_without_cuda(
     torch.testing.assert_close(
         restored["tensor"], cache["tensor"], rtol=0, atol=0
     )
+
+
+@withCUDA
+def test_kv_cache_entry_dequantize(device: torch.device) -> None:
+    cache = Cache(
+        scaled=KVCacheEntry(
+            key=torch.tensor([[1, -2]], dtype=torch.int8),
+            value=torch.tensor([[1.0, 2.0]]),
+            key_scale=torch.tensor([[2.0]]),
+            value_scale=torch.tensor([[3.0]]),
+        ),
+        unscaled=KVCacheEntry(
+            key=torch.tensor([[1.0, -2.0]]).to(torch.float8_e4m3fn),
+            value=torch.tensor([[1.0, 2.0]]).to(torch.float8_e4m3fn),
+        ),
+    ).to(device)
+    assert cache.size() == (2 + 8 + 4 + 4) + (2 + 2)
+
+    scaled = cast(KVCacheEntry, cache["scaled"])
+    out = scaled.dequantize(torch.float32)
+    torch.testing.assert_close(
+        out.key, torch.tensor([[2.0, -4.0]], device=device)
+    )
+    torch.testing.assert_close(
+        out.value, torch.tensor([[3.0, 6.0]], device=device)
+    )
+    # Dequantizing must not modify the cached data:
+    torch.testing.assert_close(
+        scaled.value, torch.tensor([[1.0, 2.0]], device=device)
+    )
+
+    out = cast(KVCacheEntry, cache["unscaled"]).dequantize(torch.float32)
+    torch.testing.assert_close(
+        out.key, torch.tensor([[1.0, -2.0]], device=device)
+    )

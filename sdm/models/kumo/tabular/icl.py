@@ -109,7 +109,9 @@ class ICLBlock(torch.nn.Module):
                 )
 
                 if cache is not None and cache.is_recording:
-                    x, (key, value) = result
+                    x, entry = result
+                    key, value = entry.key, entry.value
+                    del entry
                     kv_heads = self.kv_heads
                     if kv_heads is not None and kv_heads < key.size(-2):
                         key, value = _copy_key_value(
@@ -123,7 +125,7 @@ class ICLBlock(torch.nn.Module):
                 del result
                 continue
 
-            x_context, (key, value) = layer(
+            x_context, entry = layer(
                 query=x
                 if train_size is not None
                 else x[..., :0, :]
@@ -139,10 +141,10 @@ class ICLBlock(torch.nn.Module):
                 else x[..., :R_train, :],
             )
             key_value = KVCacheEntry(
-                key=key[..., : self.kv_heads, :].contiguous(),
-                value=value[..., : self.kv_heads, :].contiguous(),
+                key=entry.key[..., : self.kv_heads, :].contiguous(),
+                value=entry.value[..., : self.kv_heads, :].contiguous(),
             )
-            del key, value
+            del entry
             x_query = layer(
                 query=x if train_size is not None else x[..., R_train:, :],
                 key_value=key_value,
