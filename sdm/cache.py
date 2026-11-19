@@ -11,7 +11,7 @@ from collections.abc import (
     MutableMapping,
 )
 from enum import StrEnum
-from typing import Any, ClassVar, NamedTuple, Self, cast
+from typing import NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
@@ -59,26 +59,6 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 class KVCacheDType(abc.ABC):
     r"""Base class for the storage dtype of cached key/value projections."""
 
-    _registry: ClassVar[dict[str, type["KVCacheDType"]]] = {}
-
-    def __init_subclass__(cls, name: str | None = None, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        if name is not None:
-            KVCacheDType._registry[name] = cls
-
-    @classmethod
-    def from_str(cls, name: str | None) -> "KVCacheDType":
-        r"""Returns the storage dtype registered under ``name``.
-
-        Args:
-            name: A registered name, or ``None`` for :class:`Unquantized`.
-        """
-        if name is None:
-            return Unquantized()
-        if name not in cls._registry:
-            raise ValueError(f"Unsupported key/value cache dtype '{name}'")
-        return cls._registry[name]()
-
     @abc.abstractmethod
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:
         r"""Returns ``entry`` in this storage dtype.
@@ -115,7 +95,7 @@ class Unquantized(KVCacheDType):
         return entry
 
 
-class Float8PerHead(KVCacheDType, name="fp8_per_head"):
+class Float8PerHead(KVCacheDType):
     r"""Stores key/value projections in FP8 with one scale per head."""
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
@@ -175,9 +155,16 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        self._kv_cache_dtype = KVCacheDType.from_str(
-            cast(str | None, kwargs.pop("kv_cache_dtype", None))
-        )
+        # TODO: Introduce registry to map str to quantization
+        kv_cache_dtype = kwargs.pop("kv_cache_dtype", None)
+        if kv_cache_dtype is None:
+            self._kv_cache_dtype: KVCacheDType = Unquantized()
+        elif kv_cache_dtype == "fp8_per_head":
+            self._kv_cache_dtype = Float8PerHead()
+        else:
+            raise ValueError(
+                f"Unsupported key/value cache dtype '{kv_cache_dtype}'"
+            )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
