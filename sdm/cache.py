@@ -22,22 +22,37 @@ from sdm.tensor.mixin import DeviceMixin
 class _KVCacheEntry(NamedTuple):
     key: Tensor
     value: Tensor
+    key_scale: Tensor | None = None
+    value_scale: Tensor | None = None
 
 
 class KVCacheEntry(_KVCacheEntry, DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
     Args:
-        key: Cached key projection tensor.
-        value: Cached value projection tensor.
+        key: Key projections with shape ``[..., KV, H, C]``.
+        value: Value projections with shape ``[..., KV, H, C]``.
+        key_scale: Optional scales broadcastable to ``key``.
+        value_scale: Optional scales broadcastable to ``value``.
     """
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
         yield self.value
+        if self.key_scale is not None:
+            yield self.key_scale
+        if self.value_scale is not None:
+            yield self.value_scale
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        return self.__class__(key=fn(self.key), value=fn(self.value))
+        return self.__class__(
+            key=fn(self.key),
+            value=fn(self.value),
+            key_scale=None if self.key_scale is None else fn(self.key_scale),
+            value_scale=None
+            if self.value_scale is None
+            else fn(self.value_scale),
+        )
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
