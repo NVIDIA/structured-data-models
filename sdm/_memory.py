@@ -46,11 +46,26 @@ def set_pinned_max_round_threshold(
 
 
 def chunk_memory_limit(device: torch.device) -> int:
-    r"""Bytes one chunk of a chunked operation may occupy on a CUDA device.
+    r"""Estimated temporary-memory budget for one inference chunk.
 
-    The limit is the ``SDM_CHUNK_MEMORY_FRACTION`` (default ``0.05``) share of
-    the device memory available to this process.
+    If set, ``SDM_CHUNK_MEMORY_BYTES`` supplies the budget in bytes on any
+    device and takes precedence over ``SDM_CHUNK_MEMORY_FRACTION``.
+    Otherwise:
+
+    - CUDA: Uses the ``SDM_CHUNK_MEMORY_FRACTION`` (default ``0.05``) share of
+      the device memory available to this process.
+    - CPU and other devices: Use a budget of 256 MiB.
+
+    This does not bound total process memory or operations whose smallest
+    chunk exceeds the budget.
+
+    Args:
+        device: Device on which the operation runs.
     """
+    if (limit := os.getenv("SDM_CHUNK_MEMORY_BYTES")) is not None:
+        return int(limit)
+    if device.type != "cuda":
+        return 256 * 2**20
     return int(
         torch.cuda.get_device_properties(device).total_memory
         * torch.cuda.get_per_process_memory_fraction(device)
@@ -61,14 +76,14 @@ def chunk_memory_limit(device: torch.device) -> int:
 def split_size(num_items: int, item_bytes: int, device: torch.device) -> int:
     r"""Split size of balanced chunks of items of ``item_bytes`` bytes each.
 
-    On CUDA devices, chunks fit :func:`chunk_memory_limit`, unless a single
-    item exceeds the limit. Autograd keeps the memory of every chunk, so one
-    chunk holds all items elsewhere or while gradients are enabled. Compiled
-    code also uses one chunk: a new number of chunks would force a recompile.
+    Chunks fit :func:`chunk_memory_limit` unless a single item exceeds the
+    limit. Autograd keeps the memory of every chunk, so one chunk holds all
+    items while gradients are enabled.
+    Compiled code also uses one chunk: a new number of chunks would force a
+    recompile.
     """
     if (
-        device.type != "cuda"
-        or torch.is_grad_enabled()
+        torch.is_grad_enabled()
         or torch.compiler.is_dynamo_compiling()
         or item_bytes == 0
     ):
