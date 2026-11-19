@@ -1,0 +1,4 @@
+interface:
+  display_name: "Draft Release Note"
+  short_description: "Draft and review SDM minor-release notes"
+  default_prompt: "Use $draft-release-note to draft SDM minor-release notes for vX.Y.0."
