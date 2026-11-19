@@ -1,5 +1,11 @@
 :orphan:
 
+KVCacheDType
+============
+
+.. autoclass:: sdm.cache.KVCacheDType
+    :members:
+
 KVCacheEntry
 ============
 
