@@ -36,17 +36,6 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value_scale: Optional scales broadcastable to ``value``.
     """
 
-    def dequantize(self, dtype: torch.dtype) -> Self:
-        r"""Returns a new entry with dequantized ``key`` and ``value``.
-
-        Args:
-            dtype: The target dtype.
-        """
-        return self.__class__(
-            key=_dequantize(self.key, self.key_scale, dtype),
-            value=_dequantize(self.value, self.value_scale, dtype),
-        )
-
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
         yield self.value
@@ -64,18 +53,6 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             if self.value_scale is None
             else fn(self.value_scale),
         )
-
-
-def _dequantize(
-    tensor: Tensor,
-    scale: Tensor | None,
-    dtype: torch.dtype,
-) -> Tensor:
-    if scale is None:
-        return tensor.to(dtype)
-    # `tensor.to(dtype)` returns `tensor` itself if it already has `dtype`.
-    # Copy so that the in-place `mul_` never modifies the cached tensor:
-    return tensor.to(dtype, copy=True).mul_(scale)
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
