@@ -13,6 +13,8 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 
+from sdm._warnings import warn_once
+
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
 
@@ -28,10 +30,10 @@ class LLM(torch.nn.Module):
     ) -> None:
         super().__init__()
 
-        from sentence_transformers import SentenceTransformer
+        import sentence_transformers
 
         if isinstance(model, str):
-            model = SentenceTransformer(
+            model = sentence_transformers.SentenceTransformer(
                 model,
                 device=str(device) if device is not None else None,
                 model_kwargs={"dtype": dtype} if dtype is not None else None,
@@ -42,6 +44,15 @@ class LLM(torch.nn.Module):
             model.tokenizer.pad_token = model.tokenizer.eos_token
 
         self.model = model.to(device, dtype).eval()
+
+        if self.model.device.type == "cuda":
+            try:
+                self.model.transformers_model.use_kernels = True  # type: ignore
+            except ValueError as e:
+                warn_once(
+                    key="transformers-kernels-missing",
+                    message=f"Transformer {e}, for faster LLM execution.",
+                )
 
     def __deepcopy__(self, memo: dict[int, object]) -> Self:
         return self
