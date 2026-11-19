@@ -118,3 +118,16 @@ def test_cache_serialization_without_cuda(
     torch.testing.assert_close(
         restored["tensor"], cache["tensor"], rtol=0, atol=0
     )
+
+
+@withCUDA
+def test_kv_cache_entry_scales(device: torch.device) -> None:
+    entry = KVCacheEntry(
+        key=torch.ones(2, 3, dtype=torch.int8),
+        value=torch.ones(2, 3, dtype=torch.int8),
+        key_scale=torch.ones(2, 1),
+        value_scale=torch.ones(2, 1),
+    )
+    cache = Cache(entry=entry).to(device)
+    assert cast(KVCacheEntry, cache["entry"]).device == device
+    assert cache.size() == 2 * 6 * 1 + 2 * 2 * 4
