@@ -36,7 +36,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Value projections with shape ``[..., KV, H, C]``.
         key_scale: Optional scales broadcastable to ``key``.
         value_scale: Optional scales broadcastable to ``value``.
-        quantizer: The quantizer of the projections, if any.
+        quantizer: The quantizer of K/V, if any.
     """
 
     def _tensors(self) -> Iterator[Tensor]:
