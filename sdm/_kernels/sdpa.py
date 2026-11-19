@@ -102,12 +102,13 @@ def sdpa(
             # Compiled code skips autocast inside the operator, so convert the
             # inputs here. Autocast never converts float64 or boolean tensors.
             dtype = torch.get_autocast_dtype(device_type)
-            query, key, value, attn_mask = (
-                x
-                if x is None or x.dtype in (torch.float64, torch.bool)
-                else x.to(dtype)
-                for x in (query, key, value, attn_mask)
+            kept = (torch.float64, torch.bool)
+            query, key, value = (
+                x if x.dtype in kept else x.to(dtype)
+                for x in (query, key, value)
             )
+            if attn_mask is not None and attn_mask.dtype not in kept:
+                attn_mask = attn_mask.to(dtype)
     return kernel(
         query, key, value, attn_mask, dropout_p, enable_gqa, is_causal, scale
     )
