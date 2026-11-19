@@ -66,7 +66,7 @@ class LLM(torch.nn.Module):
         deduplicate: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor, Tensor]]:
 
         inverse: Tensor | None = None
         if deduplicate:
@@ -152,11 +152,12 @@ class LLM(torch.nn.Module):
             inputs["use_cache"] = False  # type: ignore
 
             with torch.inference_mode():
-                emb = self.model(inputs)["token_embeddings"]
+                out = self.model(inputs)
 
-            emb = emb.to(device, dtype)
-            offset = inputs["offset_mapping"].to(emb.device)
-            attn_mask = inputs["attention_mask"].to(emb.device)
+            token_emb = out["token_embeddings"].to(device, dtype)
+            sentence_emb = out["sentence_embedding"].to(device, dtype)
+            offset = inputs["offset_mapping"].to(token_emb.device)
+            attn_mask = inputs["attention_mask"].to(token_emb.device)
 
             end = min(start + batch_size, len(text))
             if edge_index is not None and ptr is not None:
@@ -165,4 +166,4 @@ class LLM(torch.nn.Module):
             else:
                 index = perm[start:end]
 
-            yield index, emb, offset, attn_mask
+            yield index, token_emb, sentence_emb, offset, attn_mask
