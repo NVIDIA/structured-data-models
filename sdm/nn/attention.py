@@ -636,7 +636,8 @@ class TransformerBlock(torch.nn.Module):
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
             batch_size_limit: Maximum number of batch elements processed at
-                once.
+                once. Only an integer limit applies in compiled code, which
+                would otherwise recompile when the number of chunks changes.
             out: The output tensor.
 
         Returns:
@@ -658,7 +659,10 @@ class TransformerBlock(torch.nn.Module):
                 "already cached"
             )
 
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or (
+            not isinstance(batch_size_limit, int)
+            and torch.compiler.is_dynamo_compiling()
+        ):
             return self._forward(
                 query=query,
                 key_value=key_value,
