@@ -25,6 +25,7 @@ class _KVCacheEntry(NamedTuple):
     value: Tensor
     key_scale: Tensor | None = None
     value_scale: Tensor | None = None
+    kv_cache_dtype: "KVCacheDType | None" = None
 
 
 class KVCacheEntry(_KVCacheEntry, DeviceMixin):
@@ -35,6 +36,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Value projections with shape ``[..., KV, H, C]``.
         key_scale: Optional scales broadcastable to ``key``.
         value_scale: Optional scales broadcastable to ``value``.
+        kv_cache_dtype: The dtype that quantized the projections, if any.
     """
 
     def _tensors(self) -> Iterator[Tensor]:
@@ -53,6 +55,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             value_scale=None
             if self.value_scale is None
             else fn(self.value_scale),
+            kv_cache_dtype=self.kv_cache_dtype,
         )
 
 
@@ -106,6 +109,7 @@ class Float8PerHead(KVCacheDType):
             value=value,
             key_scale=key_scale,
             value_scale=value_scale,
+            kv_cache_dtype=self,
         )
 
     def dequantize(  # noqa: D102

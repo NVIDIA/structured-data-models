@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from sdm.cache import Float8PerHead
 from sdm.nn import (
     SDPA,
     Attention,
@@ -747,3 +748,19 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+    with torch.no_grad():  # Chunking applies without gradients only.
+        quantized = Float8PerHead().quantize(kv)
+        quantized_out = module(
+            query=query,
+            key_value=quantized,
+            seqused_key_value=seqused_key_value,
+        )
+        chunked_out = module(
+            query=query,
+            key_value=quantized,
+            seqused_key_value=seqused_key_value,
+            batch_size_limit=1,
+        )
+    torch.testing.assert_close(quantized_out, direct_out, atol=0.25, rtol=0)
+    torch.testing.assert_close(chunked_out, quantized_out)

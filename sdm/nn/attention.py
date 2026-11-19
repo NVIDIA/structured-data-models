@@ -408,6 +408,11 @@ class Attention(torch.nn.Module):
                 if self.qkv_lin.bias is not None
                 else None,
             )
+            # TODO: Attention backend should decide whether to dequantize.
+            if key_value.kv_cache_dtype is not None:
+                key_value = key_value.kv_cache_dtype.dequantize(
+                    key_value, query.dtype
+                )
             if (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
@@ -956,9 +961,8 @@ def _chunk(
         return None
 
     if isinstance(tensor, KVCacheEntry):
-        return KVCacheEntry(
-            key=_chunk(tensor.key, batch_shape, 3, start, end),
-            value=_chunk(tensor.value, batch_shape, 3, start, end),
+        return tensor._apply_tensor(
+            lambda t: _chunk(t, batch_shape, 3, start, end)
         )
 
     trailing_shape = tensor.size()[-trailing_dims:] if trailing_dims else ()
