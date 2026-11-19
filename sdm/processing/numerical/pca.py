@@ -18,7 +18,7 @@ class PCA(Processor):
         num_components: Number of principal components to keep.
         solver: PCA solver to use: ``"full"`` computes full SVD, ``"eigh"``
             decomposes the feature covariance matrix, and ``"qr"`` or ``"lu"``
-            use randomized SVD with QR or LU normalization. :obj:`"auto"`
+            use randomized SVD with QR or LU normalization. ``"auto"``
             selects a solver based on the input shape and number of components.
         num_iterations: Number of power iterations for randomized SVD.
         num_oversamples: Number of additional random vectors used to
