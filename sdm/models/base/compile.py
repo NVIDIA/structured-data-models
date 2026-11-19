@@ -49,6 +49,7 @@ def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
 
 def compile_predict(
     model: ICLModel,
+    dynamic_shapes: bool = True,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
@@ -58,14 +59,16 @@ def compile_predict(
 
     Args:
         model: The model.
+        dynamic_shapes: If set to ``False``, no dimension is dynamic, for
+            callers whose queries always have the same shape.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``isolate_recompiles`` defaults to ``True``, since all models
             would otherwise share one recompile limit.
     """
     kwargs = {"isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    shapes = model._dynamic_shapes
-    # A model without declared dynamic shapes needs none of the steps below.
+    shapes = model._dynamic_shapes if dynamic_shapes else DynamicShapes()
+    # Without dynamic shapes, none of the steps below are needed.
     if shapes == DynamicShapes():
         return compiled
 
