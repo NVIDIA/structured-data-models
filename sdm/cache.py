@@ -99,8 +99,8 @@ class Float8PerHead(KVCacheDType):
     r"""Stores key/value projections in FP8 with one scale per head."""
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
-        key, key_scale = _quantize_fp8_per_head(entry.key)
-        value, value_scale = _quantize_fp8_per_head(entry.value)
+        key, key_scale = self._quantize(entry.key)
+        value, value_scale = self._quantize(entry.value)
         return KVCacheEntry(
             key=key,
             value=value,
@@ -118,16 +118,13 @@ class Float8PerHead(KVCacheDType):
             value=entry.value.to(dtype).mul_(cast(Tensor, entry.value_scale)),
         )
 
-
-def _quantize_fp8_per_head(tensor: Tensor) -> tuple[Tensor, Tensor]:
-    # One scale per head over rows and channels:
-    amax = torch.linalg.vector_norm(
-        tensor, ord=torch.inf, dim=(-3, -1), keepdim=True
-    )  # [..., 1, H, 1]
-    # Divide in the input dtype to avoid a full-size float32 copy:
-    scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
-    data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
-    return data, scale.float()
+    @staticmethod
+    def _quantize(tensor: Tensor) -> tuple[Tensor, Tensor]:
+        amax = tensor.abs().amax(dim=(-3, -1), keepdim=True)  # [..., 1, H, 1]
+        # Divide in the input dtype to avoid a full-size float32 copy:
+        scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
+        data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
+        return data, scale.float()
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):

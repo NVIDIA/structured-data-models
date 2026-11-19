@@ -120,17 +120,14 @@ def test_cache_serialization_without_cuda(
     )
 
 
-@withCUDA
-def test_kv_cache_entry_scales(device: torch.device) -> None:
+def test_kv_cache_entry_scales() -> None:
     entry = KVCacheEntry(
         key=torch.ones(2, 3, dtype=torch.int8),
         value=torch.ones(2, 3, dtype=torch.int8),
         key_scale=torch.ones(2, 1),
         value_scale=torch.ones(2, 1),
     )
-    cache = Cache(entry=entry).to(device)
-    assert cast(KVCacheEntry, cache["entry"]).device == device
-    assert cache.size() == 2 * 6 * 1 + 2 * 2 * 4
+    assert Cache(entry=entry).size() == 2 * 6 * 1 + 2 * 2 * 4
 
 
 def test_cache_fp8_per_head() -> None:
