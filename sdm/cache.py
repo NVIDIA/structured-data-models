@@ -11,7 +11,7 @@ from collections.abc import (
     MutableMapping,
 )
 from enum import StrEnum
-from typing import NamedTuple, Self, cast
+from typing import Any, ClassVar, NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
@@ -59,6 +59,26 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 class KVCacheDType(abc.ABC):
     r"""Base class for the storage dtype of cached key/value projections."""
 
+    _registry: ClassVar[dict[str, type["KVCacheDType"]]] = {}
+
+    def __init_subclass__(cls, name: str | None = None, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if name is not None:
+            KVCacheDType._registry[name] = cls
+
+    @classmethod
+    def from_str(cls, name: str | None) -> "KVCacheDType":
+        r"""Returns the storage dtype registered under ``name``.
+
+        Args:
+            name: A registered name, or ``None`` for :class:`Unquantized`.
+        """
+        if name is None:
+            return Unquantized()
+        if name not in cls._registry:
+            raise ValueError(f"Unsupported key/value cache dtype '{name}'")
+        return cls._registry[name]()
+
     @abc.abstractmethod
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:
         r"""Returns ``entry`` in this storage dtype.
@@ -95,6 +115,41 @@ class Unquantized(KVCacheDType):
         return entry
 
 
+class Float8PerHead(KVCacheDType, name="fp8_per_head"):
+    r"""Stores key/value projections in FP8 with one scale per head."""
+
+    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
+        key, key_scale = _quantize_fp8_per_head(entry.key)
+        value, value_scale = _quantize_fp8_per_head(entry.value)
+        return KVCacheEntry(
+            key=key,
+            value=value,
+            key_scale=key_scale,
+            value_scale=value_scale,
+        )
+
+    def dequantize(  # noqa: D102
+        self,
+        entry: KVCacheEntry,
+        dtype: torch.dtype,
+    ) -> KVCacheEntry:
+        return KVCacheEntry(
+            key=entry.key.to(dtype).mul_(cast(Tensor, entry.key_scale)),
+            value=entry.value.to(dtype).mul_(cast(Tensor, entry.value_scale)),
+        )
+
+
+def _quantize_fp8_per_head(tensor: Tensor) -> tuple[Tensor, Tensor]:
+    # One scale per head over rows and channels:
+    amax = torch.linalg.vector_norm(
+        tensor, ord=torch.inf, dim=(-3, -1), keepdim=True
+    )  # [..., 1, H, 1]
+    # Divide in the input dtype to avoid a full-size float32 copy:
+    scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
+    data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
+    return data, scale.float()
+
+
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
@@ -120,8 +175,9 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        # TODO: Support different dtypes given str in kwargs:
-        self._kv_cache_dtype: KVCacheDType = Unquantized()
+        self._kv_cache_dtype = KVCacheDType.from_str(
+            cast(str | None, kwargs.pop("kv_cache_dtype", None))
+        )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property

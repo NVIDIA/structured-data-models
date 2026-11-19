@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 import torch
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache, Float8PerHead, KVCacheEntry
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -131,3 +131,21 @@ def test_kv_cache_entry_scales(device: torch.device) -> None:
     cache = Cache(entry=entry).to(device)
     assert cast(KVCacheEntry, cache["entry"]).device == device
     assert cache.size() == 2 * 6 * 1 + 2 * 2 * 4
+
+
+def test_cache_fp8_per_head() -> None:
+    key = torch.randn(2, 5, 3, 4)  # [B, KV, H, C]
+    value = torch.randn(2, 5, 3, 4)
+    cache = Cache(kv_cache_dtype="fp8_per_head")
+    cache["entry"] = KVCacheEntry(key=key, value=value)
+
+    entry = cast(KVCacheEntry, cache["entry"])
+    assert entry.key.dtype == torch.float8_e4m3fn
+    assert cast(torch.Tensor, entry.key_scale).size() == (2, 1, 3, 1)
+
+    out = Float8PerHead().dequantize(entry, torch.float32)
+    torch.testing.assert_close(out.key, key, rtol=2**-4, atol=1e-2)
+    torch.testing.assert_close(out.value, value, rtol=2**-4, atol=1e-2)
+
+    with pytest.raises(ValueError, match="Unsupported key/value cache dtype"):
+        Cache(kv_cache_dtype="unknown")
