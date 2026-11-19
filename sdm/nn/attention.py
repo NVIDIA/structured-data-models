@@ -409,8 +409,8 @@ class Attention(torch.nn.Module):
                 else None,
             )
             # TODO: Attention backend should decide whether to dequantize.
-            if key_value.kv_cache_dtype is not None:
-                key_value = key_value.kv_cache_dtype.dequantize(
+            if key_value.quantizer is not None:
+                key_value = key_value.quantizer.dequantize(
                     key_value, query.dtype
                 )
             if (
