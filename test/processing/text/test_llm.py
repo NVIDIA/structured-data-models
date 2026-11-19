@@ -8,17 +8,25 @@ import torch
 from sdm.processing.text.llm import LLM
 
 
-def test_forward() -> None:
+@pytest.mark.parametrize("deduplicate", [False, True])
+def test_forward(deduplicate: bool) -> None:
     pytest.importorskip("sentence_transformers")
     encoder = LLM(
         model="sentence-transformers-testing/stsb-bert-tiny-safetensors",
         dtype=torch.float16,
     )
-    rows = ["hello world", "hello", "world"]
+    rows = ["hello world", "hello", "hello"]
 
-    perm, emb, offset, mask = next(iter(encoder(pa.array(rows), device="cpu")))
+    iterator = encoder(pa.array(rows), deduplicate=deduplicate, device="cpu")
+    index, emb, offset, mask = next(iterator)
 
-    assert perm.equal(torch.arange(3))
+    if deduplicate:
+        emb = emb[index[0]]
+        offset = offset[index[0]]
+        mask = mask[index[0]]
+        index = index[1]
+
+    assert index.equal(torch.arange(3))
     assert emb.size() == (3, 4, 128)
     assert emb.is_cpu
     assert emb.dtype == torch.float16

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Literal, Self
 
@@ -62,9 +63,21 @@ class LLM(torch.nn.Module):
         text: pa.Array,
         batch_size: int = 64,
         max_length: int | None = None,
+        deduplicate: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]:
+
+        inverse: Tensor | None = None
+        if deduplicate:
+            text = text.dictionary_encode()
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The given NumPy array is not writable",
+                )
+                inverse = torch.from_numpy(text.indices.to_numpy())
+            text = text.dictionary
 
         encodings = self.model.tokenizer(
             text=text.to_pylist(),
@@ -83,6 +96,20 @@ class LLM(torch.nn.Module):
         else:
             perm_cpu = torch.arange(length.numel())
         perm = perm_cpu.to(device or self.model.device)
+
+        ptr: list[int] | None = None
+        edge_index: Tensor | None = None
+        if inverse is not None:
+            pos = torch.empty_like(perm_cpu)
+            pos[perm_cpu] = torch.arange(len(text))
+            pos = pos[inverse]
+            row = pos.argsort()
+            pos = pos[row]
+
+            edge_index = torch.stack([pos, row], dim=0).to(perm.device)
+            ptr = torch._convert_indices_from_coo_to_csr(
+                pos, len(text)
+            ).tolist()
 
         for start in range(0, len(text), batch_size):
             index = perm_cpu[start : start + batch_size]
@@ -131,4 +158,11 @@ class LLM(torch.nn.Module):
             offset = inputs["offset_mapping"].to(emb.device)
             attn_mask = inputs["attention_mask"].to(emb.device)
 
-            yield perm[start : start + batch_size], emb, offset, attn_mask
+            end = min(start + batch_size, len(text))
+            if edge_index is not None and ptr is not None:
+                index = edge_index[:, ptr[start] : ptr[end]]
+                index[0] -= start
+            else:
+                index = perm[start:end]
+
+            yield index, emb, offset, attn_mask
