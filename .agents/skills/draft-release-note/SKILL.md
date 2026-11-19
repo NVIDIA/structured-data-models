@@ -11,7 +11,7 @@ Draft researcher-facing SDM release notes for stable minor releases (`vX.Y.0`, w
 
 Read repository instructions and preserve existing draft edits. Use the maintainer's chosen destination and naming conventions; do not assume a local filename or gist.
 
-Identify the target tag or agreed commit and the preceding stable release, including its latest patch (for example, `v0.2.1...v0.3.0`). Inspect the comparison, merged PRs, public APIs, examples, and documentation. Ground claims in that range. Verify package ownership and model tasks; do not conflate separately packaged models with SDM integrations or anomaly detection with forecasting.
+Identify the target tag or agreed commit and the preceding stable release, including its latest patch. Inspect the comparison, merged PRs, public APIs, examples, and documentation. Ground claims in that range. Verify each model's task, provenance, and whether it ships in SDM.
 
 ## Required structure
 
@@ -36,29 +36,29 @@ We're excited to release SDM vX.Y.0! :tada:
 # Full changelog
 ```
 
-- **Highlights (required):** Lead with the most significant new researcher capability. Favor new models or tasks, newly usable training/adaptation workflows, substantial public-API capabilities, and measured performance improvements. Judge what researchers can now do, not commit volume. Group related additions into themes, with concise per-model bullets explaining task differences. Fold supporting work into those themes; routine fixes, internal refactors, and guide updates rarely merit standalone highlights. Do not add a generic Features section or processor inventory.
-- **Breaking changes (if any):** Identify the affected public API, concrete migration, and relevant PR.
+- **Highlights (required):** Lead with the most significant new researcher capability. Favor new models/tasks, usable training/adaptation workflows, substantial public APIs, and measured performance improvements. A standalone highlight should name a concrete capability researchers can try through a public entry point. Judge impact, not commit volume; group related additions into themes, with per-model bullets explaining differences. Fold supporting fixes, refactors, and guide updates into those themes or omit them. Do not add a generic Features section or inventory of minor additions.
+- **Breaking changes (if any):** Include removed/renamed APIs and changed defaults or behavior that alter existing results. In one or two sentences per migration, name the public API, old-to-new usage (including restoring old behavior), and PR; omit internal adjustments.
 - **New contributors (required):** List first-time contributors by GitHub handle with links to their first merged PRs. Verify first-time status against earlier history or GitHub metadata. If none, say so; if verification is blocked, retain the section and report the gap rather than inventing credits.
 - **Full changelog (required):** Link the exact baseline-to-target GitHub comparison.
 
 ## Writing and examples
 
-Explain the task and benefit before interface details. Use references to calibrate emphasis and detail. For a target-release draft, retain its leading themes, example purpose, and useful resources; allow additional well-supported highlights worth a maintainer's review. For a prior-release style reference, select fresh content from the current release. Keep verified migrations and credits, flagging differences in the handoff. Treat references as read-only unless edits are requested. Prefer “For more details:” followed by a short reference list. For each new model, link its public API, paper or research blog, upstream code, and weights when available. Prefer user-facing guides over implementation files or tests, and release-pinned repository links. Reuse a helpful documentation figure with descriptive alt text and available light/dark variants. Verify URLs and claims rather than inventing them.
+Explain the task and benefit before interface details. If a maintainer-written draft exists for this release, keep its leading themes, example purpose, and resources; add worthwhile, well-supported highlights. Earlier-release references guide style and emphasis, not content. Keep verified migrations and credits, flagging differences in the handoff. Treat references as read-only unless edits are requested.
 
-Choose an example that directly demonstrates the headline capability and its meaningful output; do not substitute an adjacent low-level component or unrelated guide. When releasing training code or research building blocks, show how researchers can use those building blocks, with brief background and a link to the full training guide; avoid long launch commands. Use the simplest public API at the target revision, including imports and setup. Run examples when practical and report verification limits. Put printed output in Python comments immediately after each print call, within the same code fence. Use the actual display format; representative output is acceptable if identified as illustrative or variable. For `TableTensor`, show size and semantic column blocks. Do not seed random examples solely to match illustrative output.
+Link each new model's public API, paper/blog, upstream code, and weights inline when available; note renames of previously published models. Prefer rendered docs and their images; use release-pinned repository links for training code, examples, benchmarks, or resources without rendered pages. Use researcher resources rather than PR history to explain highlights. Put remaining guides and evaluation scripts in a short “For more details:” list. Reuse helpful documentation figures with descriptive alt text and available light/dark variants. Verify URLs and claims.
+
+Code is optional; a figure or model list may suffice. Choose examples that directly demonstrate the headline capability and meaningful output, not adjacent low-level components. For training/building-block releases, show the distinctive reusable component and link the full training guide; avoid long launch commands. Use the simplest public API at the target revision, with imports and setup. Run examples when practical and report limits. Put printed output in Python comments immediately after each print call in the same fence, using the real display format. Identify representative output as illustrative or variable; do not seed randomness solely to match it.
 
 ## Optional gist synchronization
 
-Once a maintainer authorizes gist synchronization, update it after every draft edit, including small wording changes. Reuse the identified gist; when asked to update one without a link, locate the matching draft or clarify an ambiguous destination. Never assume an earlier release's gist ID.
+Once a maintainer authorizes gist synchronization, update it after every draft edit. Reuse the identified gist; locate the matching draft or clarify an ambiguous destination rather than assuming a gist ID. Read the remote file first, reconcile divergent edits, and preserve other files, metadata, and visibility. Upload the named file, then fetch it back and compare with the intended draft. After an uncertain write, read back before retrying; report failures without claiming synchronization.
 
-Read the remote file before writing, reconcile divergent edits, and preserve other files, metadata, and visibility. Use structured payloads or file uploads for multiline content. With `gh gist edit`, supply the actual gist ID, remote filename, and working-copy path. Fetch the named file afterward and compare its content with the intended draft. After an uncertain result, read back before retrying; report failures without claiming synchronization.
-
-Create gists, publish releases, change tags, post to issues or PRs, commit, or push only within the maintainer's authorization and repository policy. Report the draft location, any gist link and verified sync status, and material verification gaps briefly.
+External actions, commits, and pushes require maintainer authorization and must follow repository policy. Briefly report the draft location, any gist link and verified sync status, and material verification gaps.
 
 ## Final checklist
 
-- [ ] Stable minor target, preceding stable baseline, and release claims are verified.
-- [ ] Announcement, linked contents, required sections, and variable highlight subsections follow the specified structure; Breaking changes appears only when needed.
-- [ ] Contributor credits, migration steps, links, and public-API examples are checked; output comments follow each print call and verification gaps are disclosed.
-- [ ] Requested removals stay removed, contents links match headings, and no personal paths, filenames, or gist IDs are assumed.
-- [ ] The chosen destination is updated, any authorized gist sync is verified, and external actions remain within authorization.
+- [ ] Minor-release target, stable baseline, and claims are verified.
+- [ ] Required structure, variable highlight count, and conditional Breaking changes are correct.
+- [ ] Credits, migrations, links, examples, and output comments are checked; gaps are disclosed.
+- [ ] Latest edits and removals are preserved, contents links match headings, and no personal defaults are assumed.
+- [ ] Chosen destination and authorized gist sync are verified; actions stay within authorization.
