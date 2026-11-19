@@ -36,16 +36,16 @@ We're excited to release SDM vX.Y.0! :tada:
 # Full changelog
 ```
 
-- **Highlights (required):** Explain substantive new capabilities and their purpose, each under a descriptive second-level heading. Add a short public-API example where useful. Do not add a generic Features section, processor inventory, or documentation-expansion list unless requested or substantive enough to be a highlight.
+- **Highlights (required):** Lead with the most significant new researcher capability. Group related additions into themes, including related models with different tasks; use concise per-model bullets to explain differences. Fold supporting improvements into those themes rather than creating highlights for implementation work, fixes, or guide updates. Do not add a generic Features section or processor inventory.
 - **Breaking changes (if any):** Identify the affected public API, concrete migration, and relevant PR.
 - **New contributors (required):** List first-time contributors by GitHub handle with links to their first merged PRs. Verify first-time status against earlier history or GitHub metadata. If none, say so; if verification is blocked, retain the section and report the gap rather than inventing credits.
 - **Full changelog (required):** Link the exact baseline-to-target GitHub comparison.
 
 ## Writing and examples
 
-Keep prose concise and concrete. Prefer “For more details:” for supporting references. Link relevant API docs, guides, code, papers, model cards, and benchmarks; prefer release-pinned repository links. Verify URLs and claims rather than inventing them.
+Explain the task and benefit before interface details. If a maintainer supplies a reference, follow its editorial scope, emphasis, and detail while verifying current-release facts; treat it as read-only unless edits are requested. Prefer “For more details:” followed by a short reference list. For each new model, link its public API, paper or research blog, upstream code, and weights when available. Prefer user-facing guides over implementation files or tests, and release-pinned repository links. Reuse a helpful documentation figure with descriptive alt text and available light/dark variants. Verify URLs and claims rather than inventing them.
 
-Use the simplest public API at the target revision, including necessary imports and setup. Run examples when practical and report verification limits. Put printed output in Python comments immediately after each corresponding print call, within the same code fence. Use the actual display format; representative output is acceptable if identified as illustrative or variable. For `TableTensor`, show size and semantic column blocks. Do not seed random examples solely to match illustrative output.
+Choose an example that demonstrates the release's distinctive reusable capability. When releasing training code or research building blocks, show how researchers can use those building blocks, with brief background and a link to the full training guide; avoid long launch commands. Use the simplest public API at the target revision, including imports and setup. Run examples when practical and report verification limits. Put printed output in Python comments immediately after each print call, within the same code fence. Use the actual display format; representative output is acceptable if identified as illustrative or variable. For `TableTensor`, show size and semantic column blocks. Do not seed random examples solely to match illustrative output.
 
 ## Optional gist synchronization
 
