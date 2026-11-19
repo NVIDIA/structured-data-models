@@ -130,9 +130,10 @@ def test_kv_cache_entry_scales() -> None:
     assert Cache(entry=entry).size() == 2 * 6 * 1 + 2 * 2 * 4
 
 
-def test_cache_fp8_per_head() -> None:
-    key = torch.randn(2, 5, 3, 4)  # [B, KV, H, C]
-    value = torch.randn(2, 5, 3, 4)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
+def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
+    key = torch.randn(2, 5, 3, 4, dtype=dtype)  # [B, KV, H, C]
+    value = torch.randn(2, 5, 3, 4, dtype=dtype)
     cache = Cache(kv_cache_dtype="fp8_per_head")
     cache["entry"] = KVCacheEntry(key=key, value=value)
 
@@ -140,7 +141,7 @@ def test_cache_fp8_per_head() -> None:
     assert entry.key.dtype == torch.float8_e4m3fn
     assert cast(torch.Tensor, entry.key_scale).size() == (2, 1, 3, 1)
 
-    out = Float8PerHead().dequantize(entry, torch.float32)
+    out = Float8PerHead().dequantize(entry, dtype)
     torch.testing.assert_close(out.key, key, rtol=2**-4, atol=1e-2)
     torch.testing.assert_close(out.value, value, rtol=2**-4, atol=1e-2)
 

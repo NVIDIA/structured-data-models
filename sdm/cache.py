@@ -82,7 +82,7 @@ class KVCacheDType(abc.ABC):
 
 
 class Unquantized(KVCacheDType):
-    r"""Stores key/value projections as computed."""
+    r"""Leaves key/value projections as computed."""
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
         return entry
@@ -96,7 +96,7 @@ class Unquantized(KVCacheDType):
 
 
 class Float8PerHead(KVCacheDType):
-    r"""Stores key/value projections in FP8 with one scale per head."""
+    r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
         key, key_scale = self._quantize(entry.key)
