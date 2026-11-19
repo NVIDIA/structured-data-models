@@ -130,7 +130,7 @@ def test_kv_cache_entry_rejects_mismatched_kv_cache_dtype() -> None:
     x = torch.randn(2, 3, 1, 4)
     with pytest.raises(ValueError, match="do not match"):
         KVCacheEntry(key=x, value=x, kv_cache_dtype=Float8PerHead())
-    with pytest.raises(ValueError, match="require"):
+    with pytest.raises(ValueError, match="do not match"):
         KVCacheEntry(key=x, value=x, key_scale=x, value_scale=x)
 
 

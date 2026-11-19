@@ -41,13 +41,11 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:  # noqa: D102
         self = super().__new__(cls, *args, **kwargs)
-        if self.kv_cache_dtype is None:
-            if self.key_scale is not None or self.value_scale is not None:
-                raise ValueError("K/V scales require a 'kv_cache_dtype'")
-        elif not self.kv_cache_dtype.is_quantized(self):
+        kv_cache_dtype = self.kv_cache_dtype or Unquantized()
+        if not kv_cache_dtype.is_quantized(self):
             raise ValueError(
                 f"K/V do not match the key/value cache dtype "
-                f"'{type(self.kv_cache_dtype).__name__}'"
+                f"'{type(kv_cache_dtype).__name__}'"
             )
         return self
 
@@ -118,7 +116,7 @@ class Unquantized(KVCacheDType):
     r"""Leaves key/value projections as computed."""
 
     def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
-        return False
+        return entry.key_scale is None and entry.value_scale is None
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
         return entry
