@@ -202,18 +202,25 @@ def test_sdpa_compile_batch_above_kernel_limit() -> None:
     assert counter.frame_count == 1
 
 
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_sdpa_compile_dynamic_batch_autocast(dtype: torch.dtype) -> None:
+@pytest.mark.parametrize(
+    ("dtype", "mask_dtype"),
+    [(torch.float32, torch.float16), (torch.float64, torch.float64)],
+)
+def test_sdpa_compile_dynamic_batch_autocast(
+    dtype: torch.dtype,
+    mask_dtype: torch.dtype,
+) -> None:
     module = SDPA(num_query_heads=2).eval()
     query = torch.randn(3, 4, 2, 8, dtype=dtype)
     key = torch.randn(3, 5, 2, 8, dtype=dtype)
     value = torch.randn_like(key)
-    for tensor in (query, key, value):
+    attn_mask = torch.randn(3, 2, 4, 5, dtype=mask_dtype)
+    for tensor in (query, key, value, attn_mask):
         torch._dynamo.mark_dynamic(tensor, 0)
     with torch.inference_mode(), torch.autocast("cpu", torch.bfloat16):
-        expected = module(query=query, key=key, value=value)
+        expected = module(query, key, value, attn_mask=attn_mask)
         out = torch.compile(module, fullgraph=True)(
-            query=query, key=key, value=value
+            query, key, value, attn_mask=attn_mask
         )
     assert out.dtype == expected.dtype
     torch.testing.assert_close(out, expected)
