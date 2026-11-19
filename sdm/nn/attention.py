@@ -409,10 +409,7 @@ class Attention(torch.nn.Module):
                 else None,
             )
             # TODO: Attention backend should decide whether to dequantize.
-            if key_value.quantizer is not None:
-                key_value = key_value.quantizer.dequantize(
-                    key_value, query.dtype
-                )
+            key_value = key_value.dequantize(query.dtype)
             if (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
