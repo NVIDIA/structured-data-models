@@ -176,12 +176,11 @@ class TILE(Processor):
         )
         for (  # Mean pool embeddings for each text cell:
             index,  # [R]
-            token_emb,  # [R, T, D]
-            _,
+            emb,  # [R, T, D]
             offset,  # [R, T, 2]
             mask,  # [R, T]
-        ) in self.llm(text, self.batch_size, self.max_length):
-            token_emb = token_emb.to(out.dtype)
+        ) in self.llm(text, "token", self.batch_size, self.max_length):
+            emb = emb.to(out.dtype)
             start, end = span[index].unbind(dim=-1)
             mask = mask & (offset[..., 1] > offset[..., 0])
             if self.skip_first:
@@ -192,7 +191,7 @@ class TILE(Processor):
                 & (offset[:, None, :, 1] > start[:, :, None])
             ).to(out.dtype)  # [R, C, T]
             weight /= weight.sum(dim=-1, keepdim=True).clamp(min=1)
-            out[index] = weight.bmm(token_emb)  # [R, C, D]
+            out[index] = weight.bmm(emb)  # [R, C, D]
 
         return out.view(*table.size()[:-1], *out.size()[-2:])  # [..., R, C, D]
 
