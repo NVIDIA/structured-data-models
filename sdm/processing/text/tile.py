@@ -159,7 +159,9 @@ class TILE(Processor):
 
     def _embed(self, table: TableTensor) -> Tensor:  # [..., R, C, D]
         columns = tuple(
-            column for columns in table.columns.values() for column in columns
+            column
+            for stype, _ in table.items()
+            for column in table.columns[stype]
         )
         positions = [columns.index(column) for column in table.text_columns]
 
