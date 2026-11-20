@@ -63,10 +63,13 @@ def compile_predict(
 
     Args:
         model: The model.
-        dynamic_shapes: The dimensions to mark as dynamic, out of those
-            that ``model`` declares: ``True`` for all of them, ``False`` for
-            none (for callers whose queries always have the same shape), or
-            a sequence of names. ``"rows"`` is the only name so far.
+        dynamic_shapes: Which of the dimensions that ``model`` declares are
+            marked as dynamic:
+
+            * ``True``: All of them.
+            * ``False``: None. Every query shape compiles its own graph.
+            * A sequence of names: Only the named ones. ``"rows"`` is the
+              only name so far.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
