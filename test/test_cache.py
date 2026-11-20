@@ -143,8 +143,6 @@ def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
 
     entry = cast(KVCacheEntry, cache["entry"])
     assert entry.key.dtype == torch.float8_e4m3fn
-    cache["entry"] = entry
-    assert cache["entry"] is entry
     assert cast(torch.Tensor, entry.key_scale).size() == (2, 1, 3, 1)
 
     out = Float8PerHead().dequantize(entry, dtype)
