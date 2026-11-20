@@ -225,7 +225,7 @@ class LLM(torch.nn.Module):
                 emb = emb.to(device, dtype)
                 yield index, emb
 
-                pbar.update(sum(length[start:end]))
-                start = end
+            pbar.update(sum(length[start:end]))
+            start = end
 
         pbar.close()
