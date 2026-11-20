@@ -66,6 +66,7 @@ def compile_predict(
             for the query rows. ``DynamicShapes()`` marks none: the query
             shape is static, and every new shape compiles another graph. A
             dimension that the model cannot keep dynamic fails to compile.
+            The lists of categories are dynamic in any case.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -75,9 +76,6 @@ def compile_predict(
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
     shapes = dynamic_shapes or model._dynamic_shapes
-    # Without dynamic shapes, none of the steps below are needed.
-    if shapes == DynamicShapes():
-        return compiled
     # With this option PyTorch does not specialize every marked size of zero
     # or one, which lets one graph serve a list of a single category.
     compiled = fx_config.patch(backed_size_oblivious=True)(compiled)  # ty: ignore[unresolved-attribute]
@@ -113,8 +111,8 @@ def compile_predict(
 
 
 def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:
+    if isinstance(tensor, TableTensor):
+        tensor._mark_dynamic(dims)
+        return
     for dim in dims:
-        if isinstance(tensor, TableTensor):
-            tensor._mark_dynamic(dim)
-        else:
-            torch._dynamo.mark_dynamic(tensor, dim)
+        torch._dynamo.mark_dynamic(tensor, dim)

@@ -452,7 +452,10 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
-def test_compile_predict_query_categories() -> None:
+@pytest.mark.parametrize("dynamic_shapes", [None, DynamicShapes()])
+def test_compile_predict_query_categories(
+    dynamic_shapes: DynamicShapes | None,
+) -> None:
     def table(categories: list[str]) -> TableTensor:
         code = torch.arange(6, dtype=torch.int32)
         code = code % len(categories) if categories else code.fill_(-1)
@@ -472,9 +475,13 @@ def test_compile_predict_query_categories() -> None:
     model.fit(table(["a", "b"]), torch.randn(6, 1))
 
     counter = CompileCounter()
-    predict = model._compile_predict(backend=counter)
-    # Every query has its own categories; "c" is not a fitted one. A query
-    # with an empty list is predicted without the graph.
+    predict = model._compile_predict(
+        backend=counter,
+        dynamic_shapes=dynamic_shapes,
+    )
+    # Every query has its own categories, whichever dimensions are dynamic;
+    # "c" is not a fitted one. A query with an empty list is predicted
+    # without the graph.
     for categories in (["b", "a"], ["a", "c", "b"], ["c"], []):
         query = table(categories)
         torch.testing.assert_close(

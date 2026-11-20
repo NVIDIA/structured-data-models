@@ -972,16 +972,19 @@ class TableTensor(Tensor):
         r"""The schema of this table."""
         return TableSchema(columns=self._columns)
 
-    def _mark_dynamic(self, dim: int) -> None:
-        r"""Mark a dimension as dynamic for :func:`torch.compile`.
+    def _mark_dynamic(self, dims: Iterable[int]) -> None:
+        r"""Mark dimensions as dynamic for :func:`torch.compile`.
+
+        The lists of categories are marked in any case.
 
         Args:
-            dim: The non-negative dimension.
+            dims: The non-negative dimensions.
         """
-        torch._dynamo.mark_dynamic(self, dim)
-        self._text._mark_dynamic(dim)
-        self._id._mark_dynamic(dim)
-        # A table of other rows brings other lists of categories.
+        for dim in dims:
+            torch._dynamo.mark_dynamic(self, dim)
+            self._text._mark_dynamic(dim)
+            self._id._mark_dynamic(dim)
+        # Every table brings its own lists of categories.
         for categories in self._categorical.categories:
             if isinstance(categories, VarLenTensor):
                 categories._mark_dynamic(0)
