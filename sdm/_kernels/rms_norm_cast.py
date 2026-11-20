@@ -45,7 +45,7 @@ def rms_norm_cast(
             ``[..., S, H, C]``, where ``S`` is the sequence length and ``H``
             is the number of heads. Rotation rounds in the input dtype.
     """
-    dtype = (
+    out_dtype = (
         torch.get_autocast_dtype(x.device.type)
         if torch.is_autocast_enabled(x.device.type)
         else x.dtype
@@ -88,9 +88,9 @@ def rms_norm_cast(
             and torch.is_grad_enabled()
         )
     ):
-        return _triton_rms_norm_cast(x, weight, eps, rope, dtype)
+        return _triton_rms_norm_cast(x, weight, eps, rope, out_dtype)
     if rope is not None:
         cos, sin = (table.unsqueeze(-2) for table in rope)
         x1, x2 = x.chunk(2, dim=-1)
         x = torch.cat((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1)
-    return F.rms_norm(x, (x.size(-1),), weight, eps).to(dtype)
+    return F.rms_norm(x, (x.size(-1),), weight, eps).to(out_dtype)
