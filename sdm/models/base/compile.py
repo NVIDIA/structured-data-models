@@ -87,8 +87,8 @@ def compile_predict(
             return model.predict(x, *args, **kwargs)
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows.
-        # Without a copy, queries that are different slices of one tensor,
-        # such as `x[40:]` and `x[41:44]`, recompile or fail to compile.
+        # Without a copy, queries that are different slices of one table, such
+        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
         dims = {dim % x.dim() for dim in shapes.query}
         repeat = (
             rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
