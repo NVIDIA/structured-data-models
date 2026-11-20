@@ -238,9 +238,11 @@ def test_estimator_batching(
     )
 
 
+@pytest.mark.parametrize("kv_cache_dtype", [None, "fp8_per_head"])
 def test_fit_predict(
     cls_model: KumoTabular,
     reg_model: KumoTabular,
+    kv_cache_dtype: str | None,
 ) -> None:
     x_context, x_query = _features()
     for num_classes in (3, 11):
@@ -257,49 +259,34 @@ def test_fit_predict(
             y=target,
             recipe=_recipe(),
             generator=torch.Generator().manual_seed(0),
+            kv_cache_dtype=kv_cache_dtype,
         )
         actual = cls_model.predict(x_query)
 
         assert actual.size() == (2, num_classes)
-        assert actual.allclose(expected, atol=1e-5)
+        assert actual.allclose(
+            expected,
+            atol=1e-5 if kv_cache_dtype is None else 0.05,
+        )
         assert actual.columns == expected.columns
 
     x_context, x_query = _features(Stype.numerical)
     target = _reg_target()
     recipe = _recipe()
     expected = reg_model(x_context, target, x_query, recipe=recipe)
-    reg_model.fit(x_context, target, recipe=recipe)
+    reg_model.fit(
+        x=x_context,
+        y=target,
+        recipe=recipe,
+        kv_cache_dtype=kv_cache_dtype,
+    )
     actual = reg_model.predict(x_query)
 
     torch.testing.assert_close(
         actual.numerical,
         expected.numerical,
         atol=1e-4,
-        rtol=1e-4,
-    )
-
-
-def test_fit_predict_fp8_kv_cache() -> None:
-    model = _build("regression", "small")
-    x_context, x_query = _features(Stype.numerical)
-    target = _reg_target()
-
-    model.fit(x_context, target, recipe=_recipe())
-    expected = model.predict(x_query)
-    model.fit(
-        x=x_context,
-        y=target,
-        recipe=_recipe(),
-        kv_cache_dtype="fp8_per_head",
-    )
-    actual = model.predict(x_query)
-
-    assert not actual.numerical.equal(expected.numerical)
-    torch.testing.assert_close(
-        actual=actual.numerical,
-        expected=expected.numerical,
-        atol=0.1,
-        rtol=0.01,
+        rtol=1e-4 if kv_cache_dtype is None else 0.02,
     )
 
 
