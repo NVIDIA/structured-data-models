@@ -85,19 +85,33 @@ class TaskGraph:  # noqa: D101
         # Propagate task assignment along graph edges.
         # NOTE This assumes neighborhoods do not overlap.
         propagated_hops = 0
-        while True:
-            if num_hops is not None and propagated_hops >= num_hops:
-                break
-            mask = frontier[graph.row] & (task_row[graph.col] < 0)
-            row = graph.row[mask]
-            if row.numel() == 0:
-                break
-            col = graph.col[mask]
+        if num_hops is None:
+            while True:
+                mask = frontier[graph.row] & (task_row[graph.col] < 0)
+                row = graph.row[mask]
+                if row.numel() == 0:
+                    break
+                col = graph.col[mask]
 
-            task_row[col] = task_row[row]
-            frontier.fill_(False)
-            frontier[col] = True
-            propagated_hops += 1
+                task_row[col] = task_row[row]
+                frontier.fill_(False)
+                frontier[col] = True
+                propagated_hops += 1
+        else:
+            # Bounded propagation avoids data-dependent indexing and early
+            # stopping.
+            for _ in range(num_hops):
+                mask = frontier[graph.row] & (task_row[graph.col] < 0)
+                candidates = torch.where(mask, task_row[graph.row], -1)
+                updates = torch.full_like(task_row, -1).scatter_reduce(
+                    dim=0,
+                    index=graph.col,
+                    src=candidates,
+                    reduce="amax",
+                    include_self=True,
+                )
+                frontier = (updates >= 0) & (task_row < 0)
+                task_row = torch.where(frontier, updates, task_row)
 
         return cls(
             x=x,
