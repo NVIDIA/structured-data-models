@@ -49,7 +49,7 @@ def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
 
 def compile_predict(
     model: ICLModel,
-    dynamic_shapes: bool = True,
+    dynamic_shapes: DynamicShapes | None = None,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
@@ -59,9 +59,11 @@ def compile_predict(
 
     Args:
         model: The model.
-        dynamic_shapes: If set to ``False``, the dimensions that ``model``
-            declares are not marked as dynamic, and every query shape
-            compiles its own graph.
+        dynamic_shapes: The dimensions to mark as dynamic instead of those
+            that ``model`` declares, *e.g.*, ``DynamicShapes(query=(-2,))``
+            for the query rows. With ``DynamicShapes()``, none is marked and
+            every query shape compiles its own graph. A dimension that the
+            model cannot keep dynamic fails to compile.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -70,7 +72,7 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    shapes = model._dynamic_shapes if dynamic_shapes else DynamicShapes()
+    shapes = dynamic_shapes or model._dynamic_shapes
     # Without dynamic shapes, none of the steps below are needed.
     if shapes == DynamicShapes():
         return compiled
@@ -86,24 +88,24 @@ def compile_predict(
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows. A
         # contiguous copy has one memory layout for any view.
+        dims = {dim % x.dim() for dim in shapes.query}
         repeat = (
-            rows == 1 and -2 in shapes.query and not kwargs.get("callbacks")
+            rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
         )
         x = (
             torch.cat([x, x], dim=-2)
             if repeat
             else x.clone(memory_format=torch.contiguous_format)
         )
-        _mark_dynamic(x, shapes.query)
+        _mark_dynamic(x, dims)
         out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if repeat else out
 
     return predict
 
 
-def _mark_dynamic(tensor: Tensor, dims: tuple[int, ...]) -> None:
+def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:
     for dim in dims:
-        dim %= tensor.dim()
         if isinstance(tensor, TableTensor):
             tensor._mark_dynamic(dim)
         else:

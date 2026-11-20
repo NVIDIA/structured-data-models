@@ -544,8 +544,9 @@ class VarLenTensor(Tensor):
         Args:
             dim: The non-negative dimension.
         """
-        # Marks reach inner tensors of the same rank only: the layout has one
-        # more dimension, and the storage varies in size with any dimension.
+        # A mark only reaches inner tensors with as many dimensions as this
+        # one: the layout has one more, and the storage is one-dimensional
+        # with a size that varies with any dimension.
         for tensor in (self, self._layout):
             torch._dynamo.mark_dynamic(tensor, dim)
         for storage in (self._data, self._offset, self._valid):

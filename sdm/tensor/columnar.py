@@ -305,8 +305,8 @@ class ColumnarTensor(Tensor):
         Args:
             dim: The non-negative dimension.
         """
-        # Marks reach inner tensors of the same rank only, and a column has
-        # one dimension less.
+        # A mark only reaches inner tensors with as many dimensions as this
+        # one, and a column has one less.
         for column in self._columns:
             if isinstance(column, VarLenTensor):
                 column._mark_dynamic(dim)
