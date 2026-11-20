@@ -14,7 +14,7 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_tile(device: torch.device) -> None:
+def test_sentence_transformer(device: torch.device) -> None:
     pytest.importorskip("sentence_transformers")
 
     table = TableTensor.from_columns(
