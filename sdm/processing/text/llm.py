@@ -126,14 +126,9 @@ class LLM(torch.nn.Module):
 
         length = np.fromiter(map(len, encodings), dtype=np.int64)
         length = torch.from_numpy(length)
-        if max_batch_tokens is not None or (
-            batch_size is not None and len(text) > batch_size
-        ):
-            perm_cpu = length.argsort(descending=True)
-        else:
-            perm_cpu = torch.arange(length.numel())
+        perm_cpu = length.argsort(descending=True)
         perm = perm_cpu.to(device or self.model.device)
-        lengths = length[perm_cpu].tolist()
+        length = length[perm_cpu].tolist()
 
         ptr: list[int] | None = None
         edge_index: Tensor | None = None
@@ -155,11 +150,12 @@ class LLM(torch.nn.Module):
             if batch_size is not None:
                 count = min(count, batch_size)
             if max_batch_tokens is not None:
-                count = min(count, max(1, max_batch_tokens // lengths[start]))
+                count = min(count, max(1, max_batch_tokens // length[start]))
             end = start + count
+
             index = perm_cpu[start:end]
             batch = [encodings[i] for i in index]
-            width = max(lengths[start:end])
+            width = max(length[start:end])
 
             for encoding in batch:
                 encoding.pad(
