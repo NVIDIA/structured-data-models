@@ -14,7 +14,7 @@ from torch.nn import Linear
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
-from sdm.cache import KVCacheEntry
+from sdm.cache import KVCacheDType, KVCacheEntry
 from sdm.nn import QueryScaling
 
 
@@ -322,6 +322,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
+        kv_cache_dtype: KVCacheDType | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -336,6 +337,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[True],
+        kv_cache_dtype: KVCacheDType | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -350,6 +352,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool,
+        kv_cache_dtype: KVCacheDType | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -363,6 +366,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
+        kv_cache_dtype: KVCacheDType | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -388,6 +392,9 @@ class Attention(torch.nn.Module):
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
+            kv_cache_dtype: The storage dtype of the returned key and value
+                projections. Attention uses the stored values, as when
+                replaying them.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -457,6 +464,19 @@ class Attention(torch.nn.Module):
             else:
                 key = self.key_transform(key, pos=key_pos)
 
+        entry = None
+        if return_key_value:
+            # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
+            # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
+            entry = KVCacheEntry(key=key.to(value.dtype), value=value)
+            if kv_cache_dtype is not None:
+                entry = kv_cache_dtype.quantize(entry)
+            entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
+            # TODO: Attention backend should decide whether to dequantize.
+            stored = entry.dequantize(value.dtype)
+            key, value = stored.key, stored.value
+            del stored
+
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
             key=key,  # [..., KV, Hkv, C // Hq]
@@ -470,13 +490,8 @@ class Attention(torch.nn.Module):
         if gate is not None:
             out = out * gate
         out = self.out_lin(out)  # [..., Q, C]
-        if return_key_value:
-            # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
-            # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
-            return out, KVCacheEntry(
-                key=key.to(value.dtype).contiguous(),
-                value=value.contiguous(),
-            )
+        if entry is not None:
+            return out, entry
         return out
 
 
@@ -563,6 +578,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -579,6 +595,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[True],
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -595,6 +612,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool,
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -610,6 +628,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -637,6 +656,9 @@ class TransformerBlock(torch.nn.Module):
             is_causal: Apply an upper-left causal attention mask.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
+            kv_cache_dtype: The storage dtype of the returned key and value
+                projections. Attention uses the stored values, as when
+                replaying them.
             batch_size_limit: Maximum number of batch elements processed at
                 once. Only an integer limit applies in compiled code, which
                 would otherwise recompile when the number of chunks changes.
@@ -674,6 +696,7 @@ class TransformerBlock(torch.nn.Module):
                 key_pos=key_pos,
                 is_causal=is_causal,
                 return_key_value=return_key_value,
+                kv_cache_dtype=kv_cache_dtype,
                 out=out,
             )
 
@@ -729,12 +752,12 @@ class TransformerBlock(torch.nn.Module):
                 key_pos=key_pos,
                 is_causal=is_causal,
                 return_key_value=return_key_value,
+                kv_cache_dtype=kv_cache_dtype,
                 out=out,
             )
 
         flat_out: Tensor | None = None
-        flat_key: Tensor | None = None
-        flat_value: Tensor | None = None
+        flat_kv: KVCacheEntry | None = None
 
         if out is not None and (out.dim() <= 3 or out.is_contiguous()):
             flat_out = out.view(batch_size, *query.size()[-2:])
@@ -757,23 +780,21 @@ class TransformerBlock(torch.nn.Module):
                 key_pos=_chunk(key_pos, batch_shape, 1, start, end),
                 is_causal=is_causal,
                 return_key_value=return_key_value,
+                kv_cache_dtype=kv_cache_dtype,
                 out=flat_out[start:end] if flat_out is not None else None,
             )
 
             if isinstance(result, tuple):
                 chunk, chunk_kv = result
 
-                if flat_key is None:
-                    flat_key = chunk_kv.key.new_empty(
-                        batch_size, *chunk_kv.key.size()[-3:]
+                if flat_kv is None:
+                    flat_kv = chunk_kv._apply_tensor(
+                        lambda t: t.new_empty(batch_size, *t.size()[-3:])
                     )
-                if flat_value is None:
-                    flat_value = chunk_kv.value.new_empty(
-                        batch_size, *chunk_kv.value.size()[-3:]
-                    )
-
-                flat_key[start:end] = chunk_kv.key
-                flat_value[start:end] = chunk_kv.value
+                for flat, kv in zip(
+                    flat_kv._tensors(), chunk_kv._tensors(), strict=True
+                ):
+                    flat[start:end] = kv
 
                 del chunk_kv
 
@@ -800,12 +821,9 @@ class TransformerBlock(torch.nn.Module):
         if not return_key_value:
             return out
 
-        assert flat_key is not None
-        assert flat_value is not None
-
-        return out, KVCacheEntry(
-            key=flat_key.view(*batch_shape, *flat_key.size()[-3:]),
-            value=flat_value.view(*batch_shape, *flat_value.size()[-3:]),
+        assert flat_kv is not None
+        return out, flat_kv._apply_tensor(
+            lambda t: t.view(*batch_shape, *t.size()[-3:])
         )
 
     def _forward(
@@ -819,6 +837,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
+        kv_cache_dtype: KVCacheDType | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
 
@@ -841,6 +860,7 @@ class TransformerBlock(torch.nn.Module):
             key_pos=key_pos,
             is_causal=is_causal,
             return_key_value=return_key_value,
+            kv_cache_dtype=kv_cache_dtype,
         )
         del key_value
 
