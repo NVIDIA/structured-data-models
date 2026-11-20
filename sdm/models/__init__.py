@@ -18,6 +18,7 @@ from sdm.models.kumo import (
     KumoTabular,
     KumoRelational,
     KumoForecast,
+    KumoForecastMissingness,
     KumoAnomaly,
 )
 from sdm.models.chronos2 import Chronos2
@@ -34,6 +35,7 @@ __all__ = [
     "KumoTabular",
     "KumoRelational",
     "KumoForecast",
+    "KumoForecastMissingness",
     "KumoAnomaly",
     "Chronos2",
     "TimesFM3",

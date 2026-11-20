@@ -74,9 +74,12 @@ class ICLBlock(torch.nn.Module):
         self,
         x: Tensor,  # [..., N, D]
         *,
+        attn_mask: Tensor | None = None,
         batch_size_limit: int | Literal["auto"] | None = "auto",
     ) -> Tensor:  # [..., N, D]
         bias = self.get_position_bias(length=x.size(-2), device=x.device)
+        if attn_mask is not None:
+            bias = bias + attn_mask
         for layer in self.layers:
             x = layer(
                 query=x,
