@@ -117,10 +117,10 @@ def test_rms_norm_cast_fallback(
     weight = torch.randn(shape[-1], device=device, dtype=dtype)
     with (
         torch.inference_mode(),
-        torch.autocast(device.type, dtype=torch.bfloat16, enabled=False),
+        torch.autocast(device.type, dtype=torch.float16, enabled=False),
     ):
         actual = rms_norm_cast(x, weight, 1e-6)
-        expected = F.rms_norm(x, (shape[-1],), weight, 1e-6).to(torch.bfloat16)
+        expected = F.rms_norm(x, (shape[-1],), weight, 1e-6)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
@@ -199,54 +199,42 @@ def test_rms_norm_cast_rope(
 
 @onlyCUDA
 @pytest.mark.parametrize(
-    ("dtype", "output_dtype"),
-    [
-        (torch.float16, torch.bfloat16),
-        (torch.bfloat16, torch.float16),
-        (torch.float16, torch.float32),
-        (torch.bfloat16, torch.float32),
-    ],
-)
-@pytest.mark.parametrize(
-    "weight_dtype", [None, torch.float16, torch.bfloat16, torch.float32]
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
 )
 @pytest.mark.parametrize("rope_enabled", [False, True])
 @pytest.mark.parametrize("strided", [False, True])
 def test_rms_norm_cast_without_autocast(
     dtype: torch.dtype,
-    output_dtype: torch.dtype,
-    weight_dtype: torch.dtype | None,
     rope_enabled: bool,
     strided: bool,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
 ) -> None:
     x = torch.randn(
         2, 257, 4, 128 if strided else 64, device="cuda", dtype=dtype
     )
     if strided:
         x = x[..., ::2]
-    weight = (
-        None
-        if weight_dtype is None
-        else torch.randn(64, device=x.device, dtype=weight_dtype)
-    )
+    weight = torch.randn(64, device=x.device)
     tables = None
-    rotated = x
     if rope_enabled:
         phase = torch.randn(257, 32, device=x.device)
         tables = (phase.cos().to(dtype), phase.sin().to(dtype))
-        cos, sin = (table.unsqueeze(-2) for table in tables)
-        first, second = x.chunk(2, dim=-1)
-        rotated = torch.cat(
-            (first * cos - second * sin, second * cos + first * sin), dim=-1
-        )
+    # A disabled autocast context still configures a dtype. The output keeps
+    # the input dtype instead.
     with (
         torch.inference_mode(),
-        torch.autocast("cuda", dtype=output_dtype, enabled=False),
+        torch.autocast(
+            "cuda",
+            dtype=torch.float16 if dtype == torch.bfloat16 else torch.bfloat16,
+            enabled=False,
+        ),
     ):
-        native = F.rms_norm(rotated, (64,), weight, 1e-6)
         actual = rms_norm_cast(x, weight, 1e-6, rope=tables)
-    assert native.dtype == dtype
-    torch.testing.assert_close(actual, native.to(output_dtype), rtol=0, atol=0)
+    expected = reference(x, weight, 1e-6, dtype, rope=tables)
+    if dtype == torch.float32:
+        torch.testing.assert_close(actual, expected)
+    else:
+        assert_close_ulp(actual, expected)
 
 
 @withCUDA

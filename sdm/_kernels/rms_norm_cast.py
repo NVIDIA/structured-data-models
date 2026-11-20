@@ -9,7 +9,8 @@ import torch.nn.functional as F
 from torch import Tensor
 
 _RMSNormCast: TypeAlias = Callable[
-    [Tensor, Tensor | None, float, tuple[Tensor, Tensor] | None], Tensor
+    [Tensor, Tensor | None, float, tuple[Tensor, Tensor] | None, torch.dtype],
+    Tensor,
 ]
 
 _triton_rms_norm_cast: _RMSNormCast | None = None
@@ -31,8 +32,8 @@ def rms_norm_cast(
 ) -> Tensor:
     """Apply RMSNorm over the last dimension and cast to the autocast dtype.
 
-    The output uses the configured autocast dtype for the input device,
-    even when autocast is disabled.
+    The output uses the autocast dtype of the input device while autocast is
+    enabled, and the input dtype otherwise.
 
     Args:
         x: Input tensor with shape ``[..., C]``, where ``C`` is the number
@@ -44,18 +45,15 @@ def rms_norm_cast(
             ``[..., S, H, C]``, where ``S`` is the sequence length and ``H``
             is the number of heads. Rotation rounds in the input dtype.
     """
+    dtype = (
+        torch.get_autocast_dtype(x.device.type)
+        if torch.is_autocast_enabled(x.device.type)
+        else x.dtype
+    )
     if (
         _triton_rms_norm_cast is not None
         and x.is_cuda
         and x.dtype in {torch.float16, torch.bfloat16, torch.float32}
-        # Without autocast, RMSNorm rounds to the input dtype before the
-        # output cast. A direct cast from the kernel's float32 accumulator
-        # would skip that rounding when changing the output dtype.
-        and (
-            torch.is_autocast_enabled("cuda")
-            or x.dtype == torch.float32
-            or x.dtype == torch.get_autocast_dtype("cuda")
-        )
         and x.size(-1) in {32, 64, 128, 256, 512}
         and (
             weight is None
@@ -90,11 +88,9 @@ def rms_norm_cast(
             and torch.is_grad_enabled()
         )
     ):
-        return _triton_rms_norm_cast(x, weight, eps, rope)
+        return _triton_rms_norm_cast(x, weight, eps, rope, dtype)
     if rope is not None:
         cos, sin = (table.unsqueeze(-2) for table in rope)
         x1, x2 = x.chunk(2, dim=-1)
         x = torch.cat((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1)
-    return F.rms_norm(x, (x.size(-1),), weight, eps).to(
-        torch.get_autocast_dtype(x.device.type)
-    )
+    return F.rms_norm(x, (x.size(-1),), weight, eps).to(dtype)
