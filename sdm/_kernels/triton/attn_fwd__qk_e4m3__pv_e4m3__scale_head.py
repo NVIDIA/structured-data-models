@@ -9,6 +9,9 @@ import triton.language as tl
 from torch import Tensor
 
 
+# References:
+# - FlashAttention-2: https://arxiv.org/abs/2307.08691
+# - Attention Quantization for Tabular Foundation Models: https://arxiv.org/abs/2609.13031
 @triton.jit
 def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     q_ptr,
@@ -141,9 +144,6 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     )
 
 
-# References:
-# - FlashAttention-2: https://arxiv.org/abs/2307.08691
-# - Attention Quantization for Tabular Foundation Models: https://arxiv.org/abs/2609.13031
 def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
     q: Tensor,
     k: Tensor,
