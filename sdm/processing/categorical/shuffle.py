@@ -57,7 +57,9 @@ class ShuffleCategories(EnsembleProcessor):
     ) -> list[Tensor]:
         device = table.categorical.device
         permutations: list[Tensor] = []
-        for column_index, category in enumerate(table.categorical.categories):
+        for column_index, category in enumerate(
+            _iter_categories(table.categorical)
+        ):
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
@@ -105,9 +107,12 @@ class ShuffleCategories(EnsembleProcessor):
                 unused_offsets=unused_offsets,
                 generator=generator,
             )
-            key = tuple(
-                tuple(permutation.tolist()) for permutation in permutations
-            )
+            # A single member needs no value-based permutation grouping.
+            key = ()
+            if len(ensemble_table) > 1:
+                key = tuple(
+                    tuple(permutation.tolist()) for permutation in permutations
+                )
             permutation_id = permutation_id_by_key.get(key)
             if permutation_id is None:
                 permutation_id = len(permutations_by_id)
