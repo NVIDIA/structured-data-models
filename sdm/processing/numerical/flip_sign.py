@@ -34,8 +34,7 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         signs = []
-        for member_id in range(len(ensemble_table)):
-            numerical = ensemble_table[member_id].numerical
+        for numerical in ensemble_table.numerical:
             sign = numerical.new_empty(
                 (*numerical.size()[:-2], 1, numerical.size(-1))
             )
