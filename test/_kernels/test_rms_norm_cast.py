@@ -13,29 +13,6 @@ from sdm.nn import RotaryEmbedding
 from sdm.testing import onlyCUDA, withCUDA
 
 
-def reference(
-    x: torch.Tensor,
-    weight: torch.Tensor | None,
-    eps: float,
-    dtype: torch.dtype,
-    rope: tuple[torch.Tensor, torch.Tensor] | None = None,
-) -> torch.Tensor:
-    if rope is not None:
-        cos, sin = (table.double().unsqueeze(-2) for table in rope)
-        x1, x2 = x.double().chunk(2, dim=-1)
-        # Preserve eager RoPE's rounding after each product and sum.
-        first = (x1 * cos).to(x.dtype).double()
-        first -= (x2 * sin).to(x.dtype).double()
-        second = (x2 * cos).to(x.dtype).double()
-        second += (x1 * sin).to(x.dtype).double()
-        x = torch.cat((first, second), dim=-1).to(x.dtype)
-    out = x.double()
-    out = out * (out.square().mean(-1, keepdim=True) + eps).rsqrt()
-    if weight is not None:
-        out = out * weight.double()
-    return out.to(dtype)
-
-
 @onlyCUDA
 @pytest.mark.parametrize(
     "dtype", [torch.float16, torch.bfloat16, torch.float32]
@@ -85,14 +62,12 @@ def test_rms_norm_cast(
         actual = rms_norm_cast(x, weight, eps)
 
     assert torch.cuda.current_device() == current_device
-    # Native CUDA and CuTeDSL use different float32 reduction orders.
-    # Validate both against float64, allowing one output rounding step.
-    oracle = reference(x, weight, eps, output_dtype)
-    assert_close_ulp(actual, oracle)
-    assert_close_ulp(expected, oracle)
+    # Native RMSNorm may sum in a different float32 order (e.g., CuTeDSL in
+    # PyTorch 2.15), which can move the output by one rounding step.
+    assert_close_ulp(actual, expected)
     torch.testing.assert_close(
         actual[0, [0, 2, 3]],
-        oracle[0, [0, 2, 3]],
+        expected[0, [0, 2, 3]],
         rtol=0,
         atol=0,
         equal_nan=True,
@@ -192,9 +167,7 @@ def test_rms_norm_cast_rope(
             torch.float16
         )
 
-    oracle = reference(x, weight, 1e-6, torch.float16, rope=tables)
-    assert_close_ulp(actual, oracle)
-    assert_close_ulp(expected, oracle)
+    assert_close_ulp(actual, expected)
 
 
 @onlyCUDA
@@ -215,10 +188,18 @@ def test_rms_norm_cast_without_autocast(
     if strided:
         x = x[..., ::2]
     weight = torch.randn(64, device=x.device)
+    rope = None
     tables = None
     if rope_enabled:
-        phase = torch.randn(257, 32, device=x.device)
-        tables = (phase.cos().to(dtype), phase.sin().to(dtype))
+        rope = RotaryEmbedding(
+            channels=64,
+            layout="split_half",
+            requires_grad=False,
+            device=x.device,
+        )
+        seq = torch.arange(x.size(-3), device=x.device, dtype=torch.float32)
+        freq = seq[:, None] * rope.inv_freq[None, :]
+        tables = (freq.cos().to(dtype), freq.sin().to(dtype))
     # A disabled autocast context still configures a dtype. The output keeps
     # the input dtype instead.
     with (
@@ -230,7 +211,9 @@ def test_rms_norm_cast_without_autocast(
         ),
     ):
         actual = rms_norm_cast(x, weight, 1e-6, rope=tables)
-    expected = reference(x, weight, 1e-6, dtype, rope=tables)
+        expected = F.rms_norm(
+            x if rope is None else rope(x), (64,), weight, 1e-6
+        )
     if dtype == torch.float32:
         torch.testing.assert_close(actual, expected)
     else:
