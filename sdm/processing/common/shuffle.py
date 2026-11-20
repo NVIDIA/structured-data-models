@@ -6,8 +6,7 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, Stype, TableTensor
-from sdm.nn._buffer import BufferList
+from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 
 
@@ -26,13 +25,15 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _permutations: EnsembleTensor[Tensor]
+
     def __init__(
         self,
         method: Literal["random", "latin"] = "random",
     ) -> None:
         super().__init__()
         self.method = method
-        self._permutations: BufferList[Tensor] = BufferList()
+        self.register_buffer("_permutations", None)
         self._host_permutations: tuple[tuple[int, ...], ...] = ()
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
@@ -92,7 +93,13 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                     )
                 permutations.append(permutation)
 
-        self._permutations = BufferList(permutations)
+        self._set_buffer(
+            "_permutations",
+            EnsembleTensor(
+                groups=tuple(row.unsqueeze(0) for row in permutations),
+                locations=tuple((i, 0) for i in range(len(permutations))),
+            ),
+        )
         # TODO: Add to EnsembleTable directly.
         member_ids_by_group: list[list[int]] = [
             [] for _ in range(ensemble_table.num_groups)

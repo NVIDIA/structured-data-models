@@ -5,8 +5,7 @@
 import torch
 from torch import Tensor
 
-from sdm import EnsembleTable, Stype
-from sdm.nn._buffer import BufferList
+from sdm import EnsembleTable, EnsembleTensor, Stype
 from sdm.processing import EnsembleInvertibleMixin, SeriesEnsembleProcessor
 
 
@@ -22,6 +21,9 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _last_values: EnsembleTensor[Tensor]
+    _last_indices: EnsembleTensor[Tensor]
+
     def __init__(
         self,
         *,
@@ -31,8 +33,8 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.fill_value = fill_value
         self.fill_leading = fill_leading
-        self._last_values: BufferList[Tensor] = BufferList()
-        self._last_indices: BufferList[Tensor] = BufferList()
+        self.register_buffer("_last_values", None)
+        self.register_buffer("_last_indices", None)
 
     def _fit_ensemble(
         self,
@@ -51,8 +53,18 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             last_values.append(last_value)
             last_indices.append(last_index)
 
-        self._last_values = BufferList(last_values)
-        self._last_indices = BufferList(last_indices)
+        self._set_buffer(
+            "_last_values",
+            EnsembleTensor(
+                groups=last_values, locations=ensemble_table._locations
+            ),
+        )
+        self._set_buffer(
+            "_last_indices",
+            EnsembleTensor(
+                groups=last_indices, locations=ensemble_table._locations
+            ),
+        )
 
     def _transform_ensemble(
         self,
@@ -73,8 +85,8 @@ class Interpolate(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
             )
 
             x = group.numerical
-            last_value = self._last_values[group_id]
-            last_index = self._last_indices[group_id]
+            last_value = self._last_values._groups[group_id]
+            last_index = self._last_indices._groups[group_id]
             offset = self._offset[first_member_id]
 
             # Prepend the context anchor only when processing future rows.
