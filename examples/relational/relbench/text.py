@@ -29,11 +29,7 @@ def embed_text(
     text = cast(sdm.TableTensor, text.to(device))
 
     processor = sp.Sequential(
-        sp.SentenceTransformer(
-            text_model,
-            batch_size=32,
-            max_seq_length=2048,
-        ),
+        sp.SentenceTransformer(text_model, max_length=2048, device=device),
         sp.PCA(text_dim),
     )
 

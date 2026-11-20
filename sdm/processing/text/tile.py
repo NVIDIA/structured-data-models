@@ -105,7 +105,7 @@ class TILE(Processor):
         model: str = "qwen3-0.6b",
         postprocess: object = None,
         *,
-        batch_size: int | None = 64,
+        batch_size: int | None = 32,
         max_batch_tokens: int | None = 65_536,
         device: torch.device | str | None = None,
         dtype: torch.dtype = torch.bfloat16,
