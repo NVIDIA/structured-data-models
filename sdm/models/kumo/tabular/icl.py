@@ -113,12 +113,10 @@ class ICLBlock(torch.nn.Module):
 
                 if cache is not None and cache.is_recording:
                     x, entry = result
-                    if (
-                        self.kv_heads is not None
-                        and self.kv_heads < entry.key.size(-2)
-                    ):
+                    kv_heads = self.kv_heads
+                    if kv_heads is not None and kv_heads < entry.key.size(-2):
                         entry = entry._apply_tensor(
-                            lambda t: _clone(t[..., : self.kv_heads, :])
+                            lambda t: _clone(t[..., :kv_heads, :])  # noqa: B023
                         )
                     cache[cache_key] = entry
                     del entry
