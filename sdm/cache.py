@@ -82,7 +82,7 @@ class KVCacheDType(abc.ABC):
 
 
 class Unquantized(KVCacheDType):
-    r"""Stores key/value projections as computed."""
+    r"""Leaves key/value projections as computed."""
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
         return entry
@@ -93,6 +93,38 @@ class Unquantized(KVCacheDType):
         dtype: torch.dtype,
     ) -> KVCacheEntry:
         return entry
+
+
+class Float8PerHead(KVCacheDType):
+    r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
+
+    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
+        key, key_scale = self._quantize(entry.key)
+        value, value_scale = self._quantize(entry.value)
+        return KVCacheEntry(
+            key=key,
+            value=value,
+            key_scale=key_scale,
+            value_scale=value_scale,
+        )
+
+    def dequantize(  # noqa: D102
+        self,
+        entry: KVCacheEntry,
+        dtype: torch.dtype,
+    ) -> KVCacheEntry:
+        return KVCacheEntry(
+            key=entry.key.to(dtype).mul_(cast(Tensor, entry.key_scale)),
+            value=entry.value.to(dtype).mul_(cast(Tensor, entry.value_scale)),
+        )
+
+    @staticmethod
+    def _quantize(tensor: Tensor) -> tuple[Tensor, Tensor]:
+        amax = tensor.abs().amax(dim=(-3, -1), keepdim=True)  # [..., 1, H, 1]
+        # Divide in the input dtype to avoid a full-size float32 copy:
+        scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
+        data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
+        return data, scale.float()
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
@@ -120,8 +152,16 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        # TODO: Support different dtypes given str in kwargs:
-        self._kv_cache_dtype: KVCacheDType = Unquantized()
+        # TODO: Introduce registry to map str to quantization
+        kv_cache_dtype = kwargs.pop("kv_cache_dtype", None)
+        if kv_cache_dtype is None:
+            self._kv_cache_dtype: KVCacheDType = Unquantized()
+        elif kv_cache_dtype == "fp8_per_head":
+            self._kv_cache_dtype = Float8PerHead()
+        else:
+            raise ValueError(
+                f"Unsupported key/value cache dtype '{kv_cache_dtype}'"
+            )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
