@@ -85,7 +85,7 @@ def test_tile(device: torch.device, monkeypatch: pytest.MonkeyPatch) -> None:
           model='tiny',
           postprocess=Sequential(
             Standardize(),
-            PCA(num_components=2),
+            PCA(num_components=2, solver='auto'),
           ),
         )""")
 
