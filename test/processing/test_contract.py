@@ -206,6 +206,7 @@ def test_all_public_processors_have_contract_cases() -> None:
         sp.TaskDispatch,
         sp.TableDispatch,
         sp.SentenceTransformer,
+        sp.TILE,
         sp.Detrend,
         sp.Interpolate,
         sp.ClipNonnegative,

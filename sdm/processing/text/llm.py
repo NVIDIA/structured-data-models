@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Self
 
 import numpy as np
 import pyarrow as pa
@@ -42,6 +42,9 @@ class LLM(torch.nn.Module):
             model.tokenizer.pad_token = model.tokenizer.eos_token
 
         self.model = model.to(device, dtype).eval()
+
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        return self
 
     def forward(
         self,

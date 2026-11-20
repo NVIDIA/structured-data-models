@@ -2,11 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from datetime import datetime
+from textwrap import dedent
 
+import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import TableTensor
-from sdm.processing.text.tile import textify
+from sdm.processing.text.tile import MODELS, TILE, textify
 from sdm.testing import withCUDA
 
 
@@ -50,3 +53,59 @@ def test_textify(device: torch.device) -> None:
 
     assert array.to_pylist() == [" ".join(sentences) for sentences in expected]
     assert span.size() == (2, 5, 2)
+
+
+@withCUDA
+def test_tile(device: torch.device, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("sentence_transformers")
+    monkeypatch.setitem(MODELS, "tiny", ("yujiepan/qwen3-tiny-random", 1))
+
+    table = TableTensor.from_columns(
+        data={
+            "description": ["gem 💎", "polished stone", "blue", "red"],
+            "origin": ["Australia", "Brazil", "India", "Ghana"],
+            "amount": [1.5, 2.5, 3.5, 4.5],
+        },
+        stypes={
+            "description": "text",
+            "origin": "text",
+            "amount": "numerical",
+        },
+        device=device,
+    )
+    encoder = TILE(
+        model="tiny",
+        postprocess=[sp.Standardize(), sp.PCA(2)],
+        batch_size=2,
+        device=device,
+        dtype=torch.float32,
+    )
+    assert repr(encoder) == dedent("""\
+        TILE(
+          model='tiny',
+          postprocess=Sequential(
+            Standardize(),
+            PCA(num_components=2),
+          ),
+        )""")
+
+    encoder.fit(table[:3])
+    out = encoder.transform(table)
+
+    assert out.size() == (4, 5)
+    assert out.device == table.device
+    assert out.dtype == table.dtype
+    assert out.text_columns == ()
+    assert out.numerical_columns == (
+        "amount",
+        "description__emb0",
+        "description__emb1",
+        "origin__emb0",
+        "origin__emb1",
+    )
+    assert out.numerical.isfinite().all()
+    torch.testing.assert_close(out.numerical[:, :1], table.numerical)
+    torch.testing.assert_close(
+        encoder.fit_transform(table[:3]).numerical,
+        out.numerical[:3],
+    )
