@@ -121,13 +121,17 @@ def test_cache_serialization_without_cuda(
 
 
 def test_kv_cache_entry_scales() -> None:
-    entry = KVCacheEntry(
-        key=torch.ones(2, 3, dtype=torch.int8),
-        value=torch.ones(2, 3, dtype=torch.int8),
-        key_scale=torch.ones(2, 1),
-        value_scale=torch.ones(2, 1),
-    )
-    assert Cache(entry=entry).size() == 2 * 6 * 1 + 2 * 2 * 4
+    x = torch.ones(2, 3, 1, 4)  # [B, KV, H, C]
+    entry = Float8PerHead().quantize(KVCacheEntry(key=x, value=x))
+    assert Cache(entry=entry).size() == 2 * 24 * 1 + 2 * 2 * 4
+
+
+def test_kv_cache_entry_rejects_mismatched_kv_cache_dtype() -> None:
+    x = torch.randn(2, 3, 1, 4)
+    with pytest.raises(ValueError, match="do not match"):
+        KVCacheEntry(key=x, value=x, kv_cache_dtype=Float8PerHead())
+    with pytest.raises(ValueError, match="do not match"):
+        KVCacheEntry(key=x, value=x, key_scale=x, value_scale=x)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
