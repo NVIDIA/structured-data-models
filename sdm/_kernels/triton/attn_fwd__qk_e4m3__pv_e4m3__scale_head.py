@@ -44,14 +44,14 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     batch_kv_head = batch * n_kv_heads + query_head // (
         n_q_heads // n_kv_heads
     )
+    # Tensors may exceed 2**31 elements, so widen per-head offsets to int64.
+    q_offset = batch_query_head.to(tl.int64) * n_queries * head_dim
+    kv_offset = batch_kv_head.to(tl.int64) * n_context * head_dim
     rows = query_block * block_q + tl.arange(0, block_q)
     cols = tl.arange(0, block_kv)
     dims = tl.arange(0, head_dim)
     q = tl.load(
-        q_ptr
-        + batch_query_head * n_queries * head_dim
-        + rows[:, None] * head_dim
-        + dims[None, :],
+        q_ptr + q_offset + rows[:, None] * head_dim + dims[None, :],
         mask=rows[:, None] < n_queries,
         other=0.0,
     )
@@ -73,10 +73,7 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
         # 1. Tiled QK^T: reduce over channels to get [block_q, block_kv].
         indices = start * block_kv + cols
         k = tl.load(
-            k_ptr
-            + batch_kv_head * n_context * head_dim
-            + indices[None, :] * head_dim
-            + dims[:, None],
+            k_ptr + kv_offset + indices[None, :] * head_dim + dims[:, None],
             mask=indices[None, :] < n_context,
             other=0.0,
         )
@@ -108,7 +105,7 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
         # 3. Tiled weights-V: reduce over context to get [block_q, head_dim].
         v_offsets = indices[:, None] + dims[None, :] * n_context
         v = tl.load(
-            v_ptr + batch_kv_head * n_context * head_dim + v_offsets,
+            v_ptr + kv_offset + v_offsets,
             mask=indices[:, None] < n_context,
             other=0.0,
         )
@@ -138,10 +135,7 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     if not scale_weights_in_exp:
         out *= 1.0 / 256.0
     tl.store(
-        out_ptr
-        + batch_query_head * n_queries * head_dim
-        + rows[:, None] * head_dim
-        + dims[None, :],
+        out_ptr + q_offset + rows[:, None] * head_dim + dims[None, :],
         out,
         mask=rows[:, None] < n_queries,
     )
