@@ -4,7 +4,7 @@
 import torch
 from torch import Tensor
 
-from sdm._kernels import rmsnorm_cast
+from sdm._kernels import rms_norm_cast
 from sdm.nn.rope import RotaryEmbedding
 
 
@@ -55,5 +55,5 @@ class RMSNorm(torch.nn.RMSNorm):
                 if self.eps is not None
                 else torch.finfo(torch.float32).eps
             )
-            return rmsnorm_cast(x, self.weight, eps, rope=cos_sin)
+            return rms_norm_cast(x, self.weight, eps, rope=cos_sin)
         return super().forward(x if rope is None else rope(x))

@@ -266,6 +266,7 @@ class ICLModel(Model):
             )
 
         callbacks = () if callbacks is None else callbacks
+        kv_cache_dtype = kwargs.pop("kv_cache_dtype", None)
 
         self.clear()
 
@@ -322,6 +323,7 @@ class ICLModel(Model):
                     ),
                     class_values=class_values[batch],
                     categorical_mask=categorical_mask,
+                    kv_cache_dtype=kv_cache_dtype,
                 )
                 self._forward(
                     x_context=context.x,
