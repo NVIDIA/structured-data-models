@@ -396,17 +396,32 @@ class AlignCategories(EnsembleProcessor):
             {} for _ in range(codes.size(-1))
         ]
         string_requests: list[tuple[int, int, StringTensor, Tensor]] = []
+        lookup_keys: list[list[int]] = []
         for column_index, input_categories in enumerate(
             _iter_categories(table.categorical)
         ):
+            column_keys: list[int] = []
+            lookup_keys.append(column_keys)
             if input_categories.numel() == 0:
                 continue
 
             lookup_by_categories = lookups_by_column[column_index]
             pending_categories: set[int] = set()
+            vocabularies: list[Tensor] = []
             for batch_categories in fitted_categories:
                 column_categories = batch_categories[column_index]
-                identity = id(column_categories)
+                if torch.compiler.is_compiling():
+                    # Group aliases without guarding a particular object ID.
+                    for vocabulary_id, other in enumerate(vocabularies):
+                        if column_categories is other:
+                            identity = vocabulary_id
+                            break
+                    else:
+                        identity = len(vocabularies)
+                        vocabularies.append(column_categories)
+                else:
+                    identity = id(column_categories)
+                column_keys.append(identity)
                 lookup = lookup_by_categories.get(identity)
                 if lookup is not None or identity in pending_categories:
                     continue
@@ -465,8 +480,8 @@ class AlignCategories(EnsembleProcessor):
                 continue
             lookup_by_categories = lookups_by_column[column_index]
             lookups = [
-                lookup_by_categories[id(batch_categories[column_index])]
-                for batch_categories in fitted_categories
+                lookup_by_categories[identity]
+                for identity in lookup_keys[column_index]
             ]
             column_codes = codes[..., column_index]
             mask = column_codes >= 0
