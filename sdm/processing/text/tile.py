@@ -85,17 +85,17 @@ class TILE(Processor):
     column, for example to reduce dimensionality.
 
     Args:
-        model: The LLM, one of ``"llama-3.1-8b"``, ``"llama-3.1-70b"``,
+        model: The model name, one of ``"llama-3.1-8b"``, ``"llama-3.1-70b"``,
             ``"llama-3.2-1b"``, ``"llama-3.2-3b"``, ``"qwen3-0.6b"``,
             ``"qwen3-4b"``, or ``"qwen3-8b"``.
         postprocess: Optional postprocessing routine, applied independently for
             each text column.
-        batch_size: The maximum batch size of the LLM. Adjusting the batch size
-            can significantly improve processing speed. The optimal value
+        batch_size: The maximum batch size of the model. Adjusting the batch
+            size can significantly improve processing speed. The optimal value
             depends on your hardware, model size, precision, and input length.
         max_batch_tokens: The maximum number of tokens to process per batch.
-        device: The LLM device.
-        dtype: The LLM dtype.
+        device: The device.
+        dtype: The dtype.
     """
 
     handles_stypes = (Stype.text,)
@@ -151,7 +151,7 @@ class TILE(Processor):
             postprocess = Processor.as_processor(postprocess)
             self.requires_fit = postprocess.requires_fit
 
-        self.llm = LLM(llm)
+        self.llm = LLM(llm, padding_side="right")
         self.postprocess = postprocess
         self.batch_size = batch_size
         self.max_batch_tokens = max_batch_tokens
@@ -179,8 +179,13 @@ class TILE(Processor):
             emb,  # [R, T, D]
             offset,  # [R, T, 2]
             mask,  # [R, T]
-        ) in self.llm(text, "token", self.batch_size, self.max_batch_tokens):
-            emb = emb.to(out.dtype)
+        ) in self.llm(
+            text,
+            output_type="token",
+            batch_size=self.batch_size,
+            max_batch_tokens=self.max_batch_tokens,
+            dtype=out.dtype,
+        ):
             start, end = span[index].unbind(dim=-1)
             mask = mask & (offset[..., 1] > offset[..., 0])
             if self.skip_first:
@@ -201,9 +206,7 @@ class TILE(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        if self.postprocess is None:
-            return
-
+        assert self.postprocess is not None
         self.postprocess.fit(
             TableTensor.from_tensor(self._embed(table).movedim(-2, -3)),
             generator=generator,

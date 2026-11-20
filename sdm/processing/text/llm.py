@@ -97,6 +97,8 @@ class LLM(torch.nn.Module):
     ) -> Iterator[
         tuple[Tensor, Tensor, Tensor, Tensor] | tuple[Tensor, Tensor]
     ]:
+        if len(text) == 0:
+            return
 
         if max_length is None:
             max_length = self.model.max_seq_length
@@ -208,7 +210,8 @@ class LLM(torch.nn.Module):
                 attn_mask = inputs["attention_mask"].to(emb.device)
                 yield index, emb, offset, attn_mask
             else:
-                emb = out["sentence_embedding"].to(device, dtype)
+                emb = out["sentence_embedding"][..., : self.model.truncate_dim]
+                emb = emb.to(device, dtype)
                 yield index, emb
 
             start = end
