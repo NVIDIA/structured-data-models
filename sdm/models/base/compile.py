@@ -86,8 +86,9 @@ def compile_predict(
         if rows == 0:
             return model.predict(x, *args, **kwargs)
         # A graph specializes on sizes of zero and one, so a single row is
-        # repeated if the rows are dynamic, unless callbacks see the rows. A
-        # contiguous copy has one memory layout for any view.
+        # repeated if the rows are dynamic, unless callbacks see the rows.
+        # The query is copied, since a graph also guards on where its input
+        # lies in memory, which differs for a slice such as `x[40:]`.
         dims = {dim % x.dim() for dim in shapes.query}
         repeat = (
             rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")

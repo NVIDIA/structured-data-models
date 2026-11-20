@@ -305,8 +305,9 @@ class ColumnarTensor(Tensor):
         Args:
             dim: The non-negative dimension.
         """
-        # A mark only reaches inner tensors with as many dimensions as this
-        # one, and a column has one less.
+        # PyTorch passes a mark on to the tensors inside this one only if
+        # they have the same number of dimensions. A column has one dimension
+        # less, so each column is marked here.
         for column in self._columns:
             if isinstance(column, VarLenTensor):
                 column._mark_dynamic(dim)

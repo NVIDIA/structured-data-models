@@ -973,8 +973,9 @@ class TableTensor(Tensor):
         Args:
             dim: The non-negative dimension.
         """
-        # The mark reaches the blocks, but not the layout of the text block
-        # or the columns of the id block.
+        # PyTorch passes a mark on to the tensors inside this one only if
+        # they have the same number of dimensions, which are the blocks. The
+        # text and id blocks mark the other tensors that they hold.
         torch._dynamo.mark_dynamic(self, dim)
         self._text._mark_dynamic(dim)
         self._id._mark_dynamic(dim)

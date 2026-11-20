@@ -435,8 +435,8 @@ def test_compile_predict(
     predict(x[42:43], callbacks=[capture])
     assert capture.inputs[0][0].size(-2) == 1
 
-    # The caller chooses the dynamic dimensions: without any, every number
-    # of rows compiles its own graph.
+    # The caller chooses the dynamic dimensions. Queries of 8, 3 and 1 rows
+    # compile 3 graphs without dynamic rows, and 1 graph with them.
     for shapes, graphs in (
         (DynamicShapes(), 3),
         (DynamicShapes(query=(0,)), 1),

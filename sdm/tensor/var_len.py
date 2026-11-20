@@ -544,9 +544,10 @@ class VarLenTensor(Tensor):
         Args:
             dim: The non-negative dimension.
         """
-        # A mark only reaches inner tensors with as many dimensions as this
-        # one: the layout has one more, and the storage is one-dimensional
-        # with a size that varies with any dimension.
+        # PyTorch passes a mark on to the tensors inside this one only if
+        # they have the same number of dimensions. The layout has one
+        # dimension more. The data, offsets and valid mask are flat, and
+        # their length changes with any dimension.
         for tensor in (self, self._layout):
             torch._dynamo.mark_dynamic(tensor, dim)
         for storage in (self._data, self._offset, self._valid):
