@@ -20,6 +20,7 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     out_ptr,
     n_q_heads: tl.constexpr,
     n_kv_heads: tl.constexpr,
+    # TODO: Avoid recompiling for each query and context length.
     n_queries: tl.constexpr,
     n_context: tl.constexpr,
     head_dim: tl.constexpr,
@@ -35,7 +36,6 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     Each program keeps a ``[block_q, head_dim]`` query tile and loops over
     context tiles of ``block_kv`` rows. Both matrix multiplications use
     the full head width.
-
     """
     query_block, batch_query_head = tl.program_id(0), tl.program_id(1)
     batch = batch_query_head // n_q_heads
@@ -168,13 +168,6 @@ def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
     fuse_score_scale: bool = False,
 ) -> Tensor:
     b, h, m, d = q.shape
-    for name, size in (
-        ("query_tile", query_tile),
-        ("context_tile", context_tile),
-        ("head dimension", d),
-    ):
-        if size <= 0 or size & (size - 1):
-            raise ValueError(f"{name} must be a positive power of two")
     if k.size(1) == 0 or h % k.size(1):
         raise ValueError("The number of K/V heads must divide the query heads")
     n = k.size(-2)
