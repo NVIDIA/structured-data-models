@@ -138,16 +138,15 @@ def test_kv_cache_entry_rejects_mismatched_kv_cache_dtype() -> None:
 def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
     key = torch.randn(2, 5, 3, 4, dtype=dtype)  # [B, KV, H, C]
     value = torch.randn(2, 5, 3, 4, dtype=dtype)
-    cache = Cache(kv_cache_dtype="fp8_per_head")
-    cache["entry"] = KVCacheEntry(key=key, value=value)
-
-    entry = cast(KVCacheEntry, cache["entry"])
+    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
     assert entry.key.dtype == torch.float8_e4m3fn
     assert cast(torch.Tensor, entry.key_scale).size() == (2, 1, 3, 1)
 
-    out = Float8PerHead().dequantize(entry, dtype)
+    out = entry.dequantize(dtype)
     torch.testing.assert_close(out.key, key, rtol=2**-4, atol=1e-2)
     torch.testing.assert_close(out.value, value, rtol=2**-4, atol=1e-2)
 
+    cache = Cache(kv_cache_dtype="fp8_per_head")
+    assert isinstance(cache.kv_cache_dtype, Float8PerHead)
     with pytest.raises(ValueError, match="Unsupported key/value cache dtype"):
         Cache(kv_cache_dtype="unknown")

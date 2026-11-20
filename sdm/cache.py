@@ -223,6 +223,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         r"""Whether the cache is in replaying mode."""
         return self._mode == Cache.Mode.replay
 
+    @property
+    def kv_cache_dtype(self) -> KVCacheDType:
+        r"""The storage dtype of cached key/value projections."""
+        return self._kv_cache_dtype
+
     def size(self) -> int:
         r"""The size in bytes of tensor data stored in this cache."""
         return sum(
@@ -253,8 +258,6 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
             )
-        if isinstance(value, KVCacheEntry):
-            value = self._kv_cache_dtype.quantize(value)
         self._items[key] = value
 
     def __delitem__(self, key: Hashable) -> None:
