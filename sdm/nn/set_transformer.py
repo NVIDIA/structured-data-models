@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from torch.nn import Parameter
 
-from sdm.cache import KVCacheEntry
+from sdm.cache import KVCacheDType, KVCacheEntry
 from sdm.nn import TransformerBlock
 
 
@@ -74,6 +74,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -87,6 +88,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -100,6 +102,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -112,6 +115,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         *,
         return_key_value: bool = False,
+        kv_cache_dtype: KVCacheDType | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -132,6 +136,9 @@ class InducedTransformerBlock(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
+            kv_cache_dtype: The storage dtype of the returned key and value
+                projections. Attention uses the stored values, as when
+                replaying them.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
             out: The output tensor.
@@ -157,6 +164,7 @@ class InducedTransformerBlock(torch.nn.Module):
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
             return_key_value=return_key_value,
+            kv_cache_dtype=kv_cache_dtype,
             batch_size_limit=batch_size_limit,
             out=out,
         )  # [..., Q, C]

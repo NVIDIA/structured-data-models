@@ -750,17 +750,20 @@ def test_transformer_block_kv_cache() -> None:
     torch.testing.assert_close(cached_out, direct_out)
 
     with torch.no_grad():  # Use no grad context to enable chunking
-        fp8_kv = Float8PerHead().quantize(kv)
-        fp8_cached_out = module(
+        fp8_out, fp8_kv = module(
             query=query,
-            key_value=fp8_kv,
+            key_value=key_value,
             seqused_key_value=seqused_key_value,
+            return_key_value=True,
+            kv_cache_dtype=Float8PerHead(),
+            batch_size_limit=1,
         )
-        fp8_chunked_out = module(
+        fp8_cached_out = module(
             query=query,
             key_value=fp8_kv,
             seqused_key_value=seqused_key_value,
             batch_size_limit=1,
         )
-    torch.testing.assert_close(fp8_cached_out, direct_out, atol=0.25, rtol=0)
-    torch.testing.assert_close(fp8_chunked_out, fp8_cached_out)
+    assert fp8_kv.key.dtype == torch.float8_e4m3fn
+    torch.testing.assert_close(fp8_out, direct_out, atol=0.25, rtol=0)
+    torch.testing.assert_close(fp8_cached_out, fp8_out)

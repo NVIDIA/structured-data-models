@@ -121,6 +121,7 @@ class ICLBlock(torch.nn.Module):
                     else x[..., :R_train, :]
                 ),
                 return_key_value=cache is not None and cache.is_recording,
+                kv_cache_dtype=None if cache is None else cache.kv_cache_dtype,
                 # `x` is still the caller's tensor at i == 0; don't mutate.
                 out=None
                 if torch.is_grad_enabled() or i == 0
