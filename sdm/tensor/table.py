@@ -989,7 +989,7 @@ class TableTensor(Tensor):
             if isinstance(categories, VarLenTensor):
                 categories._mark_dynamic(0)
             else:
-                torch._dynamo.maybe_mark_dynamic(categories, 0)
+                torch._dynamo.mark_dynamic(categories, 0)
 
     def is_same_schema(self, other: TableTensor) -> bool:
         r"""Whether ``other`` has the same schema layout.
