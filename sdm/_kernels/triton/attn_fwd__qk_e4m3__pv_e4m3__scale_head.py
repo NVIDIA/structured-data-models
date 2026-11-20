@@ -147,6 +147,9 @@ def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     )
 
 
+# References:
+# - FlashAttention-2: https://arxiv.org/abs/2307.08691
+# - Attention Quantization for Tabular Foundation Models: https://arxiv.org/abs/2609.13031
 def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
     q: Tensor,
     k: Tensor,
@@ -164,53 +167,6 @@ def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
     scale_weights_in_exp: bool = False,
     fuse_score_scale: bool = False,
 ) -> Tensor:
-    r"""Attention forward pass with E4M3 QK and PV and per-head Q/K/V scales.
-
-    The kernel follows the tiling of FlashAttention-2: each program computes
-    one tile of ``query_tile`` query rows for one batch element and query
-    head, and loops over tiles of ``context_tile`` key/value rows with an
-    online softmax, so attention weights are never written to global memory.
-    Both matrix multiplications take E4M3 inputs and accumulate in FP32:
-
-    1. :math:`S = Q K^\top` from E4M3 queries and keys, rescaled by the
-       query and key scales and ``scale``.
-    2. Softmax over :math:`S` in FP32, with the weights :math:`P` multiplied
-       by 256 and cast to E4M3.
-    3. :math:`O = P V` from E4M3 weights and values, rescaled by the value
-       scale and normalized in FP32.
-
-    Queries, keys and values are quantized beforehand with one FP32 scale per
-    batch element and head. Query heads share key/value heads when the number
-    of query heads is a multiple of the number of key/value heads. Every
-    context row is attended to; masks and padding are not supported.
-
-    Args:
-        q: Contiguous FP8 queries shaped ``[batch, query_heads, queries, D]``.
-        k: Contiguous FP8 keys shaped ``[batch, kv_heads, context, D]``.
-        v: Contiguous FP8 values shaped ``[batch, kv_heads, D, context]``.
-        qs: Query scales shaped ``[batch, query_heads, 1, 1]``.
-        ks: Key scales shaped ``[batch, kv_heads, 1, 1]``.
-        vs: Value scales shaped ``[batch, kv_heads, 1, 1]``.
-        dtype: Output dtype.
-        query_tile: Query rows per program; a positive power of two.
-        scale: Attention score multiplier. Defaults to ``1 / sqrt(D)``.
-        context_tile: Context rows per loop iteration; a positive power of two.
-        warps: Cooperating warps per program.
-        stages: Software pipeline stages.
-        accumulation_chunk: Tiles per FP32 accumulator flush; zero disables it.
-        scale_weights_in_exp: Apply the weight factor 256 inside exp2 instead
-            of before the weighted-value multiplication.
-        fuse_score_scale: Permit fused score scaling and maximum subtraction.
-
-    Returns:
-        Attention output with the query shape and requested dtype.
-
-    References:
-        - `"FlashAttention-2: Faster Attention with Better Parallelism and Work
-          Partitioning" <https://arxiv.org/abs/2307.08691>`_
-        - `"Attention Quantization for Tabular Foundation Models"
-          <https://arxiv.org/abs/2609.13031>`_
-    """
     b, h, m, d = q.shape
     for name, size in (
         ("query_tile", query_tile),
