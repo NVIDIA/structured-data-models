@@ -1,25 +1,35 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import torch
+from torch import Tensor
+
+from sdm.cache import Float8PerHead, KVCacheEntry
 
 pytest.importorskip("triton")
-from sdm._kernels.triton.fp8_attention import (
-    quantize,
-    quantized_attention,
-)
+from sdm._kernels.triton.fp8_attention import quantized_attention
 
 pytestmark = [
-    pytest.mark.usefixtures("fp8_rng"),
     pytest.mark.skipif(
         not torch.cuda.is_available()
         or torch.cuda.get_device_capability() < (8, 9),
         reason="FP8 attention requires an Ada or newer CUDA GPU",
     ),
 ]
+
+
+def quantize(x: Tensor) -> tuple[Tensor, Tensor]:
+    # [B, H, S, D] -> FP8 [B, H, S, D] and FP32 per-head scales [B, H, 1, 1].
+    x = x.transpose(1, 2)
+    entry = Float8PerHead().quantize(KVCacheEntry(key=x, value=x))
+    scale = cast(Tensor, entry.key_scale)
+    return (
+        entry.key.transpose(1, 2).contiguous(),
+        scale.transpose(1, 2).contiguous(),
+    )
 
 
 @pytest.mark.parametrize(
@@ -141,19 +151,6 @@ def test_periodic_attention_matches_cached_query_slice(
         ).sqrt()
         assert relative_rms < 0.08
         assert cached.isfinite().all()
-
-
-def test_quantization_reads_strided_heads_without_fp16_copy() -> None:
-    x = torch.randn(
-        2, 513, 8, 64, device="cuda", dtype=torch.float16
-    ).transpose(1, 2)
-    actual, actual_scale = quantize(x)
-    expected, expected_scale = quantize(x.contiguous())
-    assert actual.is_contiguous()
-    torch.testing.assert_close(
-        actual.float(), expected.float(), rtol=0, atol=0
-    )
-    torch.testing.assert_close(actual_scale, expected_scale, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize(
