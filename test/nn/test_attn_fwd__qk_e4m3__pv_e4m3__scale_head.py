@@ -10,7 +10,9 @@ from torch import Tensor
 from sdm.cache import Float8PerHead, KVCacheEntry
 
 pytest.importorskip("triton")
-from sdm._kernels.triton.fp8_attention import quantized_attention
+from sdm._kernels.triton.attn_fwd__qk_e4m3__pv_e4m3__scale_head import (
+    attn_fwd__qk_e4m3__pv_e4m3__scale_head,
+)
 
 pytestmark = [
     pytest.mark.skipif(
@@ -47,7 +49,7 @@ def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
         q8, qs = quantize(q)
         k8, ks = quantize(k)
         v8, vs = quantize(v)
-        actual = quantized_attention(
+        actual = attn_fwd__qk_e4m3__pv_e4m3__scale_head(
             q8,
             k8,
             v8.transpose(-1, -2).contiguous(),
@@ -83,7 +85,7 @@ def test_grouped_query_attention_and_model_scale(
         q8, qs = quantize(q)
         k8, ks = quantize(k)
         v8, vs = quantize(v)
-        actual = quantized_attention(
+        actual = attn_fwd__qk_e4m3__pv_e4m3__scale_head(
             q8,
             k8,
             v8.transpose(-1, -2).contiguous(),
@@ -125,10 +127,10 @@ def test_periodic_attention_matches_cached_query_slice(
             "scale_weights_in_exp": optimized,
             "fuse_score_scale": optimized,
         }
-        full = quantized_attention(
+        full = attn_fwd__qk_e4m3__pv_e4m3__scale_head(
             q8, k8, v8, qs, ks, vs, q.dtype, 128, **opts
         )
-        cached = quantized_attention(
+        cached = attn_fwd__qk_e4m3__pv_e4m3__scale_head(
             q8[:, :, -129:].contiguous(),
             k8,
             v8,
@@ -187,7 +189,7 @@ def test_invalid_attention_launch(
     qs = torch.ones(1, query_heads, 1, 1, device="cuda")
     ks = qs.new_ones(1, kv_heads, 1, 1)
     with pytest.raises(ValueError, match=message):
-        quantized_attention(
+        attn_fwd__qk_e4m3__pv_e4m3__scale_head(
             q,
             k,
             k.transpose(-1, -2).contiguous(),

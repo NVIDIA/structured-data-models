@@ -10,7 +10,7 @@ from torch import Tensor
 
 
 @triton.jit
-def _attention_kernel(
+def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
     q_ptr,
     k_ptr,
     v_ptr,
@@ -147,7 +147,7 @@ def _attention_kernel(
     )
 
 
-def quantized_attention(
+def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
     q: Tensor,
     k: Tensor,
     v: Tensor,
@@ -164,7 +164,25 @@ def quantized_attention(
     scale_weights_in_exp: bool = False,
     fuse_score_scale: bool = False,
 ) -> Tensor:
-    """Run tiled attention on per-head scaled FP8 inputs.
+    r"""Attention forward pass with E4M3 QK and PV and per-head Q/K/V scales.
+
+    The kernel follows the tiling of FlashAttention-2: each program computes
+    one tile of ``query_tile`` query rows for one batch element and query
+    head, and loops over tiles of ``context_tile`` key/value rows with an
+    online softmax, so attention weights are never written to global memory.
+    Both matrix multiplications take E4M3 inputs and accumulate in FP32:
+
+    1. :math:`S = Q K^\top` from E4M3 queries and keys, rescaled by the
+       query and key scales and ``scale``.
+    2. Softmax over :math:`S` in FP32, with the weights :math:`P` multiplied
+       by 256 and cast to E4M3.
+    3. :math:`O = P V` from E4M3 weights and values, rescaled by the value
+       scale and normalized in FP32.
+
+    Queries, keys and values are quantized beforehand with one FP32 scale per
+    batch element and head. Query heads share key/value heads when the number
+    of query heads is a multiple of the number of key/value heads. Every
+    context row is attended to; masks and padding are not supported.
 
     Args:
         q: Contiguous FP8 queries shaped ``[batch, query_heads, queries, D]``.
@@ -186,6 +204,12 @@ def quantized_attention(
 
     Returns:
         Attention output with the query shape and requested dtype.
+
+    References:
+        - `"FlashAttention-2: Faster Attention with Better Parallelism and Work
+          Partitioning" <https://arxiv.org/abs/2307.08691>`_
+        - `"Attention Quantization for Tabular Foundation Models"
+          <https://arxiv.org/abs/2609.13031>`_
     """
     b, h, m, d = q.shape
     for name, size in (
@@ -202,7 +226,7 @@ def quantized_attention(
     output = q.new_empty(q.shape, dtype=dtype)
     grid = (triton.cdiv(m, query_tile), b * h)  # ty: ignore[invalid-argument-type]
     with torch.cuda.device(q.device):
-        cast(Any, _attention_kernel)[grid](
+        cast(Any, _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel)[grid](
             q,
             k,
             v,
