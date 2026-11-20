@@ -551,7 +551,7 @@ class VarLenTensor(Tensor):
             torch._dynamo.mark_dynamic(tensor, dim)
         for storage in (self._data, self._offset, self._valid):
             if storage is not None:
-                torch._dynamo.maybe_mark_dynamic(storage, 0)
+                torch._dynamo.mark_dynamic(storage, 0)
 
     # Decorators ##############################################################
 
