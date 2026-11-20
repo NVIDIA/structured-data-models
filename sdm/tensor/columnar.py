@@ -299,6 +299,20 @@ class ColumnarTensor(Tensor):
             },
         )
 
+    def _mark_dynamic(self, dim: int) -> None:
+        r"""Mark a dimension as dynamic for :func:`torch.compile`.
+
+        Args:
+            dim: The non-negative dimension.
+        """
+        # Marks reach inner tensors of the same rank only, and a column has
+        # one dimension less.
+        for column in self._columns:
+            if isinstance(column, VarLenTensor):
+                column._mark_dynamic(dim)
+            else:
+                torch._dynamo.mark_dynamic(column, dim)
+
     # Decorators ##############################################################
 
     @classmethod
@@ -339,9 +353,10 @@ class ColumnarTensor(Tensor):
         cls, count, device = ctx
         if count == 0:
             return cls._from_empty(inner_tensors["_empty"])
+        # The size comes from the columns: checking them against `outer_size`
+        # would fix a dynamic dimension to the size of the first call.
         return cls(
             tuple(inner_tensors[f"_column_{i}"] for i in range(count)),
-            size=outer_size[:-1],
             device=device,
         )
 

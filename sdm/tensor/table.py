@@ -973,9 +973,11 @@ class TableTensor(Tensor):
         Args:
             dim: The non-negative dimension.
         """
-        # The mark reaches the blocks, but not the layout of the text block.
+        # The mark reaches the blocks, but not the layout of the text block
+        # or the columns of the id block.
         torch._dynamo.mark_dynamic(self, dim)
         self._text._mark_dynamic(dim)
+        self._id._mark_dynamic(dim)
 
     def is_same_schema(self, other: TableTensor) -> bool:
         r"""Whether ``other`` has the same schema layout.

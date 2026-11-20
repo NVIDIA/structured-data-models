@@ -8,7 +8,13 @@ import torch
 from torch._dynamo.testing import CompileCounter
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
 from sdm.testing import onlyMPS
@@ -390,6 +396,15 @@ def test_compile_predict(
             TableTensor.from_tensor(
                 StringTensor.from_list([["a" * (i % 5)] for i in range(48)]),
                 columns=["text"],
+            ),
+            TableTensor(
+                columns={Stype.id: ("string_id", "integer_id")},
+                id=ColumnarTensor(
+                    (
+                        StringTensor.from_list([str(i) for i in range(48)]),
+                        torch.arange(48),
+                    )
+                ),
             ),
         ],
         dim=-1,
