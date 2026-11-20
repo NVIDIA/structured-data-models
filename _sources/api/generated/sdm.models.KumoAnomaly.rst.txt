@@ -65,7 +65,7 @@ Default Recipe
      features=StypeDispatch(
        numerical=Sequential(
          ImputeMean(),
-         PCA(num_components=40),
+         PCA(num_components=40, solver='auto'),
          MinMaxScale(),
        ),
      ),
