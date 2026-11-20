@@ -90,13 +90,10 @@ class TILE(Processor):
             ``"qwen3-4b"``, or ``"qwen3-8b"``.
         postprocess: Optional postprocessing routine, applied independently for
             each text column.
-        batch_size: Maximum number of rows per LLM batch, or :obj:`None`
-            for no row limit. Adjusting the batch size can
-            significantly improve processing speed. The optimal value depends
-            on your hardware, model size, precision, and input length.
-        max_batch_tokens: Maximum number of padded token positions per batch.
-            A row exceeding this budget runs alone without being truncated
-            by the budget. :obj:`None` disables the token budget.
+        batch_size: The maximum batch size of the LLM. Adjusting the batch size
+            can significantly improve processing speed. The optimal value
+            depends on your hardware, model size, precision, and input length.
+        max_batch_tokens: The maximum number of tokens to process per batch.
         device: The LLM device.
         dtype: The LLM dtype.
     """
@@ -109,7 +106,7 @@ class TILE(Processor):
         postprocess: object = None,
         *,
         batch_size: int | None = 64,
-        max_batch_tokens: int | None = None,
+        max_batch_tokens: int | None = 65_536,
         device: torch.device | str | None = None,
         dtype: torch.dtype = torch.bfloat16,
     ) -> None:
@@ -182,12 +179,7 @@ class TILE(Processor):
             emb,  # [R, T, D]
             offset,  # [R, T, 2]
             mask,  # [R, T]
-        ) in self.llm(
-            text,
-            output_type="token",
-            batch_size=self.batch_size,
-            max_batch_tokens=self.max_batch_tokens,
-        ):
+        ) in self.llm(text, "token", self.batch_size, self.max_batch_tokens):
             emb = emb.to(out.dtype)
             start, end = span[index].unbind(dim=-1)
             mask = mask & (offset[..., 1] > offset[..., 0])

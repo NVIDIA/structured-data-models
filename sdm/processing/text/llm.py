@@ -89,7 +89,7 @@ class LLM(torch.nn.Module):
         text: pa.Array,
         output_type: Literal["token", "sentence"],
         batch_size: int | None = 64,
-        max_batch_tokens: int | None = None,
+        max_batch_tokens: int | None = 65_536,
         max_length: int | None = None,
         deduplicate: bool = False,
         device: torch.device | str | None = None,
