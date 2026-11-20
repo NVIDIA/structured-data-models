@@ -11,8 +11,14 @@ import torch
 from torch import Tensor
 from typing_extensions import TypeVar
 
-from sdm import Stype, StypeLike
-from sdm.tensor import TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    StypeLike,
+    TableTensor,
+)
 from sdm.tensor.categorical import _iter_categories
 from sdm.tensor.mixin import DeviceMixin
 
@@ -419,6 +425,74 @@ class EnsembleTable(DeviceMixin, EnsembleTensor[TableTensor]):
         return self.replace_groups(
             [cast(TableTensor, fn(group)) for group in self._groups]
         )
+
+    def replace_blocks(
+        self,
+        *,
+        numerical: Tensor | EnsembleTensor | None = None,
+        categorical: (
+            CategoricalTensor | EnsembleTensor[CategoricalTensor] | None
+        ) = None,
+        datetime: Tensor | EnsembleTensor | None = None,
+        text: StringTensor | EnsembleTensor[StringTensor] | None = None,
+        id: ColumnarTensor | EnsembleTensor[ColumnarTensor] | None = None,
+    ) -> EnsembleTable:
+        """Return a table with semantic blocks replaced.
+
+        Omitted blocks and column names are preserved. Tensor replacements
+        are shared across members; ensemble replacements are aligned by member.
+
+        Args:
+            numerical: Replacement numerical block.
+            categorical: Replacement categorical block.
+            datetime: Replacement datetime block.
+            text: Replacement text block.
+            id: Replacement identifier block.
+        """
+        replacements = {
+            name: block
+            for name, block in (
+                ("numerical", numerical),
+                ("categorical", categorical),
+                ("datetime", datetime),
+                ("text", text),
+                ("id", id),
+            )
+            if block is not None
+        }
+        if all(
+            not isinstance(block, EnsembleTensor)
+            or block._locations == self._locations
+            for block in replacements.values()
+        ):
+            return EnsembleData.execute(
+                TableTensor.replace_blocks, self, **replacements, batched=True
+            )
+
+        # Do not align old values of blocks that will be replaced.
+        blocks: dict[str, object] = {
+            "columns": EnsembleData(
+                groups=tuple(group.columns for group in self._groups),
+                locations=tuple((group, 0) for group, _ in self._locations),
+            )
+        }
+        for stype in Stype.all():
+            name = stype.value
+            block = replacements.get(name)
+            if block is None:
+                block = EnsembleTensor(
+                    groups=tuple(
+                        getattr(group, name) for group in self._groups
+                    ),
+                    locations=self._locations,
+                )
+            elif isinstance(block, Tensor):
+                block = EnsembleTensor(
+                    groups=(block.unsqueeze(0),),
+                    locations=((0, 0),) * len(self),
+                )
+            blocks[name] = block
+        return EnsembleData.execute(TableTensor, **blocks, batched=True)
 
     def select_stypes(
         self,
