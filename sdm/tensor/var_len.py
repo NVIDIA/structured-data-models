@@ -538,6 +538,18 @@ class VarLenTensor(Tensor):
         r"""Whether this tensor has a validity mask."""
         return self._valid is not None
 
+    def _mark_dynamic(self, dim: int) -> None:
+        r"""Mark a dimension as dynamic for :func:`torch.compile`.
+
+        Args:
+            dim: The non-negative dimension.
+        """
+        for tensor in (self, self._layout):
+            torch._dynamo.mark_dynamic(tensor, dim)
+        for storage in (self._data, self._offset, self._valid):
+            if storage is not None:
+                torch._dynamo.mark_dynamic(storage, 0)
+
     # Decorators ##############################################################
 
     @classmethod
