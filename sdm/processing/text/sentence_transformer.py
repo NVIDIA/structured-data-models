@@ -30,6 +30,7 @@ class SentenceTransformer(Processor):
             depends on your hardware, model size, precision, and input length.
         max_batch_tokens: The maximum number of tokens to process per batch.
         max_length: The maximum number of tokens per text before truncation.
+        show_progress: Whether to display a progress bar with token throughput.
         device: The device.
         dtype: The dtype.
     """
@@ -44,6 +45,7 @@ class SentenceTransformer(Processor):
         batch_size: int | None = 32,
         max_batch_tokens: int | None = 65_536,
         max_length: int | None = None,
+        show_progress: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype = torch.bfloat16,
     ) -> None:
@@ -60,6 +62,7 @@ class SentenceTransformer(Processor):
         self.batch_size = batch_size
         self.max_batch_tokens = max_batch_tokens
         self.max_length = max_length
+        self.show_progress = show_progress
 
     def _embed(self, table: TableTensor) -> Tensor:  # [..., R, C, D]
         text = table.text.to_arrow()
@@ -78,6 +81,7 @@ class SentenceTransformer(Processor):
             max_batch_tokens=self.max_batch_tokens,
             max_length=self.max_length,
             deduplicate=True,
+            show_progress=self.show_progress,
             dtype=out.dtype,
         ):
             out[index[1]] = emb[index[0]]

@@ -77,6 +77,7 @@ def test_tile(device: torch.device, monkeypatch: pytest.MonkeyPatch) -> None:
         model="tiny",
         postprocess=[sp.Standardize(), sp.PCA(2)],
         batch_size=2,
+        show_progress=False,
         device=device,
         dtype=torch.float32,
     )

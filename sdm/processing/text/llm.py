@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Literal, Self, overload
 import numpy as np
 import pyarrow as pa
 import torch
+import tqdm
 from torch import Tensor
 
 from sdm._warnings import warn_once
@@ -67,6 +68,7 @@ class LLM(torch.nn.Module):
         max_batch_tokens: int | None = ...,
         max_length: int | None = ...,
         deduplicate: bool = ...,
+        show_progress: bool = ...,
         device: torch.device | str | None = ...,
         dtype: torch.dtype | None = ...,
     ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
@@ -80,6 +82,7 @@ class LLM(torch.nn.Module):
         max_batch_tokens: int | None = ...,
         max_length: int | None = ...,
         deduplicate: bool = ...,
+        show_progress: bool = ...,
         device: torch.device | str | None = ...,
         dtype: torch.dtype | None = ...,
     ) -> Iterator[tuple[Tensor, Tensor]]: ...
@@ -92,6 +95,7 @@ class LLM(torch.nn.Module):
         max_batch_tokens: int | None = 65_536,
         max_length: int | None = None,
         deduplicate: bool = False,
+        show_progress: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> Iterator[
@@ -146,6 +150,13 @@ class LLM(torch.nn.Module):
                 pos, len(text)
             ).tolist()
 
+        pbar = tqdm.tqdm(
+            total=sum(length),
+            desc="Embedding text",
+            unit="token",
+            unit_scale=True,
+            disable=not show_progress,
+        )
         start = 0
         while start < len(text):
             count = len(text) - start
@@ -214,4 +225,7 @@ class LLM(torch.nn.Module):
                 emb = emb.to(device, dtype)
                 yield index, emb
 
+            pbar.update(sum(length[start:end]))
             start = end
+
+        pbar.close()

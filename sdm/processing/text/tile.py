@@ -94,6 +94,7 @@ class TILE(Processor):
             size can significantly improve processing speed. The optimal value
             depends on your hardware, model size, precision, and input length.
         max_batch_tokens: The maximum number of tokens to process per batch.
+        show_progress: Whether to display a progress bar with token throughput.
         device: The device.
         dtype: The dtype.
     """
@@ -107,6 +108,7 @@ class TILE(Processor):
         *,
         batch_size: int | None = 32,
         max_batch_tokens: int | None = 65_536,
+        show_progress: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype = torch.bfloat16,
     ) -> None:
@@ -155,6 +157,7 @@ class TILE(Processor):
         self.postprocess = postprocess
         self.batch_size = batch_size
         self.max_batch_tokens = max_batch_tokens
+        self.show_progress = show_progress
         self.skip_first = len(self.llm.model.tokenizer("")["input_ids"]) == 0
 
     def _embed(self, table: TableTensor) -> Tensor:  # [..., R, C, D]
@@ -184,6 +187,7 @@ class TILE(Processor):
             output_type="token",
             batch_size=self.batch_size,
             max_batch_tokens=self.max_batch_tokens,
+            show_progress=self.show_progress,
             dtype=out.dtype,
         ):
             start, end = span[index].unbind(dim=-1)
