@@ -68,6 +68,7 @@ class LLM(torch.nn.Module):
         max_batch_tokens: int | None = ...,
         max_length: int | None = ...,
         deduplicate: bool = ...,
+        show_progress: bool = ...,
         device: torch.device | str | None = ...,
         dtype: torch.dtype | None = ...,
     ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
@@ -81,6 +82,7 @@ class LLM(torch.nn.Module):
         max_batch_tokens: int | None = ...,
         max_length: int | None = ...,
         deduplicate: bool = ...,
+        show_progress: bool = ...,
         device: torch.device | str | None = ...,
         dtype: torch.dtype | None = ...,
     ) -> Iterator[tuple[Tensor, Tensor]]: ...
@@ -93,7 +95,7 @@ class LLM(torch.nn.Module):
         max_batch_tokens: int | None = 65_536,
         max_length: int | None = None,
         deduplicate: bool = False,
-        show_progress: bool = True,
+        show_progress: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> Iterator[
