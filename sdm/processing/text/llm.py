@@ -94,18 +94,6 @@ class LLM(torch.nn.Module):
     ) -> Iterator[
         tuple[Tensor, Tensor, Tensor, Tensor] | tuple[Tensor, Tensor]
     ]:
-
-        inverse: Tensor | None = None
-        if deduplicate:
-            text = text.dictionary_encode()
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="The given NumPy array is not writable",
-                )
-                inverse = torch.from_numpy(text.indices.to_numpy())
-            text = text.dictionary
-
         inverse: Tensor | None = None
         if deduplicate:
             text = text.dictionary_encode()
