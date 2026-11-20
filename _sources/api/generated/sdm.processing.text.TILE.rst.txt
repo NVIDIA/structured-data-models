@@ -1,0 +1,20 @@
+﻿TILE
+====
+
+.. currentmodule:: sdm.processing.text
+
+.. autoclass:: TILE
+   :members:
+   :show-inheritance:
+   :exclude-members: handles_stypes, requires_fit
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Handled Semantic Types**
+     - ``text``
+   * - **Requires Fitting**
+     - instance-specific
