@@ -42,7 +42,7 @@ def _load_input(
 
 
 @triton.jit(do_not_specialize=["rows", "seq_len", "num_heads"])
-def _rmsnorm_cast_kernel(
+def _rms_norm_cast_kernel(
     x_ptr,
     weight_ptr,
     cos_ptr,
@@ -98,7 +98,7 @@ def _rmsnorm_cast_kernel(
     tl.store(out_ptr + offsets + c, value, mask=mask)
 
 
-def rmsnorm_cast(
+def rms_norm_cast(
     x: Tensor,
     weight: Tensor | None,
     eps: float,
@@ -118,7 +118,7 @@ def rmsnorm_cast(
     grid = ((rows + block_rows - 1) // block_rows,)
     out = torch.empty_like(x, dtype=torch.get_autocast_dtype("cuda"))
     with torch.cuda.device(x.device):
-        cast(Any, _rmsnorm_cast_kernel)[grid](
+        cast(Any, _rms_norm_cast_kernel)[grid](
             x,
             weight,
             cos,
