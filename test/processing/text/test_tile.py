@@ -9,7 +9,7 @@ import torch
 
 import sdm.processing as sp
 from sdm import TableTensor
-from sdm.processing.text.tile import MODELS, TILE, textify
+from sdm.processing.text.tile import MODELS, textify
 from sdm.testing import withCUDA
 
 
@@ -73,13 +73,14 @@ def test_tile(device: torch.device, monkeypatch: pytest.MonkeyPatch) -> None:
         },
         device=device,
     )
-    encoder = TILE(
+    encoder = sp.TILE(
         model="tiny",
         postprocess=[sp.Standardize(), sp.PCA(2)],
         batch_size=2,
         device=device,
         dtype=torch.float32,
     )
+    assert encoder.requires_fit
     assert repr(encoder) == dedent("""\
         TILE(
           model='tiny',
