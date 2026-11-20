@@ -418,11 +418,7 @@ def test_compile_predict(
     model.fit(x[:40], y, num_estimators=4)
 
     counter = CompileCounter()
-    predict = model._compile_predict(
-        backend=counter,
-        fullgraph=True,
-        dynamic=False,
-    )
+    predict = model._compile_predict(backend=counter, fullgraph=True)
     # Queries of any number of rows, including one and none, reuse one graph.
     for query in (x[40:], x[41:44], x[42:43], x[40:40]):
         torch.testing.assert_close(
@@ -439,14 +435,13 @@ def test_compile_predict(
     assert capture.inputs[0][0].size(-2) == 1
 
     # Without dynamic rows, every number of rows compiles its own graph.
-    for shapes, graphs in ((False, 2), (["rows"], 1)):
+    for shapes, graphs in ((False, 3), (["rows"], 1)):
         counter = CompileCounter()
         predict = model._compile_predict(
             backend=counter,
-            dynamic=False,
             dynamic_shapes=shapes,
         )
-        for query in (x[40:], x[41:44]):
+        for query in (x[40:], x[41:44], x[40:46]):
             predict(query)
         assert counter.frame_count == graphs
 

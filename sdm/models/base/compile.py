@@ -68,10 +68,12 @@ def compile_predict(
             none (for callers whose queries always have the same shape), or
             a sequence of names. ``"rows"`` is the only name so far.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
-            ``isolate_recompiles`` defaults to ``True``, since all models
-            would otherwise share one recompile limit.
+            ``dynamic`` defaults to ``False``, so that only the marked
+            dimensions are dynamic. ``isolate_recompiles`` defaults to
+            ``True``, since all models would otherwise share one recompile
+            limit.
     """
-    kwargs = {"isolate_recompiles": True} | kwargs
+    kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
     shapes = model._dynamic_shapes
     if dynamic_shapes is not True:
