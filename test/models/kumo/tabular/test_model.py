@@ -434,19 +434,12 @@ def test_compile_predict(
     predict(x[42:43], callbacks=[capture])
     assert capture.inputs[0][0].size(-2) == 1
 
-    # Without dynamic rows, every number of rows compiles its own graph.
-    for shapes, graphs in ((False, 3), (["rows"], 1)):
-        counter = CompileCounter()
-        predict = model._compile_predict(
-            backend=counter,
-            dynamic_shapes=shapes,
-        )
-        for query in (x[40:], x[41:44], x[40:46]):
-            predict(query)
-        assert counter.frame_count == graphs
-
-    with pytest.raises(ValueError, match="to be among"):
-        model._compile_predict(dynamic_shapes=["columns"])
+    # Without dynamic shapes, every number of rows compiles its own graph.
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter, dynamic_shapes=False)
+    for query in (x[40:], x[41:44], x[40:46]):
+        predict(query)
+    assert counter.frame_count == 3
 
 
 @onlyMPS

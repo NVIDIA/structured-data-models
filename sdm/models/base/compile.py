@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -33,10 +33,6 @@ class DynamicShapes:
     query: tuple[int, ...] = ()
 
 
-# The fields of `DynamicShapes` behind each name that callers can choose.
-_FIELDS = {"rows": ("query",)}
-
-
 def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
     r"""Declare the :class:`DynamicShapes` of a model.
 
@@ -53,7 +49,7 @@ def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
 
 def compile_predict(
     model: ICLModel,
-    dynamic_shapes: bool | Sequence[str] = True,
+    dynamic_shapes: bool = True,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
@@ -63,13 +59,9 @@ def compile_predict(
 
     Args:
         model: The model.
-        dynamic_shapes: Which of the dimensions that ``model`` declares are
-            marked as dynamic:
-
-            * ``True``: All of them.
-            * ``False``: None. Every query shape compiles its own graph.
-            * A sequence of names: Only the named ones. ``"rows"`` is the
-              only name so far.
+        dynamic_shapes: If set to ``False``, the dimensions that ``model``
+            declares are not marked as dynamic, and every query shape
+            compiles its own graph.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -78,21 +70,7 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    shapes = model._dynamic_shapes
-    if dynamic_shapes is not True:
-        names = dynamic_shapes or ()
-        if not set(names) <= set(_FIELDS):
-            raise ValueError(
-                f"Expected 'dynamic_shapes' to be among {list(_FIELDS)} "
-                f"(got {list(names)})"
-            )
-        shapes = DynamicShapes(
-            **{
-                field: getattr(shapes, field)
-                for name in names
-                for field in _FIELDS[name]
-            }
-        )
+    shapes = model._dynamic_shapes if dynamic_shapes else DynamicShapes()
     # Without dynamic shapes, none of the steps below are needed.
     if shapes == DynamicShapes():
         return compiled
