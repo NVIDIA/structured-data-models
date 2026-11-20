@@ -194,6 +194,9 @@ class RowEmbedding(torch.nn.Module):
                     if cache is not None and cache.is_replaying
                     else x[..., :R_train, :],
                     return_key_value=cache is not None and cache.is_recording,
+                    kv_cache_dtype=None
+                    if cache is None
+                    else cache.kv_cache_dtype,
                     batch_size_limit="auto",
                     out=None if buffer is None else x,
                 )  # [..., C, R, D]
