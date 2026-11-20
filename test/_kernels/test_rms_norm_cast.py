@@ -212,7 +212,7 @@ def test_rms_norm_cast_rope(
 )
 @pytest.mark.parametrize("rope_enabled", [False, True])
 @pytest.mark.parametrize("strided", [False, True])
-def test_rmsnorm_cast_without_autocast(
+def test_rms_norm_cast_without_autocast(
     dtype: torch.dtype,
     output_dtype: torch.dtype,
     weight_dtype: torch.dtype | None,
@@ -244,7 +244,7 @@ def test_rmsnorm_cast_without_autocast(
         torch.autocast("cuda", dtype=output_dtype, enabled=False),
     ):
         native = F.rms_norm(rotated, (64,), weight, 1e-6)
-        actual = rmsnorm_cast(x, weight, 1e-6, rope=tables)
+        actual = rms_norm_cast(x, weight, 1e-6, rope=tables)
     assert native.dtype == dtype
     torch.testing.assert_close(actual, native.to(output_dtype), rtol=0, atol=0)
 
