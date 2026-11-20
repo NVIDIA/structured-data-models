@@ -11,7 +11,7 @@ from collections.abc import (
     MutableMapping,
 )
 from enum import StrEnum
-from typing import NamedTuple, Self, cast
+from typing import Any, NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
@@ -25,6 +25,7 @@ class _KVCacheEntry(NamedTuple):
     value: Tensor
     key_scale: Tensor | None = None
     value_scale: Tensor | None = None
+    kv_cache_dtype: "KVCacheDType | None" = None
 
 
 class KVCacheEntry(_KVCacheEntry, DeviceMixin):
@@ -35,7 +36,28 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Value projections with shape ``[..., KV, H, C]``.
         key_scale: Optional scales broadcastable to ``key``.
         value_scale: Optional scales broadcastable to ``value``.
+        kv_cache_dtype: The storage dtype of K/V, if any.
     """
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:  # noqa: D102
+        self = super().__new__(cls, *args, **kwargs)
+        kv_cache_dtype = self.kv_cache_dtype or Unquantized()
+        if not kv_cache_dtype.is_quantized(self):
+            raise ValueError(
+                f"K/V do not match the key/value cache dtype "
+                f"'{type(kv_cache_dtype).__name__}'"
+            )
+        return self
+
+    def dequantize(self, dtype: torch.dtype) -> "KVCacheEntry":
+        r"""Returns the entry with quantized K/V dequantized to ``dtype``.
+
+        Args:
+            dtype: The target dtype.
+        """
+        if self.kv_cache_dtype is None:
+            return self
+        return self.kv_cache_dtype.dequantize(self, dtype)
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
@@ -53,11 +75,20 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             value_scale=None
             if self.value_scale is None
             else fn(self.value_scale),
+            kv_cache_dtype=self.kv_cache_dtype,
         )
 
 
 class KVCacheDType(abc.ABC):
     r"""Base class for the storage dtype of cached key/value projections."""
+
+    @abc.abstractmethod
+    def is_quantized(self, entry: KVCacheEntry) -> bool:
+        r"""Returns whether K/V of ``entry`` are in this storage dtype.
+
+        Args:
+            entry: Key/value projections.
+        """
 
     @abc.abstractmethod
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:
@@ -82,7 +113,10 @@ class KVCacheDType(abc.ABC):
 
 
 class Unquantized(KVCacheDType):
-    r"""Stores key/value projections as computed."""
+    r"""Leaves key/value projections as computed."""
+
+    def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
+        return entry.key_scale is None and entry.value_scale is None
 
     def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
         return entry
@@ -93,6 +127,53 @@ class Unquantized(KVCacheDType):
         dtype: torch.dtype,
     ) -> KVCacheEntry:
         return entry
+
+
+class Float8PerHead(KVCacheDType):
+    r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
+
+    def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
+        return all(
+            data.dtype == torch.float8_e4m3fn
+            and scale is not None
+            and scale.dtype == torch.float32
+            and scale.shape == (*data.shape[:-3], 1, data.size(-2), 1)
+            for data, scale in (
+                (entry.key, entry.key_scale),
+                (entry.value, entry.value_scale),
+            )
+        )
+
+    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
+        if self.is_quantized(entry):
+            return entry
+        key, key_scale = self._quantize(entry.key)
+        value, value_scale = self._quantize(entry.value)
+        return KVCacheEntry(
+            key=key,
+            value=value,
+            key_scale=key_scale,
+            value_scale=value_scale,
+            kv_cache_dtype=self,
+        )
+
+    def dequantize(  # noqa: D102
+        self,
+        entry: KVCacheEntry,
+        dtype: torch.dtype,
+    ) -> KVCacheEntry:
+        return KVCacheEntry(
+            key=entry.key.to(dtype).mul_(cast(Tensor, entry.key_scale)),
+            value=entry.value.to(dtype).mul_(cast(Tensor, entry.value_scale)),
+        )
+
+    @staticmethod
+    def _quantize(tensor: Tensor) -> tuple[Tensor, Tensor]:
+        amax = tensor.abs().amax(dim=(-3, -1), keepdim=True)  # [..., 1, H, 1]
+        # Divide in the input dtype to avoid a full-size float32 copy:
+        scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
+        data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
+        return data, scale.float()
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
@@ -120,8 +201,16 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         **kwargs: object,
     ) -> None:
         self._mode = Cache.Mode.record
-        # TODO: Support different dtypes given str in kwargs:
-        self._kv_cache_dtype: KVCacheDType = Unquantized()
+        # TODO: Introduce registry to map str to quantization
+        kv_cache_dtype = kwargs.pop("kv_cache_dtype", None)
+        if kv_cache_dtype is None:
+            self._kv_cache_dtype: KVCacheDType = Unquantized()
+        elif kv_cache_dtype == "fp8_per_head":
+            self._kv_cache_dtype = Float8PerHead()
+        else:
+            raise ValueError(
+                f"Unsupported key/value cache dtype '{kv_cache_dtype}'"
+            )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
 
     @property
@@ -133,6 +222,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def is_replaying(self) -> bool:
         r"""Whether the cache is in replaying mode."""
         return self._mode == Cache.Mode.replay
+
+    @property
+    def kv_cache_dtype(self) -> KVCacheDType:
+        r"""The storage dtype of cached key/value projections."""
+        return self._kv_cache_dtype
 
     def size(self) -> int:
         r"""The size in bytes of tensor data stored in this cache."""
@@ -164,8 +258,6 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
             )
-        if isinstance(value, KVCacheEntry):
-            value = self._kv_cache_dtype.quantize(value)
         self._items[key] = value
 
     def __delitem__(self, key: Hashable) -> None:
