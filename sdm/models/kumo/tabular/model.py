@@ -64,9 +64,9 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 
 
 class KumoTabular(ICLModel):
-    r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
-    Accuracy-Efficiency Frontier for Tabular Prediction"
-    <https://huggingface.co/blog/nvidia/kumo-tabular>`__.
+    r"""The tabular foundation model from the `"NVIDIA Kumo Tabular: Pushing
+    the Accuracy-Efficiency Frontier for Tabular Prediction"
+    <https://arxiv.org/abs/2611.23001>`__ paper.
 
     .. figure:: /images/kumo_tabular.svg
         :width: 100%
@@ -110,7 +110,7 @@ class KumoTabular(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
-    paper: ClassVar[str] = "https://huggingface.co/blog/nvidia/kumo-tabular"
+    paper: ClassVar[str] = "https://arxiv.org/abs/2611.23001"
     source: ClassVar[str] = (
         "https://github.com/NVIDIA/structured-data-models/tree/main/sdm/models/kumo/tabular"
     )

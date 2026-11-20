@@ -181,6 +181,7 @@ class RowEmbedding(torch.nn.Module):
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
+                kv_cache_dtype=None if cache is None else cache.kv_cache_dtype,
                 batch_size_limit="auto",
                 out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
