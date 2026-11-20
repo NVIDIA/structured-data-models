@@ -90,10 +90,13 @@ class TILE(Processor):
             ``"qwen3-4b"``, or ``"qwen3-8b"``.
         postprocess: Optional postprocessing routine, applied independently for
             each text column.
-        batch_size: The batch size of the LLM. Adjusting the batch size can
+        batch_size: Maximum number of rows per LLM batch, or :obj:`None`
+            for no row limit. Adjusting the batch size can
             significantly improve processing speed. The optimal value depends
             on your hardware, model size, precision, and input length.
-        max_length: Maximum number of tokens per row.
+        max_batch_tokens: Maximum number of padded token positions per batch.
+            A row exceeding this budget runs alone without being truncated
+            by the budget. :obj:`None` disables the token budget.
         device: The LLM device.
         dtype: The LLM dtype.
     """
@@ -105,8 +108,8 @@ class TILE(Processor):
         model: str = "qwen3-0.6b",
         postprocess: object = None,
         *,
-        batch_size: int = 64,
-        max_length: int | None = None,
+        batch_size: int | None = 64,
+        max_batch_tokens: int | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype = torch.bfloat16,
     ) -> None:
@@ -154,7 +157,7 @@ class TILE(Processor):
         self.llm = LLM(llm)
         self.postprocess = postprocess
         self.batch_size = batch_size
-        self.max_length = max_length
+        self.max_batch_tokens = max_batch_tokens
         self.skip_first = len(self.llm.model.tokenizer("")["input_ids"]) == 0
 
     def _embed(self, table: TableTensor) -> Tensor:  # [..., R, C, D]
@@ -179,7 +182,12 @@ class TILE(Processor):
             emb,  # [R, T, D]
             offset,  # [R, T, 2]
             mask,  # [R, T]
-        ) in self.llm(text, "token", self.batch_size, self.max_length):
+        ) in self.llm(
+            text,
+            output_type="token",
+            batch_size=self.batch_size,
+            max_batch_tokens=self.max_batch_tokens,
+        ):
             emb = emb.to(out.dtype)
             start, end = span[index].unbind(dim=-1)
             mask = mask & (offset[..., 1] > offset[..., 0])

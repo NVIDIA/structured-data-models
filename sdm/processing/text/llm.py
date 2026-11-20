@@ -63,7 +63,8 @@ class LLM(torch.nn.Module):
         self,
         text: pa.Array,
         output_type: Literal["token"],
-        batch_size: int = ...,
+        batch_size: int | None = ...,
+        max_batch_tokens: int | None = ...,
         max_length: int | None = ...,
         deduplicate: bool = ...,
         device: torch.device | str | None = ...,
@@ -75,7 +76,8 @@ class LLM(torch.nn.Module):
         self,
         text: pa.Array,
         output_type: Literal["sentence"],
-        batch_size: int = ...,
+        batch_size: int | None = ...,
+        max_batch_tokens: int | None = ...,
         max_length: int | None = ...,
         deduplicate: bool = ...,
         device: torch.device | str | None = ...,
@@ -86,7 +88,8 @@ class LLM(torch.nn.Module):
         self,
         text: pa.Array,
         output_type: Literal["token", "sentence"],
-        batch_size: int = 64,
+        batch_size: int | None = 64,
+        max_batch_tokens: int | None = None,
         max_length: int | None = None,
         deduplicate: bool = False,
         device: torch.device | str | None = None,
@@ -94,6 +97,11 @@ class LLM(torch.nn.Module):
     ) -> Iterator[
         tuple[Tensor, Tensor, Tensor, Tensor] | tuple[Tensor, Tensor]
     ]:
+
+        if max_length is None:
+            max_length = self.model.max_seq_length
+        elif self.model.max_seq_length is not None:
+            max_length = min(max_length, self.model.max_seq_length)
 
         inverse: Tensor | None = None
         if deduplicate:
@@ -118,11 +126,14 @@ class LLM(torch.nn.Module):
 
         length = np.fromiter(map(len, encodings), dtype=np.int64)
         length = torch.from_numpy(length)
-        if len(text) > batch_size:
-            perm_cpu = length.argsort()
+        if max_batch_tokens is not None or (
+            batch_size is not None and len(text) > batch_size
+        ):
+            perm_cpu = length.argsort(descending=True)
         else:
             perm_cpu = torch.arange(length.numel())
         perm = perm_cpu.to(device or self.model.device)
+        lengths = length[perm_cpu].tolist()
 
         ptr: list[int] | None = None
         edge_index: Tensor | None = None
@@ -138,10 +149,17 @@ class LLM(torch.nn.Module):
                 pos, len(text)
             ).tolist()
 
-        for start in range(0, len(text), batch_size):
-            index = perm_cpu[start : start + batch_size]
+        start = 0
+        while start < len(text):
+            count = len(text) - start
+            if batch_size is not None:
+                count = min(count, batch_size)
+            if max_batch_tokens is not None:
+                count = min(count, max(1, max_batch_tokens // lengths[start]))
+            end = start + count
+            index = perm_cpu[start:end]
             batch = [encodings[i] for i in index]
-            width = int(length[index].max())
+            width = max(lengths[start:end])
 
             for encoding in batch:
                 encoding.pad(
@@ -179,7 +197,6 @@ class LLM(torch.nn.Module):
             }
             inputs["use_cache"] = False  # type: ignore
 
-            end = min(start + batch_size, len(text))
             if edge_index is not None and ptr is not None:
                 index = edge_index[:, ptr[start] : ptr[end]]
                 index[0] -= start
@@ -197,3 +214,5 @@ class LLM(torch.nn.Module):
             else:
                 emb = out["sentence_embedding"].to(device, dtype)
                 yield index, emb
+
+            start = end
