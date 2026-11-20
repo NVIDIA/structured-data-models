@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -33,6 +33,10 @@ class DynamicShapes:
     query: tuple[int, ...] = ()
 
 
+# The fields of `DynamicShapes` behind each name that callers can choose.
+_FIELDS = {"rows": ("query",)}
+
+
 def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
     r"""Declare the :class:`DynamicShapes` of a model.
 
@@ -49,7 +53,7 @@ def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
 
 def compile_predict(
     model: ICLModel,
-    dynamic_shapes: bool | DynamicShapes = True,
+    dynamic_shapes: bool | Sequence[str] = True,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
@@ -59,10 +63,10 @@ def compile_predict(
 
     Args:
         model: The model.
-        dynamic_shapes: The dimensions to mark as dynamic, which must be
-            among those that ``model`` declares. ``True`` marks all of them
-            and ``False`` none, for callers whose queries always have the
-            same shape.
+        dynamic_shapes: The dimensions to mark as dynamic, out of those
+            that ``model`` declares: ``True`` for all of them, ``False`` for
+            none (for callers whose queries always have the same shape), or
+            a sequence of names. ``"rows"`` is the only name so far.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``isolate_recompiles`` defaults to ``True``, since all models
             would otherwise share one recompile limit.
@@ -70,15 +74,20 @@ def compile_predict(
     kwargs = {"isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
     shapes = model._dynamic_shapes
-    if isinstance(dynamic_shapes, DynamicShapes):
-        if not set(dynamic_shapes.query) <= set(shapes.query):
+    if dynamic_shapes is not True:
+        names = dynamic_shapes or ()
+        if not set(names) <= set(_FIELDS):
             raise ValueError(
-                f"Expected 'dynamic_shapes' to be among {shapes} "
-                f"(got {dynamic_shapes})"
+                f"Expected 'dynamic_shapes' to be among {list(_FIELDS)} "
+                f"(got {list(names)})"
             )
-        shapes = dynamic_shapes
-    elif not dynamic_shapes:
-        shapes = DynamicShapes()
+        shapes = DynamicShapes(
+            **{
+                field: getattr(shapes, field)
+                for name in names
+                for field in _FIELDS[name]
+            }
+        )
     # Without dynamic shapes, none of the steps below are needed.
     if shapes == DynamicShapes():
         return compiled
