@@ -17,6 +17,7 @@ from sdm import (
 )
 from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
+from sdm.models.base.compile import DynamicShapes
 from sdm.testing import onlyMPS
 
 
@@ -439,11 +440,20 @@ def test_compile_predict(
     assert capture.inputs[0][0].size(-2) == 1
 
     # Without dynamic shapes, every number of rows compiles its own graph.
-    counter = CompileCounter()
-    predict = model._compile_predict(backend=counter, dynamic_shapes=False)
-    for query in (x[40:], x[41:44]):
-        predict(query)
-    assert counter.frame_count == 2
+    for shapes in (False, DynamicShapes()):
+        counter = CompileCounter()
+        predict = model._compile_predict(
+            backend=counter,
+            dynamic=False,
+            dynamic_shapes=shapes,
+        )
+        for query in (x[40:], x[41:44]):
+            predict(query)
+        assert counter.frame_count == 2
+
+    # Only the dimensions that the model declares can be dynamic.
+    with pytest.raises(ValueError, match="to be among"):
+        model._compile_predict(dynamic_shapes=DynamicShapes(query=(-1,)))
 
 
 @onlyMPS
