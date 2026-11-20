@@ -179,7 +179,7 @@ class TILE(Processor):
             emb,  # [R, T, D]
             offset,  # [R, T, 2]
             mask,  # [R, T]
-        ) in self.llm(text, self.batch_size, self.max_length):
+        ) in self.llm(text, "token", self.batch_size, self.max_length):
             emb = emb.to(out.dtype)
             start, end = span[index].unbind(dim=-1)
             mask = mask & (offset[..., 1] > offset[..., 0])

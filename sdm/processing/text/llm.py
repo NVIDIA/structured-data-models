@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Literal, Self, overload
 
 import numpy as np
 import pyarrow as pa
@@ -58,15 +58,53 @@ class LLM(torch.nn.Module):
     def __deepcopy__(self, memo: dict[int, object]) -> Self:
         return self
 
+    @overload
     def forward(
         self,
         text: pa.Array,
+        output_type: Literal["token"],
+        batch_size: int = ...,
+        max_length: int | None = ...,
+        deduplicate: bool = ...,
+        device: torch.device | str | None = ...,
+        dtype: torch.dtype | None = ...,
+    ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
+
+    @overload
+    def forward(
+        self,
+        text: pa.Array,
+        output_type: Literal["sentence"],
+        batch_size: int = ...,
+        max_length: int | None = ...,
+        deduplicate: bool = ...,
+        device: torch.device | str | None = ...,
+        dtype: torch.dtype | None = ...,
+    ) -> Iterator[tuple[Tensor, Tensor]]: ...
+
+    def forward(
+        self,
+        text: pa.Array,
+        output_type: Literal["token", "sentence"],
         batch_size: int = 64,
         max_length: int | None = None,
         deduplicate: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Iterator[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> Iterator[
+        tuple[Tensor, Tensor, Tensor, Tensor] | tuple[Tensor, Tensor]
+    ]:
+
+        inverse: Tensor | None = None
+        if deduplicate:
+            text = text.dictionary_encode()
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The given NumPy array is not writable",
+                )
+                inverse = torch.from_numpy(text.indices.to_numpy())
+            text = text.dictionary
 
         inverse: Tensor | None = None
         if deduplicate:
@@ -134,11 +172,12 @@ class LLM(torch.nn.Module):
                     [e.attention_mask for e in batch],
                     dtype=np.bool,
                 ),
-                "offset_mapping": np.asarray(
+            }
+            if output_type == "token":
+                inputs["offset_mapping"] = np.asarray(
                     [e.offsets for e in batch],
                     dtype=np.int64,
-                ),
-            }
+                )
             if "token_type_ids" in self.model.tokenizer.model_input_names:
                 inputs["token_type_ids"] = np.asarray(
                     [e.type_ids for e in batch],
@@ -151,13 +190,6 @@ class LLM(torch.nn.Module):
             }
             inputs["use_cache"] = False  # type: ignore
 
-            with torch.inference_mode():
-                emb = self.model(inputs)["token_embeddings"]
-
-            emb = emb.to(device, dtype)
-            offset = inputs["offset_mapping"].to(emb.device)
-            attn_mask = inputs["attention_mask"].to(emb.device)
-
             end = min(start + batch_size, len(text))
             if edge_index is not None and ptr is not None:
                 index = edge_index[:, ptr[start] : ptr[end]]
@@ -165,4 +197,14 @@ class LLM(torch.nn.Module):
             else:
                 index = perm[start:end]
 
-            yield index, emb, offset, attn_mask
+            with torch.inference_mode():
+                out = self.model(inputs)
+
+            if output_type == "token":
+                emb = out["token_embeddings"].to(device, dtype)
+                offset = inputs["offset_mapping"].to(emb.device)
+                attn_mask = inputs["attention_mask"].to(emb.device)
+                yield index, emb, offset, attn_mask
+            else:
+                emb = out["sentence_embedding"].to(device, dtype)
+                yield index, emb
