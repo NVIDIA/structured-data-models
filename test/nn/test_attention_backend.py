@@ -8,7 +8,12 @@ from torch import Tensor
 
 from sdm.cache import Float8PerHead, KVCacheEntry
 from sdm.nn import SDPA
-from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
+from sdm.nn.attention_backend import (
+    AttentionBackend,
+    FP8AttentionBackend,
+    TorchAttentionBackend,
+)
+from sdm.testing import onlyCUDA
 
 
 @pytest.mark.parametrize("num_key_value_heads", [4, 2])
@@ -102,3 +107,37 @@ def test_sdpa_backend() -> None:
     dequantized = key_value.dequantize(query.dtype)
     expected = torch_sdpa(query, dequantized.key, dequantized.value)
     torch.testing.assert_close(torch_sdpa(query, key_value), expected)
+
+
+@onlyCUDA
+def test_fp8_attention_backend() -> None:
+    pytest.importorskip("triton")
+    if torch.cuda.get_device_capability() not in {
+        (8, 9),
+        (9, 0),
+        (12, 0),
+        (12, 1),
+    }:
+        pytest.skip("FP8 attention requires an Ada, Hopper or Blackwell GPU")
+    query = torch.randn(2, 129, 8, 64, device="cuda", dtype=torch.float16)
+    key = torch.randn(2, 513, 2, 64, device="cuda", dtype=torch.float16)
+    value = torch.randn_like(key)
+    key_value = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
+    options = {
+        "attn_mask": None,
+        "seqused_key_value": None,
+        "is_causal": False,
+        "dropout_p": 0.0,
+    }
+    backend = FP8AttentionBackend()
+    unquantized = KVCacheEntry(key=key, value=value)
+    assert not backend.supports(query, unquantized, **options)
+    assert backend.supports(query, key_value, **options)
+
+    with torch.inference_mode():
+        out = backend.forward(query, key_value, **options, scale=None)
+        expected = TorchAttentionBackend().forward(
+            query, key_value.dequantize(query.dtype), **options, scale=None
+        )
+    error = (out.float() - expected.float()).square().mean().sqrt()
+    assert error / expected.float().square().mean().sqrt() < 0.08
