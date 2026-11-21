@@ -36,12 +36,7 @@ def quantize(x: Tensor) -> tuple[Tensor, Tensor]:
 
 
 @pytest.mark.parametrize(
-    ("batch", "queries", "context"),
-    [
-        (2, 129, 513),
-        (1, 129, 8192),
-        (8193, 1, 16),  # Over 65,535 batch heads.
-    ],
+    ("batch", "queries", "context"), [(2, 129, 513), (1, 129, 8192)]
 )
 def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
     with torch.inference_mode():
@@ -159,6 +154,40 @@ def test_periodic_attention_matches_cached_query_slice(
         ).sqrt()
         assert relative_rms < 0.08
         assert cached.isfinite().all()
+
+
+def test_launch_over_grid_limit() -> None:
+    # 8,193 batch elements and 8 heads exceed CUDA's limit of 65,535
+    # programs, so the last 2 batch elements run in a second launch.
+    with torch.inference_mode():
+        q = torch.randn(8193, 8, 1, 64, device="cuda", dtype=torch.float16)
+        k = torch.randn(8193, 8, 16, 64, device="cuda", dtype=torch.float16)
+        q8, qs = quantize(q)
+        k8, ks = quantize(k)
+        v8, vs = quantize(torch.randn_like(k))
+        v8 = v8.transpose(-1, -2).contiguous()
+        out = attn_fwd__qk_e4m3__pv_e4m3__scale_head(
+            q=q8,
+            k=k8,
+            v=v8,
+            qs=qs,
+            ks=ks,
+            vs=vs,
+            dtype=q.dtype,
+            query_tile=128,
+        )
+        for rows in (slice(None, 2), slice(-2, None)):
+            expected = attn_fwd__qk_e4m3__pv_e4m3__scale_head(
+                q=q8[rows],
+                k=k8[rows],
+                v=v8[rows],
+                qs=qs[rows],
+                ks=ks[rows],
+                vs=vs[rows],
+                dtype=q.dtype,
+                query_tile=128,
+            )
+            torch.testing.assert_close(out[rows], expected, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize(("query_heads", "kv_heads"), [(3, 2), (1, 2), (2, 0)])
