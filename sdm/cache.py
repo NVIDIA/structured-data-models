@@ -215,7 +215,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
         # The dimensions of entries that follow the fitted data; see `_record`.
-        self._dims: dict[Hashable, Mapping[int, int]] = {}
+        self._dims: dict[Hashable, Mapping[int | None, int]] = {}
         self._dynamic = False
 
     @property
@@ -262,7 +262,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         self,
         key: Hashable,
         value: KVCacheEntry,
-        dims: Mapping[int, int],
+        dims: Mapping[int | None, int],
     ) -> None:
         r"""Store ``value`` and declare its dimensions that follow the table.
 
@@ -278,7 +278,9 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         self[key] = value
         self._dims[key] = dims
 
-    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[int, int]]]:
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
         # Every fitted tensor with its declared dimensions; see `_record`.
         for key, value in self.items():
             dims = self._dims.get(key)
@@ -308,7 +310,9 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             return
         for tensor, follows in self._dynamic_dims():
             for table_dim, dim in follows.items():
-                if table_dim in dims:
+                # `None` stands for a dimension that follows the fitted data
+                # itself, such as a list of categories.
+                if table_dim is None or table_dim in dims:
                     _mark_dynamic(tensor, dim)
         self._dynamic = True
 

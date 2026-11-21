@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 import pytest
@@ -419,12 +419,18 @@ def test_compile_predict(
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # One graph serves fits on 40 and 30 context rows, and queries of any
-    # number of rows, including one and none.
-    for rows in (40, 30):
+    # One graph serves fits on 40 and 30 context rows with three and two
+    # categories, and queries of any number of rows, including one and none.
+    two_categories = cast(TableTensor, x).replace_blocks(
+        categorical=CategoricalTensor(
+            code=code.remainder(2),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    for context in (x[:40], two_categories[:30]):
         model.fit(
-            x[:rows],
-            y[:rows],
+            context,
+            y[: context.size(-2)],
             num_estimators=4,
             # The seed keeps the order of the columns.
             generator=torch.Generator().manual_seed(0),
@@ -476,6 +482,47 @@ def test_compile_predict_query_categories() -> None:
     # whichever of the categories their rows contain.
     for colors in (["a", "b", "c", "a"], ["b"], ["c", "a", "c"]):
         query = table(colors)
+        torch.testing.assert_close(
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
+def test_compile_predict_category_counts() -> None:
+    categories = [str(i) for i in range(60)]
+
+    def table(rows: int) -> TableTensor:
+        df = pd.DataFrame(
+            {
+                "x": torch.randn(rows).numpy(),
+                "category": pd.Categorical(
+                    categories[:rows],
+                    categories=categories,
+                ),
+            }
+        )
+        return TableTensor.from_pandas(
+            df,
+            stypes={"x": "numerical", "category": "categorical"},
+        )
+
+    model = _build("regression", "small")
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter, fullgraph=True)
+    # One graph serves fits that count 55 and 52 categories, more than the
+    # 50 above which the default recipe adds a count column.
+    for rows in (55, 52):
+        model.fit(
+            table(rows),
+            torch.randn(rows, 1),
+            # The seed keeps the order of the columns.
+            generator=torch.Generator().manual_seed(0),
+        )
+        query = table(8)
         torch.testing.assert_close(
             actual=predict(query).numerical,
             expected=model.predict(query).numerical,
