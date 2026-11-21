@@ -80,9 +80,11 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    # Marks on fitted state take effect only without static parameter shapes.
+    # Dynamo ignores marks on buffers otherwise, and PyTorch 2.14.1 fails on
+    # CUDA when the copies of the cache to the device join the graph.
     compiled = torch._dynamo.config.patch(
         force_parameter_static_shapes=False,
+        inline_single_use_invoke_subgraph=False,
     )(compiled)
     shapes = dynamic_shapes or model._dynamic_shapes
     # The lists of categories are dynamic in any case, as in the query.
