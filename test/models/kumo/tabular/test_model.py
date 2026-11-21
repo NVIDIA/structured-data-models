@@ -379,8 +379,10 @@ def test_estimator_batching_many_classes(
 
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("estimator_batch_size", [1, 2])
 def test_compile_predict(
     task: Literal["classification", "regression"],
+    estimator_batch_size: int,
 ) -> None:
     model = _build(task, "small")
     code = torch.arange(48, dtype=torch.int32).remainder(3).unsqueeze(-1)
@@ -416,7 +418,12 @@ def test_compile_predict(
             columns={Stype.categorical: ("target",)},
             categorical=CategoricalTensor.from_tensor(code[:40]),
         )
-    model.fit(x[:40], y, num_estimators=4)
+    model.fit(
+        x[:40],
+        y,
+        num_estimators=4,
+        estimator_batch_size=estimator_batch_size,
+    )
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)

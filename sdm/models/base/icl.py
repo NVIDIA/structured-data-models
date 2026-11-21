@@ -310,7 +310,9 @@ class ICLModel(Model):
         )
         for i, batch in enumerate(batches):
             with inference_mode("no_grad"):
-                context = _stack_context(contexts[batch])
+                context = _stack_context(
+                    contexts[batch], self.supported_feature_stypes
+                )
                 categorical_mask = _categorical_mask(contexts[batch])
                 batch_cache = Cache(
                     x_schemas=tuple(
@@ -682,11 +684,15 @@ class ICLModel(Model):
         # Stacking inside the autograd region keeps callback-captured leaves
         # attached to the graph.
         with inference_mode("grad" if requires_grad else "inference"):
-            context = None if contexts is None else _stack_context(contexts)
+            context = (
+                None
+                if contexts is None
+                else _stack_context(contexts, self.supported_feature_stypes)
+            )
             if categorical_mask is None:
                 assert contexts is not None
                 categorical_mask = _categorical_mask(contexts)
-            query = _stack_query(queries)
+            query = _stack_query(queries, self.supported_feature_stypes)
             out = self._forward(
                 x_context=None if context is None else context.x,
                 y_context=None if context is None else context.y,
@@ -793,10 +799,21 @@ class ICLModel(Model):
                 )
 
 
-def _stack(tables: Sequence[TableTensor]) -> TableTensor:
+def _stack(
+    tables: Sequence[TableTensor],
+    stypes: Iterable[Stype] | None = None,
+) -> TableTensor:
     ref = tables[0]
     if len(tables) == 1:
         return ref
+    if stypes is not None:
+        # The model reads only the columns of `stypes`. Stacking strings would
+        # copy them all, and needs the number of characters, which a compiled
+        # graph only learns from the data. `torch.compile` can't pass a
+        # frozenset like `supported_feature_stypes` to `select_stypes`.
+        stypes = tuple(stypes)
+        tables = [table.select_stypes(stypes) for table in tables]
+        ref = tables[0]
     # torch.stack aligns columns by name, which would undo per-estimator column
     # shuffles; renaming to the first member's names stacks blocks by position.
     columns = cast(Mapping[StypeLike, Sequence[str]], ref.columns)
@@ -810,27 +827,35 @@ def _stack(tables: Sequence[TableTensor]) -> TableTensor:
     return cast(TableTensor, torch.stack(renamed))
 
 
-def _stack_context(members: Sequence[MemberContext]) -> MemberContext:
+def _stack_context(
+    members: Sequence[MemberContext],
+    stypes: Iterable[Stype],
+) -> MemberContext:
     if len(members) == 1:
         return members[0]
     return MemberContext(
-        x=_stack([member.x for member in members]),
+        x=_stack([member.x for member in members], stypes),
         y=_stack([member.y for member in members]),
         x_context_only=None
         if members[0].x_context_only is None
         else _stack(
-            [cast(TableTensor, member.x_context_only) for member in members]
+            [cast(TableTensor, member.x_context_only) for member in members],
+            stypes,
         ),
         related_tables=None,
         input_stypes=members[0].input_stypes,
     )
 
 
-def _stack_query(members: Sequence[MemberQuery]) -> MemberQuery:
+def _stack_query(
+    members: Sequence[MemberQuery],
+    stypes: Iterable[Stype],
+) -> MemberQuery:
     if len(members) == 1:
         return members[0]
     return MemberQuery(
-        x=_stack([member.x for member in members]), related_tables=None
+        x=_stack([member.x for member in members], stypes),
+        related_tables=None,
     )
 
 
