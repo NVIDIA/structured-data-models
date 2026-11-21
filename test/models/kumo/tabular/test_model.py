@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Literal
+from typing import Literal, cast
 
 import pytest
 import torch
@@ -419,12 +419,18 @@ def test_compile_predict(
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # One graph serves fits on 40 and 30 context rows, and queries of any
-    # number of rows, including one and none.
-    for rows in (40, 30):
+    # One graph serves fits on 40 and 30 context rows with three and two
+    # categories, and queries of any number of rows, including one and none.
+    two_categories = cast(TableTensor, x).replace_blocks(
+        categorical=CategoricalTensor(
+            code=code.remainder(2),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    for context in (x[:40], two_categories[:30]):
         model.fit(
-            x[:rows],
-            y[:rows],
+            context,
+            y[: context.size(-2)],
             num_estimators=4,
             # The seed keeps the order of the columns.
             generator=torch.Generator().manual_seed(0),

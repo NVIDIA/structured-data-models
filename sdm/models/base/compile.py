@@ -85,7 +85,9 @@ def compile_predict(
         force_parameter_static_shapes=False,
     )(compiled)
     shapes = dynamic_shapes or model._dynamic_shapes
-    names = {name for name, dynamic in asdict(shapes).items() if dynamic}
+    # The lists of categories are dynamic in any case, as in the query.
+    names = {"categories"}
+    names |= {name for name, dynamic in asdict(shapes).items() if dynamic}
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
