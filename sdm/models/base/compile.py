@@ -56,8 +56,8 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares, with any lists of categories. A query that is
-    empty or holds an empty list of categories is predicted without the graph.
+    that ``model`` declares, with any lists of categories. An empty query is
+    predicted without the graph.
 
     Args:
         model: The model.
@@ -86,10 +86,7 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
-        if rows == 0 or (
-            isinstance(x, TableTensor)
-            and any(c.size(0) == 0 for c in x.categorical.categories)
-        ):
+        if rows == 0:
             return model.predict(x, *args, **kwargs)
         # Operations on the rows still specialize on a single row, so it is
         # repeated if the rows are dynamic, unless callbacks see the rows.

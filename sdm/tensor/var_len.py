@@ -246,6 +246,8 @@ class VarLenTensor(Tensor):
             dtype=data.dtype,
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
+            # `torch.compile` cannot trace an empty tensor without storage.
+            storage_size=1,
         )
         out._data = data
         out._offset = offset
