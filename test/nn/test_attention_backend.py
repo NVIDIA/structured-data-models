@@ -112,12 +112,8 @@ def test_sdpa_backend() -> None:
 @onlyCUDA
 def test_fp8_attention_backend() -> None:
     pytest.importorskip("triton")
-    if torch.cuda.get_device_capability() not in {
-        (8, 9),
-        (9, 0),
-        (12, 0),
-        (12, 1),
-    }:
+    capability = torch.cuda.get_device_capability()
+    if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
         pytest.skip("FP8 attention requires an Ada, Hopper or Blackwell GPU")
     query = torch.randn(2, 129, 8, 64, device="cuda", dtype=torch.float16)
     key = torch.randn(2, 513, 2, 64, device="cuda", dtype=torch.float16)
