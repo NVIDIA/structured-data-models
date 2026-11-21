@@ -4,18 +4,17 @@
 """Attention modules for structured tensor models."""
 
 import math
-from typing import Any, Literal, overload
+from typing import Any, Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm._kernels.flash_attention import flash_attention
-from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheDType, KVCacheEntry
 from sdm.nn import QueryScaling
+from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
 
 class SDPA(torch.nn.Module):
@@ -38,9 +37,11 @@ class SDPA(torch.nn.Module):
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
         dropout: Attention dropout probability.
-        backend: ``"sdpa"`` (default) or ``"fa3"`` for FlashAttention-3 on
-            Hopper with FP16/BF16 inputs. General masks, causal attention,
-            and attention dropout use SDPA with either setting.
+        backend: The attention backend. ``None`` uses
+            :class:`~sdm.nn.attention_backend.TorchAttentionBackend`.
+            Calls the backend declines are retried with dequantized
+            key/value projections, then fall back to
+            :class:`~sdm.nn.attention_backend.TorchAttentionBackend`.
     """
 
     def __init__(
@@ -50,7 +51,7 @@ class SDPA(torch.nn.Module):
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
-        backend: Literal["sdpa", "fa3"] = "sdpa",
+        backend: AttentionBackend | None = None,
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -66,13 +67,13 @@ class SDPA(torch.nn.Module):
         self.query_scaling = query_scaling
         self.scale = scale
         self.dropout = dropout
-        self.backend = backend
+        self.backend = TorchAttentionBackend() if backend is None else backend
 
     def forward(
         self,
         query: Tensor,  # [..., Q, Hq, C]
-        key: Tensor,  # [..., KV, Hkv, C]
-        value: Tensor,  # [..., KV, Hkv, C]
+        key: Tensor | KVCacheEntry,  # [..., KV, Hkv, C]
+        value: Tensor | None = None,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
@@ -85,10 +86,12 @@ class SDPA(torch.nn.Module):
                 ``Q`` is the query sequence length, ``Hq`` is the number of
                 query attention heads (``num_query_heads``), and ``C`` is the
                 channels per head.
-            key: The key tensor with shape ``[..., KV, Hkv, C]``.
+            key: The key tensor with shape ``[..., KV, Hkv, C]``, or
+                key/value projections as a :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, C]``.
+            value: The value tensor with shape ``[..., KV, Hkv, C]``, or
+                ``None`` if ``key`` is a :class:`~sdm.cache.KVCacheEntry`.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
@@ -101,6 +104,13 @@ class SDPA(torch.nn.Module):
         """
         if query.numel() == 0:
             return query
+
+        key_value = (
+            key
+            if isinstance(key, KVCacheEntry)
+            else KVCacheEntry(key=key, value=cast(Tensor, value))
+        )
+        key, value = key_value.key, key_value.value
 
         if attn_mask is not None and seqused_key_value is not None:
             raise ValueError(
@@ -156,6 +166,7 @@ class SDPA(torch.nn.Module):
 
         if (  # Softmax over a single key is one, so skip SDPA:
             key_size[0] == 1
+            and key_value.kv_cache_dtype is None
             and (attn_mask is None or attn_mask.dtype == torch.bool)
             and seqused_key_value is None
             and not torch.is_grad_enabled()
@@ -173,56 +184,39 @@ class SDPA(torch.nn.Module):
             return out
 
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
-        key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
-        value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
-
-        if (
-            self.backend == "fa3"
-            and attn_mask is None
-            and not is_causal
-            and (not self.training or self.dropout == 0.0)
-        ):
-            lengths = (
-                None
-                if seqused_key_value is None
-                else seqused_key_value.expand(batch_shape).reshape(-1)
+        key_value = key_value._apply_tensor(
+            lambda t: t.expand(batch_shape + t.size()[-3:]).reshape(
+                -1, *t.size()[-3:]
             )
-            out = flash_attention(
-                query, key, value, lengths=lengths, scale=self.scale
-            )
-            return out.view(batch_shape + out.size()[-3:])
-
+        )
         if attn_mask is not None:
             attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])
             attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-3:])
-
         if seqused_key_value is not None:
-            seqused_key_value = seqused_key_value.expand(batch_shape)
-            seqused_key_value = seqused_key_value.reshape(-1).unsqueeze(-1)
-            key_index = torch.arange(key.size(-3), device=key.device)
-            attn_mask = key_index.unsqueeze(0) < seqused_key_value
-            attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
-            attn_mask = attn_mask.unsqueeze(-3)
+            seqused_key_value = seqused_key_value.expand(batch_shape).reshape(
+                -1
+            )
 
-        enable_gqa = False
-        if query.size(-2) != key.size(-2):
-            enable_gqa = True
+        options: dict[str, Any] = {
+            "attn_mask": attn_mask,  # [B, Hq, Q, KV]
+            "seqused_key_value": seqused_key_value,  # [B]
+            "is_causal": is_causal,
+            "dropout_p": self.dropout if self.training else 0.0,
+            "scale": self.scale,
+        }
+        backend = self.backend
+        if not backend.supports(query, key_value, **options):
+            device = query.device.type
+            dtype = (
+                torch.get_autocast_dtype(device)
+                if torch.is_autocast_enabled(device)
+                else query.dtype
+            )
+            key_value = key_value.dequantize(dtype)
+            if not backend.supports(query, key_value, **options):
+                backend = TorchAttentionBackend()
 
-        query = query.transpose(-3, -2)  # [B, Hq, Q, C]
-        key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
-        value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
-
-        out = sdpa(
-            query,
-            key,
-            value,
-            attn_mask,  # [B, Hq, Q, KV]
-            self.dropout if self.training else 0.0,
-            enable_gqa,
-            is_causal,
-            self.scale,
-        )  # [B, Q, Hq, C]
-
+        out = backend.forward(query, key_value, **options)
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
 
@@ -415,9 +409,7 @@ class Attention(torch.nn.Module):
                 if self.qkv_lin.bias is not None
                 else None,
             )
-            # TODO: Attention backend should decide whether to dequantize.
-            key_value = key_value.dequantize(query.dtype)
-            if (
+            if key_value.kv_cache_dtype is None and (
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
             ):
@@ -426,8 +418,6 @@ class Attention(torch.nn.Module):
                     f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
                     f"the query has dtype '{query.dtype}'"
                 )
-            key = key_value.key
-            value = key_value.value
         elif key_value is None:
             query, key, value = self.qkv_lin(query).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -472,15 +462,13 @@ class Attention(torch.nn.Module):
             if kv_cache_dtype is not None:
                 entry = kv_cache_dtype.quantize(entry)
             entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
-            # TODO: Attention backend should decide whether to dequantize.
-            stored = entry.dequantize(value.dtype)
-            key, value = stored.key, stored.value
-            del stored
+            key_value = entry
+        elif not isinstance(key_value, KVCacheEntry):
+            key_value = KVCacheEntry(key=key, value=value)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
-            key=key,  # [..., KV, Hkv, C // Hq]
-            value=value,  # [..., KV, Hkv, C // Hq]
+            key=key_value,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
             attn_mask=attn_mask,  # [..., Hq, Q, KV]
             is_causal=is_causal,

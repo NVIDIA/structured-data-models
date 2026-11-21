@@ -6,6 +6,7 @@ import abc
 import torch
 from torch import Tensor
 
+from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm.cache import KVCacheEntry
 
@@ -114,5 +115,50 @@ class TorchAttentionBackend(AttentionBackend):
             dropout_p=dropout_p,
             enable_gqa=enable_gqa,
             is_causal=is_causal,
+            scale=scale,
+        )
+
+
+class FlashAttention3Backend(AttentionBackend):
+    r"""Attention backend using FlashAttention-3 on Hopper GPUs.
+
+    It requires FP16/BF16 inputs and declines general masks, causal
+    attention, and attention dropout.
+    """
+
+    def supports(  # noqa: D102
+        self,
+        query: Tensor,
+        key_value: KVCacheEntry,
+        *,
+        attn_mask: Tensor | None,
+        seqused_key_value: Tensor | None,
+        is_causal: bool,
+        dropout_p: float,
+        scale: float | None,
+    ) -> bool:
+        return (
+            key_value.kv_cache_dtype is None
+            and attn_mask is None
+            and not is_causal
+            and dropout_p == 0.0
+        )
+
+    def forward(  # noqa: D102
+        self,
+        query: Tensor,  # [B, Q, Hq, C]
+        key_value: KVCacheEntry,  # [B, KV, Hkv, C]
+        *,
+        attn_mask: Tensor | None,
+        seqused_key_value: Tensor | None,  # [B]
+        is_causal: bool,
+        dropout_p: float,
+        scale: float | None,
+    ) -> Tensor:  # [B, Q, Hq, C]
+        return flash_attention(
+            query=query,
+            key=key_value.key,
+            value=key_value.value,
+            lengths=seqused_key_value,
             scale=scale,
         )
