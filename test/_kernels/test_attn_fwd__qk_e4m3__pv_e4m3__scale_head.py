@@ -36,7 +36,12 @@ def quantize(x: Tensor) -> tuple[Tensor, Tensor]:
 
 
 @pytest.mark.parametrize(
-    ("batch", "queries", "context"), [(2, 129, 513), (1, 129, 8192)]
+    ("batch", "queries", "context"),
+    [
+        (2, 129, 513),
+        (1, 129, 8192),
+        (8193, 1, 16),  # Over 65,535 batch heads.
+    ],
 )
 def test_fp8_partial_tiles(batch: int, queries: int, context: int) -> None:
     with torch.inference_mode():

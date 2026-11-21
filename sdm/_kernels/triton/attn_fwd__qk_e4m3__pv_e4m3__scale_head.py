@@ -167,28 +167,32 @@ def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
     n = k.size(-2)
     # Q/K are [batch, heads, sequence, channels]; V is transposed.
     output = q.new_empty(q.shape, dtype=dtype)
-    grid = (triton.cdiv(m, query_tile), b * h)  # ty: ignore[invalid-argument-type]
+    # CUDA grids allow at most 65,535 programs along the batch-head axis.
+    batch_tile = 65_535 // h
     with torch.cuda.device(q.device):
-        cast(Any, _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel)[grid](
-            q,
-            k,
-            v,
-            qs,
-            ks,
-            vs,
-            output,
-            n_q_heads=h,
-            n_kv_heads=k.size(1),
-            n_queries=m,
-            n_context=n,
-            head_dim=d,
-            attn_scale=d**-0.5 if scale is None else scale,
-            block_q=query_tile,
-            block_kv=context_tile,
-            acc_flush_tiles=accumulation_chunk,
-            scale_weights_in_exp=scale_weights_in_exp,
-            fuse_score_scale=fuse_score_scale,
-            num_warps=warps,
-            num_stages=stages,
-        )
+        for start in range(0, b, batch_tile):
+            batch = slice(start, start + batch_tile)
+            grid = (triton.cdiv(m, query_tile), q[batch].size(0) * h)  # ty: ignore[invalid-argument-type]
+            cast(Any, _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel)[grid](
+                q[batch],
+                k[batch],
+                v[batch],
+                qs[batch],
+                ks[batch],
+                vs[batch],
+                output[batch],
+                n_q_heads=h,
+                n_kv_heads=k.size(1),
+                n_queries=m,
+                n_context=n,
+                head_dim=d,
+                attn_scale=d**-0.5 if scale is None else scale,
+                block_q=query_tile,
+                block_kv=context_tile,
+                acc_flush_tiles=accumulation_chunk,
+                scale_weights_in_exp=scale_weights_in_exp,
+                fuse_score_scale=fuse_score_scale,
+                num_warps=warps,
+                num_stages=stages,
+            )
     return output
