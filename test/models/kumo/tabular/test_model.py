@@ -439,7 +439,7 @@ def test_compile_predict(
     # compile 3 graphs without dynamic rows, and 1 graph with them.
     for shapes, graphs in (
         (DynamicShapes(), 3),
-        (DynamicShapes(query=(0,)), 1),
+        (DynamicShapes(rows=True), 1),
     ):
         counter = CompileCounter()
         predict = model._compile_predict(
