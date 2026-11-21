@@ -303,8 +303,15 @@ class ICLModel(Model):
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
         )
+        stypes = contexts[0].input_stypes
         cache = Cache(
             recipe_execution=recipe_execution,
+            # Compiled predictions run queries of only these numerical columns
+            # without names, if the recipe allows it.
+            numerical_columns=tuple(stypes)
+            if set(stypes.values()) == {Stype.numerical}
+            and recipe_execution._accepts_unnamed()
+            else None,
             kwargs=kwargs,
             num_batches=len(batches),
         )
@@ -335,8 +342,10 @@ class ICLModel(Model):
                         else None
                     ),
                     class_values=class_values[batch],
-                    categorical_mask=categorical_mask,
                     kv_cache_dtype=kv_cache_dtype,
+                )
+                batch_cache.record(
+                    "categorical_mask", categorical_mask, columns=-1
                 )
                 self._forward(
                     x_context=context.x,

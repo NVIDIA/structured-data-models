@@ -13,6 +13,7 @@ import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, TableTensor
+from sdm.tensor import var_len
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -33,6 +34,11 @@ class DynamicShapes:
     #: :meth:`~sdm.cache.Cache.record`. Dynamic rows require that the model
     #: and its recipe predict every query row independently of the other rows.
     rows: bool = False
+    #: Whether the number of columns is dynamic after a fit on numerical
+    #: features only: the query columns, and the columns of the fitted state
+    #: that declares them. Such queries run without column names, which a
+    #: graph would hold as constants.
+    columns: bool = False
 
 
 def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
@@ -59,9 +65,12 @@ def compile_predict(
     One graph serves queries and fits of any size along the
     :class:`DynamicShapes` that ``model`` declares, and any categories,
     except that a fitted size of zero or one compiles a graph of its own.
-    Uncompiled ``model.predict`` serves a query without rows, and a query
-    with a categorical column that has no categories, neither in the query
-    nor in the fitted table.
+    The columns are dynamic only if the recipe keeps every column, such as a
+    fit with up to 500 columns for :class:`~sdm.models.KumoTabular`.
+    Uncompiled ``model.predict`` serves a query without rows, a query with
+    a categorical column that has no categories, neither in the query nor
+    in the fitted table, and, with dynamic columns after a fit on numerical
+    features only, a query named otherwise or with callbacks.
 
     Args:
         model: The model.
@@ -79,18 +88,27 @@ def compile_predict(
             limit.
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
-    compiled = torch.compile(model.predict, **kwargs)
+
+    def predict_unnamed(x: Tensor, *args: Any, **kwargs: Any) -> TableTensor:
+        # Inside the graph, the empty blocks of the table keep zero columns.
+        x = TableTensor(columns={"numerical": None}, numerical=x)
+        return model.predict(x, *args, **kwargs)
+
     # Dynamo ignores marks on buffers otherwise, and PyTorch 2.14.1 fails on
     # CUDA when the copies of the cache to the device join the graph.
-    compiled = torch._dynamo.config.patch(
+    dynamo_config = torch._dynamo.config.patch(
         force_parameter_static_shapes=False,
         inline_single_use_invoke_subgraph=False,
-    )(compiled)
+    )
     # Inductor would order the kernels for the sizes of the first compile,
     # which costs time and memory after a fit of another size.
-    compiled = torch._inductor.config.patch(
+    inductor_config = torch._inductor.config.patch(
         reorder_for_peak_memory=False,
-    )(compiled)
+    )
+    compiled, compiled_unnamed = (
+        inductor_config(dynamo_config(torch.compile(fn, **kwargs)))
+        for fn in (model.predict, predict_unnamed)
+    )
     shapes = dynamic_shapes or model._dynamic_shapes
     # The lists of categories are dynamic in any case, as in the query.
     names = {"categories"}
@@ -112,7 +130,20 @@ def compile_predict(
         cache = model._cache
         if rows == 0 or query is None or cache is None:
             return model.predict(x, *args, **kwargs)
-        cache._mark_dynamic(names)
+        fitted = cast(
+            "tuple[str, ...] | None",
+            cache.get("numerical_columns") if shapes.columns else None,
+        )
+        if fitted is not None:
+            # Column names are constants of a graph, so a query named as in
+            # `fit` runs without them. Callbacks may read the names.
+            query = None if kwargs.get("callbacks") else _numerical(x, fitted)
+            if query is None:
+                return model.predict(x, *args, **kwargs)
+            dims.add(x.dim() - 1)
+        cache._mark_dynamic(
+            names if fitted is not None else names - {"columns"}
+        )
         # Without a copy, queries that are different slices of one table, such
         # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
         query = (
@@ -121,7 +152,9 @@ def compile_predict(
             else query.clone(memory_format=torch.contiguous_format)
         )
         _mark_dynamic(query, dims)
-        out = compiled(query, *args, **kwargs)
+        out = (compiled if fitted is None else compiled_unnamed)(
+            query, *args, **kwargs
+        )
         return out[..., :1, :] if repeat else out
 
     return predict
@@ -162,9 +195,20 @@ def _categories(
     )
 
 
+def _numerical(x: Tensor, columns: tuple[str, ...]) -> Tensor | None:
+    # The numerical features of `x` if it holds only these columns. A tensor
+    # has the names of `TableTensor.from_tensor`.
+    if isinstance(x, TableTensor):
+        if x.numerical_columns == columns and x.size(-1) == len(columns):
+            return x.numerical
+        return None
+    names = tuple(map(str, range(x.size(-1))))
+    return x if x.is_floating_point() and names == columns else None
+
+
 def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:
     if isinstance(tensor, TableTensor):
         tensor._mark_dynamic(dims)
         return
     for dim in dims:
-        torch._dynamo.mark_dynamic(tensor, dim)
+        var_len._mark_dynamic(tensor, dim)

@@ -21,6 +21,7 @@ class Detrend(SeriesEnsembleProcessor, EnsembleInvertibleMixin):
 
     handles_stypes = (Stype.numerical,)
     requires_fit = True
+    _accepts_unnamed = False
 
     def __init__(self, threshold: float | None = None) -> None:
         super().__init__()

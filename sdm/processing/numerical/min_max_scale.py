@@ -18,6 +18,7 @@ class MinMaxScale(Processor, InvertibleMixin):
 
     handles_stypes = (Stype.numerical,)
     requires_fit = True
+    _accepts_unnamed = False
 
     minimum: Tensor
     scale: Tensor

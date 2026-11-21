@@ -22,6 +22,7 @@ class ClipQuantiles(Processor):
 
     handles_stypes = (Stype.numerical,)
     requires_fit = True
+    _accepts_unnamed = False
 
     lower_bound: Tensor
     upper_bound: Tensor

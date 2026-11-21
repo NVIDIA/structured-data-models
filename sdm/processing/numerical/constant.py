@@ -94,7 +94,8 @@ class DropConstantColumns(EnsembleProcessor):
     ) -> None:
         self._kept_indices = kept_indices
         self._kept_index = None
-        if len(set(kept_indices)) == 1:
+        self._accepts_unnamed = len(set(kept_indices)) == 1
+        if self._accepts_unnamed:
             self._kept_index = torch.tensor(
                 kept_indices[0], dtype=torch.long, device=device
             )
@@ -137,13 +138,9 @@ class DropConstantColumns(EnsembleProcessor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if table.numerical_columns is None:
-            if self._kept_index is None:
-                raise NotImplementedError(
-                    f"{self.__class__.__name__!r} selects unnamed columns "
-                    "only after a fit in which all members keep the same"
-                )
+            index = cast(Tensor, self._kept_index)
             return table.replace_blocks(
-                numerical=table.numerical.index_select(-1, self._kept_index)
+                numerical=table.numerical.index_select(-1, index)
             )
         return self._select_columns(table, self._kept_indices[0])
 

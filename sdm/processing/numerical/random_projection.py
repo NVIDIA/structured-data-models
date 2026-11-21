@@ -22,6 +22,7 @@ class RandomProjection(EnsembleProcessor):
 
     handles_stypes = (Stype.numerical,)
     requires_fit = True
+    _accepts_unnamed = False
 
     def __init__(
         self,

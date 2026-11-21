@@ -71,6 +71,13 @@ class RecipeExecution:
                 if isinstance(module, sp.Processor):
                     yield from module._dynamic_dims()
 
+    def _accepts_unnamed(self) -> bool:
+        return all(
+            module._accepts_unnamed
+            for module in _iter_modules(self.recipe.features)
+            if isinstance(module, sp.Processor) and module.is_fitted
+        )
+
     @overload
     def fit_transform(
         self,

@@ -466,6 +466,30 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
+def test_compile_predict_columns() -> None:
+    model = _build("regression", "small")
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter, fullgraph=True)
+    # Fits on numerical tables with other numbers of columns and rows and
+    # other names share one graph. The second table holds a constant column.
+    for num_columns, rows in ((17, 40), (5, 30), (2, 40)):
+        x = torch.randn(rows + 9, num_columns)
+        if num_columns == 5:
+            x[:, 1] = 1.0
+        x = TableTensor.from_tensor(
+            x, columns=[f"{num_columns}_{i}" for i in range(num_columns)]
+        )
+        model.fit(x[:rows], torch.randn(rows, 1), num_estimators=4)
+        torch.testing.assert_close(
+            actual=predict(x[rows:]).numerical,
+            expected=model.predict(x[rows:]).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("dynamic_shapes", [None, DynamicShapes()])
 def test_compile_predict_query_categories(
     dynamic_shapes: DynamicShapes | None,

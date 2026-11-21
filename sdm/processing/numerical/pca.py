@@ -27,6 +27,7 @@ class PCA(Processor):
 
     handles_stypes = (Stype.numerical,)
     requires_fit = True
+    _accepts_unnamed = False
 
     mean: Tensor
     components: Tensor

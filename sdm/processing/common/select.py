@@ -39,6 +39,23 @@ class SelectColumns(EnsembleProcessor):
         self.max_columns = max_columns
         self.method = method
 
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        # Tables without column names, as in compiled predictions, cannot be
+        # cut to a fixed number of columns, so their fit must keep them all.
+        self._accepts_unnamed = all(
+            group.size(-1) <= self.max_columns
+            for group in ensemble_table._iter_groups()
+        )
+        return super()._fit_transform_ensemble(
+            ensemble_table,
+            generator=generator,
+        )
+
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,

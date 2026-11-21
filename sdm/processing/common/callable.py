@@ -12,6 +12,7 @@ class Callable(Processor):
 
     handles_stypes = tuple(Stype)
     requires_fit = False
+    _accepts_unnamed = False
 
     def __init__(self, function: Callable[[TableTensor], TableTensor]) -> None:
         super().__init__()
