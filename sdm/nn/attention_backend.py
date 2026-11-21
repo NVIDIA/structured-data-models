@@ -179,8 +179,8 @@ class FlashAttention3Backend(AttentionBackend):
 class FP8AttentionBackend(AttentionBackend):
     r"""Attention backend with FP8 (E4M3) matrix multiplications.
 
-    It reads key/value projections stored as :class:`~sdm.cache.Float8PerHead`
-    and quantizes queries with one scale per batch element and head.
+    It reads key/value projections stored as ``Float8PerHead`` and quantizes
+    queries with one scale per batch element and head.
     """
 
     def supports(  # noqa: D102
