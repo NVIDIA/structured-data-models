@@ -18,7 +18,7 @@ from sdm import (
 from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
 from sdm.models.base.compile import DynamicShapes
-from sdm.testing import onlyMPS
+from sdm.testing import onlyCUDA, onlyMPS
 
 
 def _build(
@@ -495,6 +495,43 @@ def test_compile_predict_query_categories(
             rtol=1e-4,
         )
         assert counter.frame_count == 1
+
+
+@onlyCUDA
+@pytest.mark.usefixtures("compilation")
+def test_compile_predict_inductor() -> None:
+    def table(rows: int) -> TableTensor:
+        code = torch.arange(rows, dtype=torch.int32).remainder(2)
+        return TableTensor(
+            columns={
+                Stype.numerical: ("x", "y"),
+                Stype.categorical: ("color",),
+            },
+            numerical=torch.randn(rows, 2),
+            categorical=CategoricalTensor(
+                code=code.unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b"]),),
+            ),
+        )
+
+    model = _build("regression", "small").to("cuda")
+    # A batch of estimators keeps its cache on the CPU and copies it to the
+    # GPU inside the compiled prediction.
+    model.fit(
+        table(6).to("cuda"),
+        torch.randn(6, 1, device="cuda"),
+        num_estimators=2,
+        estimator_batch_size=2,
+    )
+
+    predict = model._compile_predict()
+    query = table(4).to("cuda")
+    torch.testing.assert_close(
+        actual=predict(query).numerical,
+        expected=model.predict(query).numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
 
 
 @onlyMPS

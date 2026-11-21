@@ -77,6 +77,11 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
+    # PyTorch 2.14 and 2.15 fail on CUDA when the copies of the cache to the
+    # device join the graph of a query with strings.
+    compiled = torch._dynamo.config.patch(
+        inline_single_use_invoke_subgraph=False,
+    )(compiled)
     shapes = dynamic_shapes or model._dynamic_shapes
 
     def predict(
