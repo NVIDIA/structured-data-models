@@ -102,7 +102,6 @@ class TorchAttentionBackend(AttentionBackend):
                 -1, -1, query.size(-3), -1
             )  # [B, 1, Q, KV]
 
-        # Branch so that `torch.compile` passes a bool, not a symbolic one.
         enable_gqa = False
         if query.size(-2) != key.size(-2):
             enable_gqa = True
