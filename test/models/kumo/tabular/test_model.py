@@ -416,18 +416,26 @@ def test_compile_predict(
             columns={Stype.categorical: ("target",)},
             categorical=CategoricalTensor.from_tensor(code[:40]),
         )
-    model.fit(x[:40], y, num_estimators=4)
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # Queries of any number of rows, including one and none, reuse one graph.
-    for query in (x[40:], x[41:44], x[42:43], x[40:40]):
-        torch.testing.assert_close(
-            actual=predict(query).numerical,
-            expected=model.predict(query).numerical,
-            atol=1e-4,
-            rtol=1e-4,
+    # One graph serves fits on 40 and 30 context rows, and queries of any
+    # number of rows, including one and none.
+    for rows in (40, 30):
+        model.fit(
+            x[:rows],
+            y[:rows],
+            num_estimators=4,
+            # The seed keeps the order of the columns.
+            generator=torch.Generator().manual_seed(0),
         )
+        for query in (x[40:], x[41:44], x[42:43], x[40:40]):
+            torch.testing.assert_close(
+                actual=predict(query).numerical,
+                expected=model.predict(query).numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
     assert counter.frame_count == 1
 
     # Callbacks see a single row as it is.
