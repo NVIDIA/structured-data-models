@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
-import torch.fx.experimental._config as fx_config
 from torch import Tensor
 
 from sdm import CategoricalTensor, TableTensor
@@ -56,9 +55,10 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares, with any lists of categories. A query without
-    rows is predicted without the graph, and so is a query with a column that
-    has no categories in the context either.
+    that ``model`` declares, and with any categories. Uncompiled
+    ``model.predict`` serves a query without rows, and a query with a
+    categorical column that has no categories, neither in the query nor in
+    the fitted table.
 
     Args:
         model: The model.
@@ -77,9 +77,6 @@ def compile_predict(
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
     shapes = dynamic_shapes or model._dynamic_shapes
-    # With this option PyTorch does not specialize every marked size of zero
-    # or one, which lets one graph serve a list of a single category.
-    compiled = fx_config.patch(backed_size_oblivious=True)(compiled)  # ty: ignore[unresolved-attribute]
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -87,55 +84,62 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
-        if isinstance(x, TableTensor):
-            x = _fill_categories(model, x)
-        if rows == 0 or (
-            isinstance(x, TableTensor)
-            and any(c.size(0) == 0 for c in x.categorical.categories)
-        ):
-            return model.predict(x, *args, **kwargs)
-        # Operations on the rows still specialize on a single row, so it is
-        # repeated if the rows are dynamic, unless callbacks see the rows.
-        # Without a copy, queries that are different slices of one table, such
-        # as `table[40:]` and `table[41:44]`, recompile or fail to compile. The
-        # copy also keeps the marks off the tensors of the caller.
         dims = {dim % x.dim() for dim in shapes.query}
+        # A graph specializes on sizes of zero and one, so a single row is
+        # repeated if the rows are dynamic, unless callbacks see the rows.
         repeat = (
             rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
         )
-        if repeat:
-            x = torch.cat([x, x], dim=-2)
-        x = x.clone(memory_format=torch.contiguous_format)
-        _mark_dynamic(x, dims)
-        out = compiled(x, *args, **kwargs)
+        query = x
+        if rows > 0 and isinstance(x, TableTensor):
+            query = _categories(model, x, copy=repeat)
+        if rows == 0 or query is None:
+            return model.predict(x, *args, **kwargs)
+        # Without a copy, queries that are different slices of one table, such
+        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
+        query = (
+            torch.cat([query, query], dim=-2)
+            if repeat
+            else query.clone(memory_format=torch.contiguous_format)
+        )
+        _mark_dynamic(query, dims)
+        out = compiled(query, *args, **kwargs)
         return out[..., :1, :] if repeat else out
 
     return predict
 
 
-def _fill_categories(model: ICLModel, x: TableTensor) -> TableTensor:
-    # A column of missing values has an empty list of categories, of any type.
-    # With the list of the fitted column, it looks like any other query.
+def _categories(
+    model: ICLModel,
+    x: TableTensor,
+    copy: bool,
+) -> TableTensor | None:
+    # Like the rows, a list of categories needs two or more entries. A column
+    # of missing values takes the fitted list, as no row points into it, and
+    # a single category is repeated. `torch.cat` would share the other lists
+    # with the caller, so they are copied before they get marked.
     categories = x.categorical.categories
-    if all(category.size(0) > 0 for category in categories):
+    if not copy and all(category.size(0) > 1 for category in categories):
         return x
     fitted = cast(
         "Mapping[str, Tensor]",
         (model._cache or {}).get("categories", {}),
     )
+    new_categories = []
+    for name, category in zip(x.categorical_columns, categories, strict=True):
+        if category.size(0) == 0:
+            category = fitted.get(name, category)
+        if category.size(0) == 0:
+            return None
+        if category.size(0) == 1:
+            category = torch.cat([category, category])
+        elif copy:
+            category = category.clone()
+        new_categories.append(category)
     return x.replace_blocks(
         categorical=CategoricalTensor(
             code=x.categorical.code,
-            categories=[
-                category
-                if category.size(0) > 0
-                else fitted.get(name, category)
-                for name, category in zip(
-                    x.categorical_columns,
-                    categories,
-                    strict=True,
-                )
-            ],
+            categories=new_categories,
         ),
     )
 
