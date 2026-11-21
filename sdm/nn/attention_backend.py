@@ -102,14 +102,18 @@ class TorchAttentionBackend(AttentionBackend):
                 -1, -1, query.size(-3), -1
             )  # [B, 1, Q, KV]
 
+        # Branch so that `torch.compile` passes a bool, not a symbolic one.
+        enable_gqa = False
+        if query.size(-2) != key.size(-2):
+            enable_gqa = True
+
         return sdpa(
             query=query.transpose(-3, -2),  # [B, Hq, Q, C]
             key=key.transpose(-3, -2),  # [B, Hkv, KV, C]
             value=value.transpose(-3, -2),  # [B, Hkv, KV, Cv]
             attn_mask=attn_mask,
             dropout_p=dropout_p,
-            # PyTorch rejects symbolic booleans under dynamic shapes.
-            enable_gqa=bool(query.size(-2) != key.size(-2)),
+            enable_gqa=enable_gqa,
             is_causal=is_causal,
             scale=scale,
         )
