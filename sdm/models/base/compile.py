@@ -5,15 +5,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
 import torch.fx.experimental._config as fx_config
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import CategoricalTensor, TableTensor
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -56,8 +56,9 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares, with any lists of categories. A query that is
-    empty or holds an empty list of categories is predicted without the graph.
+    that ``model`` declares, with any lists of categories. A query without
+    rows is predicted without the graph, and so is a query with a column that
+    has no categories in the context either.
 
     Args:
         model: The model.
@@ -86,6 +87,8 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
+        if isinstance(x, TableTensor):
+            x = _fill_categories(model, x)
         if rows == 0 or (
             isinstance(x, TableTensor)
             and any(c.size(0) == 0 for c in x.categorical.categories)
@@ -108,6 +111,33 @@ def compile_predict(
         return out[..., :1, :] if repeat else out
 
     return predict
+
+
+def _fill_categories(model: ICLModel, x: TableTensor) -> TableTensor:
+    # A column of missing values has an empty list of categories, of any type.
+    # With the list of the fitted column, it looks like any other query.
+    categories = x.categorical.categories
+    if all(category.size(0) > 0 for category in categories):
+        return x
+    fitted = cast(
+        "Mapping[str, Tensor]",
+        (model._cache or {}).get("categories", {}),
+    )
+    return x.replace_blocks(
+        categorical=CategoricalTensor(
+            code=x.categorical.code,
+            categories=[
+                category
+                if category.size(0) > 0
+                else fitted.get(name, category)
+                for name, category in zip(
+                    x.categorical_columns,
+                    categories,
+                    strict=True,
+                )
+            ],
+        ),
+    )
 
 
 def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:

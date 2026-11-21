@@ -467,7 +467,12 @@ def test_compile_predict_query_categories(
             numerical=torch.randn(6, 2),
             categorical=CategoricalTensor(
                 code=code.unsqueeze(-1),
-                categories=(StringTensor.from_list(categories),),
+                # A column of missing values has an empty list of integers.
+                categories=(
+                    StringTensor.from_list(categories)
+                    if categories
+                    else torch.empty(0, dtype=torch.long),
+                ),
             ),
         )
 
@@ -480,9 +485,8 @@ def test_compile_predict_query_categories(
         dynamic_shapes=dynamic_shapes,
     )
     # Every query has its own categories, whichever dimensions are dynamic;
-    # "c" is not a fitted one. A query with an empty list is predicted
-    # without the graph.
-    for categories in (["b", "a"], ["a", "c", "b"], ["c"], []):
+    # the first one has none, and "c" is not a fitted one.
+    for categories in ([], ["b", "a"], ["a", "c", "b"], ["c"]):
         query = table(categories)
         torch.testing.assert_close(
             actual=predict(query).numerical,
@@ -490,7 +494,7 @@ def test_compile_predict_query_categories(
             atol=1e-4,
             rtol=1e-4,
         )
-    assert counter.frame_count == 1
+        assert counter.frame_count == 1
 
 
 @onlyMPS
