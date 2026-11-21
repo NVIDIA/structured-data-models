@@ -451,6 +451,52 @@ def test_compile_predict(
         assert counter.frame_count == graphs
 
 
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("dynamic_shapes", [None, DynamicShapes()])
+def test_compile_predict_query_categories(
+    dynamic_shapes: DynamicShapes | None,
+) -> None:
+    def table(categories: list[str]) -> TableTensor:
+        code = torch.arange(6, dtype=torch.int32)
+        code = code % len(categories) if categories else code.fill_(-1)
+        return TableTensor(
+            columns={
+                Stype.numerical: ("x", "y"),
+                Stype.categorical: ("color",),
+            },
+            numerical=torch.randn(6, 2),
+            categorical=CategoricalTensor(
+                code=code.unsqueeze(-1),
+                # A column of missing values has an empty list of integers.
+                categories=(
+                    StringTensor.from_list(categories)
+                    if categories
+                    else torch.empty(0, dtype=torch.long),
+                ),
+            ),
+        )
+
+    model = _build("regression", "small")
+    model.fit(table(["a", "b"]), torch.randn(6, 1))
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        dynamic_shapes=dynamic_shapes,
+    )
+    # Every query has its own categories, whichever dimensions are dynamic;
+    # the first one has none, and "c" is not a fitted one.
+    for categories in ([], ["b", "a"], ["a", "c", "b"], ["c"]):
+        query = table(categories)
+        torch.testing.assert_close(
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        assert counter.frame_count == 1
+
+
 @onlyMPS
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_default_recipe_on_mps(

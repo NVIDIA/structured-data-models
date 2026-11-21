@@ -19,7 +19,12 @@ from torch import Tensor
 from typing_extensions import override
 
 from sdm import NaT, Stype, StypeLike
-from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm.tensor import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    VarLenTensor,
+)
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _record_compiled_stream, _resolve_device
 
@@ -967,15 +972,24 @@ class TableTensor(Tensor):
         r"""The schema of this table."""
         return TableSchema(columns=self._columns)
 
-    def _mark_dynamic(self, dim: int) -> None:
-        r"""Mark a dimension as dynamic for :func:`torch.compile`.
+    def _mark_dynamic(self, dims: Iterable[int]) -> None:
+        r"""Mark dimensions as dynamic for :func:`torch.compile`.
+
+        The lists of categories are marked in any case.
 
         Args:
-            dim: The non-negative dimension.
+            dims: The non-negative dimensions.
         """
-        torch._dynamo.mark_dynamic(self, dim)
-        self._text._mark_dynamic(dim)
-        self._id._mark_dynamic(dim)
+        for dim in dims:
+            torch._dynamo.mark_dynamic(self, dim)
+            self._text._mark_dynamic(dim)
+            self._id._mark_dynamic(dim)
+        # Every table brings its own lists of categories.
+        for categories in self._categorical.categories:
+            if isinstance(categories, VarLenTensor):
+                categories._mark_dynamic(0)
+            else:
+                torch._dynamo.mark_dynamic(categories, 0)
 
     def is_same_schema(self, other: TableTensor) -> bool:
         r"""Whether ``other`` has the same schema layout.
