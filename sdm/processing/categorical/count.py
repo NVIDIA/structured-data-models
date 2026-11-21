@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator, Mapping
 from typing import cast
 
 import torch
@@ -121,6 +122,13 @@ class AddCategoryCounts(Processor):
             numerical=counts.transpose(-2, -1).to(table.numerical.dtype),
         )
         return cast(TableTensor, torch.cat([table, out_table], dim=-1))
+
+    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[str, int]]]:
+        # [..., N, K + 1] log counts of N count columns with up to K
+        # categories and one slot for missing values.
+        yield self._log_counts, {"categories": -1}
+        for categories in self._categories:
+            yield categories, {"categories": 0}
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.min_cardinality == 0:
