@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from contextlib import ContextDecorator
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -16,7 +17,6 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.base.compile import DynamicShapes
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -173,8 +173,24 @@ class KumoTabular(ICLModel):
         """  # noqa: D212
         return default_recipe()
 
-    def _default_dynamic_shapes(self) -> DynamicShapes:
-        return DynamicShapes(query=(-2,))
+    def _default_dynamic_dims(self) -> tuple[int, ...]:
+        # Mark the rows (`-2`) of the query as dynamic, and with them the rows
+        # of the context that `fit` saved.
+        return (-2,)
+
+    def _dynamic_compile_patches(self) -> list[ContextDecorator]:
+        return [
+            torch._dynamo.config.patch(
+                # Keep the marks on buffers, such as those of `RankGaussian`.
+                force_parameter_static_shapes=False,
+                # Avoid a failure of PyTorch 2.14.1 on CUDA when the copies of
+                # the cache to the device join the graph.
+                inline_single_use_invoke_subgraph=False,
+            ),
+            # Do not order kernels for the sizes of the first fit, which would
+            # cost time and memory after fits of other sizes.
+            torch._inductor.config.patch(reorder_for_peak_memory=False),
+        ]
 
     def _load_from_pretrained(
         self,
