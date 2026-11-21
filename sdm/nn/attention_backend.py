@@ -180,7 +180,10 @@ class FP8AttentionBackend(AttentionBackend):
     r"""Attention backend with FP8 (E4M3) matrix multiplications.
 
     It reads key/value projections stored as ``Float8PerHead`` and quantizes
-    queries with one scale per batch element and head.
+    queries with one scale per batch element and head. It runs on GPUs with
+    compute capability 8.9, 9.0, 12.0 or 12.1 and 32, 64, 128 or 256 channels
+    per head, and declines masks, padding, causal attention, dropout, and
+    gradients.
     """
 
     def supports(  # noqa: D102
@@ -192,6 +195,7 @@ class FP8AttentionBackend(AttentionBackend):
         seqused_key_value: Tensor | None,
         is_causal: bool,
         dropout_p: float,
+        scale: float | None,
     ) -> bool:
         return (
             _attn_fwd__qk_e4m3__pv_e4m3__scale_head is not None
@@ -200,11 +204,19 @@ class FP8AttentionBackend(AttentionBackend):
             and torch.cuda.get_device_capability(query.device)
             in {(8, 9), (9, 0), (12, 0), (12, 1)}
             and query.size(-1) in {32, 64, 128, 256}
+            and key_value.value.size(-1) == query.size(-1)
             and attn_mask is None
             and seqused_key_value is None
             and not is_causal
             and dropout_p == 0.0
-            and not (torch.is_grad_enabled() and query.requires_grad)
+            and not (
+                torch.is_grad_enabled()
+                and (
+                    query.requires_grad
+                    or key_value.key.requires_grad
+                    or key_value.value.requires_grad
+                )
+            )
         )
 
     def forward(  # noqa: D102
@@ -237,14 +249,14 @@ class FP8AttentionBackend(AttentionBackend):
         ) == (12, 0)
 
         out = _attn_fwd__qk_e4m3__pv_e4m3__scale_head(
-            query.transpose(1, 2).contiguous(),  # [B, Hq, Q, C]
-            key_value.key.transpose(1, 2).contiguous(),  # [B, Hkv, KV, C]
-            key_value.value.permute(
+            q=query.transpose(1, 2).contiguous(),  # [B, Hq, Q, C]
+            k=key_value.key.transpose(1, 2).contiguous(),  # [B, Hkv, KV, C]
+            v=key_value.value.permute(
                 0, 2, 3, 1
             ).contiguous(),  # [B, Hkv, C, KV]
-            query_scale.transpose(1, 2).contiguous(),  # [B, Hq, 1, 1]
-            key_scale.transpose(1, 2).contiguous(),  # [B, Hkv, 1, 1]
-            value_scale.transpose(1, 2).contiguous(),  # [B, Hkv, 1, 1]
+            qs=query_scale.transpose(1, 2).contiguous(),  # [B, Hq, 1, 1]
+            ks=key_scale.transpose(1, 2).contiguous(),  # [B, Hkv, 1, 1]
+            vs=value_scale.transpose(1, 2).contiguous(),  # [B, Hkv, 1, 1]
             dtype=dtype,
             query_tile=64 if channels == 256 else 128,
             scale=scale,

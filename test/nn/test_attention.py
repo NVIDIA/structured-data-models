@@ -784,7 +784,7 @@ def test_attention_fp8_backend() -> None:
     pytest.importorskip("triton")
     capability = torch.cuda.get_device_capability()
     if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
-        pytest.skip("FP8 attention requires an Ada, Hopper or Blackwell GPU")
+        pytest.skip("FP8AttentionBackend does not support this GPU")
     module = Attention(channels=128, num_query_heads=2, device="cuda")
     with torch.no_grad():
         module.out_lin.weight.copy_(torch.eye(128))

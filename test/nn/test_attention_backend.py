@@ -114,26 +114,37 @@ def test_fp8_attention_backend() -> None:
     pytest.importorskip("triton")
     capability = torch.cuda.get_device_capability()
     if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
-        pytest.skip("FP8 attention requires an Ada, Hopper or Blackwell GPU")
+        pytest.skip("FP8AttentionBackend does not support this GPU")
     query = torch.randn(2, 129, 8, 64, device="cuda", dtype=torch.float16)
     key = torch.randn(2, 513, 2, 64, device="cuda", dtype=torch.float16)
     value = torch.randn_like(key)
+    # Give each batch element and head its own magnitude, so that a mixed-up
+    # scale changes the output:
+    query *= torch.linspace(0.25, 1, 16, device="cuda").view(2, 1, 8, 1)
+    key *= key.new_tensor([0.5, 1, 0.25, 0.75]).view(2, 1, 2, 1)
+    value *= value.new_tensor([0.01, 1, 100, 0.1]).view(2, 1, 2, 1)
     key_value = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
     options = {
         "attn_mask": None,
         "seqused_key_value": None,
         "is_causal": False,
         "dropout_p": 0.0,
+        "scale": None,
     }
     backend = FP8AttentionBackend()
     unquantized = KVCacheEntry(key=key, value=value)
     assert not backend.supports(query, unquantized, **options)
+    requires_grad = query.detach().requires_grad_()
+    assert not backend.supports(requires_grad, key_value, **options)
     assert backend.supports(query, key_value, **options)
 
     with torch.inference_mode():
-        out = backend.forward(query, key_value, **options, scale=None)
+        out = backend.forward(query, key_value, **options)
+        dequantized = key_value.dequantize(query.dtype)
         expected = TorchAttentionBackend().forward(
-            query, key_value.dequantize(query.dtype), **options, scale=None
+            query=query, key_value=dequantized, **options
         )
-    error = (out.float() - expected.float()).square().mean().sqrt()
-    assert error / expected.float().square().mean().sqrt() < 0.08
+    # Relative errors per batch element and head:
+    error = (out.float() - expected.float()).square().mean(dim=(1, 3)).sqrt()
+    norm = expected.float().square().mean(dim=(1, 3)).sqrt()
+    assert error.div(norm).max() < 0.08
