@@ -18,7 +18,9 @@ from sdm import (
 from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
 from sdm.models.base.compile import DynamicShapes
-from sdm.testing import onlyMPS
+from sdm.nn import SDPA
+from sdm.nn.attention_backend import FP8AttentionBackend
+from sdm.testing import onlyCUDA, onlyMPS
 
 
 def _build(
@@ -295,6 +297,43 @@ def test_fit_predict(
         expected.numerical,
         atol=1e-4,
         rtol=1e-4 if kv_cache_dtype is None else 0.02,
+    )
+
+
+@onlyCUDA
+def test_fit_predict_fp8_attention_backend() -> None:
+    pytest.importorskip("triton")
+    capability = torch.cuda.get_device_capability()
+    if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
+        pytest.skip("FP8 attention requires an Ada, Hopper or Blackwell GPU")
+    model = _build("regression", "small").cuda()
+    x = torch.randn(300, 6, device="cuda")
+    y = x.sum(dim=-1, keepdim=True)
+
+    model.fit(
+        x=x[:200],
+        y=y[:200],
+        recipe=_recipe(),
+        kv_cache_dtype="fp8_per_head",
+    )
+    expected = model.predict(x[200:])
+    for module in model.modules():
+        if isinstance(module, SDPA):
+            module.backend = FP8AttentionBackend()
+    model.fit(
+        x=x[:200],
+        y=y[:200],
+        recipe=_recipe(),
+        kv_cache_dtype="fp8_per_head",
+    )
+    actual = model.predict(x[200:])
+
+    assert not actual.numerical.equal(expected.numerical)
+    torch.testing.assert_close(
+        actual=actual.numerical,
+        expected=expected.numerical,
+        atol=0.1,
+        rtol=0.02,
     )
 
 

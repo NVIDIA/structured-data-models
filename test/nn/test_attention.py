@@ -18,7 +18,8 @@ from sdm.nn import (
     SoftplusScale,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.nn.attention_backend import FP8AttentionBackend, TorchAttentionBackend
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -776,3 +777,34 @@ def test_transformer_block_kv_cache() -> None:
     assert fp8_kv.key.dtype == torch.float8_e4m3fn
     torch.testing.assert_close(fp8_out, direct_out, atol=0.25, rtol=0)
     torch.testing.assert_close(fp8_cached_out, fp8_out)
+
+
+@onlyCUDA
+def test_attention_fp8_backend() -> None:
+    pytest.importorskip("triton")
+    capability = torch.cuda.get_device_capability()
+    if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
+        pytest.skip("FP8 attention requires an Ada, Hopper or Blackwell GPU")
+    module = Attention(channels=128, num_query_heads=2, device="cuda")
+    with torch.no_grad():
+        module.out_lin.weight.copy_(torch.eye(128))
+    query = torch.randn(2, 33, 128, device="cuda")
+    key_value = torch.randn(2, 600, 128, device="cuda")
+
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
+        expected = module(query=query, key_value=key_value)
+        module.sdpa.backend = FP8AttentionBackend()
+        out, cache = module(
+            query=query,
+            key_value=key_value,
+            return_key_value=True,
+            kv_cache_dtype=Float8PerHead(),
+        )
+        cached_out = module(query=query, key_value=cache)
+        module.sdpa.backend = TorchAttentionBackend()
+        dequantized_out = module(query=query, key_value=cache)
+
+    torch.testing.assert_close(cached_out, out)
+    assert not torch.equal(out, dequantized_out)
+    error = (out.float() - expected.float()).square().mean().sqrt()
+    assert error / expected.float().square().mean().sqrt() < 0.08
