@@ -902,8 +902,6 @@ class TransformerBlock(torch.nn.Module):
         key_value_length: int | None = None,
     ) -> int:
         r""":meta private:"""  # noqa: D415
-        if device.type != "cuda":
-            return 65_535
         bytes_per_example = self.peak_bytes_per_example(
             element_size=element_size,
             query_length=query_length,

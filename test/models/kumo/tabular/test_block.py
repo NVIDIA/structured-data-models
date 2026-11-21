@@ -30,6 +30,19 @@ def test_transformer_block(device: torch.device) -> None:
     torch.testing.assert_close(output, query, rtol=0, atol=0)
 
 
+def test_cpu_auto_batch_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SDM_CHUNK_MEMORY_BYTES", raising=False)
+    block = KumoTabularTransformerBlock(
+        channels=256, num_heads=4, query_scaling=None
+    )
+
+    limit = block.auto_batch_size_limit(
+        device=torch.device("cpu"), element_size=4, query_length=54
+    )
+
+    assert 0 < limit < 4000
+
+
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("channels", [128, 256])
