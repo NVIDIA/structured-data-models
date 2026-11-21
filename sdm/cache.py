@@ -4,6 +4,7 @@
 import abc
 from collections.abc import (
     Callable,
+    Collection,
     Hashable,
     Iterable,
     Iterator,
@@ -18,6 +19,7 @@ from torch import Tensor
 
 from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
+from sdm.tensor.var_len import _mark_dynamic
 
 
 class _KVCacheEntry(NamedTuple):
@@ -212,6 +214,9 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 f"Unsupported key/value cache dtype '{kv_cache_dtype}'"
             )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
+        # The dimensions of entries that follow the fitted data; see `record`.
+        self._dims: dict[Hashable, dict[str, int]] = {}
+        self._dynamic = False
 
     @property
     def is_recording(self) -> bool:
@@ -253,6 +258,58 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         _freeze(self)
         return self
 
+    def record(
+        self,
+        key: Hashable,
+        value: Tensor | KVCacheEntry,
+        **dims: int,
+    ) -> None:
+        r"""Store ``value`` and declare the dimensions of its tensors.
+
+        The dimensions follow the fitted data, and compiled predictions keep
+        them dynamic.
+
+        Args:
+            key: The cache key.
+            value: A tensor or a :class:`KVCacheEntry`.
+            **dims: The dimensions by name, *e.g.*, ``rows=-3`` for keys and
+                values of shape ``[..., R, H, C]`` with one entry per row.
+        """
+        self[key] = value
+        self._dims[key] = dims
+
+    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[str, int]]]:
+        # The recorded dimensions, and those that other entries declare, such
+        # as nested caches and the recipe execution.
+        for key, value in self.items():
+            dims = self._dims.get(key)
+            if dims is None:
+                declared = getattr(value, "_dynamic_dims", None)
+                if declared is not None:
+                    yield from declared()
+            elif isinstance(value, DeviceMixin):
+                for tensor in value._tensors():
+                    yield tensor, dims
+            else:
+                yield cast(Tensor, value), dims
+
+    def _mark_dynamic(self, names: Collection[str]) -> None:
+        r"""Mark the declared dimensions called ``names`` as dynamic.
+
+        Marks for :func:`torch.compile` stay on the tensors, so a cache is
+        marked once.
+
+        Args:
+            names: The names of the dimensions, *e.g.*, ``{"rows"}``.
+        """
+        if self._dynamic:
+            return
+        for tensor, dims in self._dynamic_dims():
+            for name, dim in dims.items():
+                if name in names:
+                    _mark_dynamic(tensor, dim)
+        self._dynamic = True
+
     def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(
@@ -293,7 +350,10 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         pinned = set(
             cast(tuple[int, ...], state.pop("_pinned_tensor_indices", ()))
         )
-        self.__dict__.update(state)
+        # Caches saved before they recorded dimensions have none, and the
+        # marks of a saved cache do not survive its tensors.
+        self.__dict__.update({"_dims": {}} | state)
+        self._dynamic = False
         if not pinned or not torch.cuda.is_available():
             return
 
@@ -349,4 +409,5 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._kv_cache_dtype = self._kv_cache_dtype
         out._mode = self._mode
+        out._dims = self._dims
         return out

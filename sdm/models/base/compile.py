@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import torch
@@ -28,9 +28,10 @@ class DynamicShapes:
     :func:`compile_predict` marks them.
     """
 
-    #: Whether the number of query rows is dynamic. Dynamic rows require that
-    #: the model and its recipe predict every query row independently of the
-    #: other rows.
+    #: Whether the number of rows is dynamic: the query rows, and the context
+    #: rows of the fitted state that declares them, see
+    #: :meth:`~sdm.cache.Cache.record`. Dynamic rows require that the model
+    #: and its recipe predict every query row independently of the other rows.
     rows: bool = False
 
 
@@ -55,20 +56,22 @@ def compile_predict(
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
-    One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares, and with any categories. Uncompiled
-    ``model.predict`` serves a query without rows, and a query with a
-    categorical column that has no categories, neither in the query nor in
-    the fitted table.
+    One graph serves queries and fits of any size along the
+    :class:`DynamicShapes` that ``model`` declares, and any categories,
+    except that a fitted size of zero or one compiles a graph of its own.
+    Uncompiled ``model.predict`` serves a query without rows, and a query
+    with a categorical column that has no categories, neither in the query
+    nor in the fitted table.
 
     Args:
         model: The model.
         dynamic_shapes: The dimensions to mark as dynamic instead of those
             that ``model`` declares, *e.g.*, ``DynamicShapes(rows=True)``
-            for the query rows. ``DynamicShapes()`` marks none: the query
-            shape is static, and every new shape compiles another graph. A
-            dimension that the model cannot keep dynamic fails to compile.
-            The lists of categories are dynamic in any case.
+            for the query rows and the context rows of the fitted state.
+            ``DynamicShapes()`` marks none: the shapes are static, and every
+            new shape compiles another graph. A dimension that the model
+            cannot keep dynamic fails to compile. The lists of categories
+            are dynamic in any case.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -77,7 +80,12 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
+    # Marks on fitted state take effect only without static parameter shapes.
+    compiled = torch._dynamo.config.patch(
+        force_parameter_static_shapes=False,
+    )(compiled)
     shapes = dynamic_shapes or model._dynamic_shapes
+    names = {name for name, dynamic in asdict(shapes).items() if dynamic}
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -92,8 +100,10 @@ def compile_predict(
         query = x
         if rows > 0 and isinstance(x, TableTensor):
             query = _categories(model, x, copy=repeat)
-        if rows == 0 or query is None:
+        cache = model._cache
+        if rows == 0 or query is None or cache is None:
             return model.predict(x, *args, **kwargs)
+        cache._mark_dynamic(names)
         # Without a copy, queries that are different slices of one table, such
         # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
         query = (
