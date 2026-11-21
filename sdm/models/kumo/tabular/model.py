@@ -64,7 +64,7 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
-@dynamic_shapes(query=(-2,))
+@dynamic_shapes(rows=True)
 class KumoTabular(ICLModel):
     r"""The tabular foundation model from the `"NVIDIA Kumo Tabular: Pushing
     the Accuracy-Efficiency Frontier for Tabular Prediction"

@@ -28,9 +28,10 @@ class DynamicShapes:
     :func:`compile_predict` marks them.
     """
 
-    #: The dimensions of the query. Rows (``-2``) require that the model and
-    #: its recipe predict every query row independently of the other rows.
-    query: tuple[int, ...] = ()
+    #: Whether the number of query rows is dynamic. Dynamic rows require that
+    #: the model and its recipe predict every query row independently of the
+    #: other rows.
+    rows: bool = False
 
 
 def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
@@ -63,7 +64,7 @@ def compile_predict(
     Args:
         model: The model.
         dynamic_shapes: The dimensions to mark as dynamic instead of those
-            that ``model`` declares, *e.g.*, ``DynamicShapes(query=(-2,))``
+            that ``model`` declares, *e.g.*, ``DynamicShapes(rows=True)``
             for the query rows. ``DynamicShapes()`` marks none: the query
             shape is static, and every new shape compiles another graph. A
             dimension that the model cannot keep dynamic fails to compile.
@@ -84,12 +85,10 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
-        dims = {dim % x.dim() for dim in shapes.query}
+        dims = {x.dim() - 2} if shapes.rows else set()
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows.
-        repeat = (
-            rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
-        )
+        repeat = rows == 1 and shapes.rows and not kwargs.get("callbacks")
         query = x
         if rows > 0 and isinstance(x, TableTensor):
             query = _categories(model, x, copy=repeat)
