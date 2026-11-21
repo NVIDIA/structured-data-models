@@ -110,13 +110,21 @@ def test_sdpa_backend() -> None:
 
 
 @onlyCUDA
-def test_fp8_attention_backend() -> None:
+@pytest.mark.parametrize(
+    ("channels", "context"),
+    [(32, 513), (64, 513), (128, 513), (128, 32768), (256, 513)],
+)
+def test_fp8_attention_backend(channels: int, context: int) -> None:
     pytest.importorskip("triton")
     capability = torch.cuda.get_device_capability()
     if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
         pytest.skip("FP8AttentionBackend does not support this GPU")
-    query = torch.randn(2, 129, 8, 64, device="cuda", dtype=torch.float16)
-    key = torch.randn(2, 513, 2, 64, device="cuda", dtype=torch.float16)
+    query = torch.randn(
+        2, 129, 8, channels, device="cuda", dtype=torch.float16
+    )
+    key = torch.randn(
+        2, context, 2, channels, device="cuda", dtype=torch.float16
+    )
     value = torch.randn_like(key)
     # Give each batch element and head its own magnitude, so that a mixed-up
     # scale changes the output:
