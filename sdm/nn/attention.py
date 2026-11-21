@@ -454,21 +454,22 @@ class Attention(torch.nn.Module):
             else:
                 key = self.key_transform(key, pos=key_pos)
 
-        entry: KVCacheEntry | None = None
-        if return_key_value:
+        if isinstance(key_value, KVCacheEntry):
+            entry = key_value
+        elif return_key_value:
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
             entry = KVCacheEntry(key=key.to(value.dtype), value=value)
             if kv_cache_dtype is not None:
                 entry = kv_cache_dtype.quantize(entry)
             entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
-            key_value = entry
-        elif not isinstance(key_value, KVCacheEntry):
-            key_value = KVCacheEntry(key=key, value=value)
+            del key, value
+        else:
+            entry = KVCacheEntry(key=key, value=value)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
-            key=key_value,  # [..., KV, Hkv, C // Hq]
+            key=entry,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
             attn_mask=attn_mask,  # [..., Hq, Q, KV]
             is_causal=is_causal,
@@ -478,7 +479,7 @@ class Attention(torch.nn.Module):
         if gate is not None:
             out = out * gate
         out = self.out_lin(out)  # [..., Q, C]
-        if entry is not None:
+        if return_key_value:
             return out, entry
         return out
 
