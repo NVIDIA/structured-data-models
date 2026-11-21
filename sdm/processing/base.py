@@ -135,10 +135,13 @@ class Processor(torch.nn.Module, abc.ABC):
         )
         self._update_fitted(True)
 
-    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[int, int]]]:
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
         # Fitted tensors with their dimensions by the dimension of the fitted
-        # table that they follow, such as `{-2: -1}` for one entry per row.
-        # Compiled models keep them dynamic.
+        # table that they follow, such as `{-2: -1}` for one entry per row,
+        # or by `None` if they follow the fitted data itself. Compiled models
+        # keep them dynamic.
         yield from ()
 
     def _check_is_fitted(self) -> None:

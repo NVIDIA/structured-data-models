@@ -25,9 +25,9 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries and fits of any size along the dynamic
-    dimensions, except that a fitted size of zero or one compiles a graph of
-    its own. With dynamic dimensions, a query without rows is predicted
-    without the graph.
+    dimensions, and fits with any categories, except that a fitted size of
+    zero or one compiles a graph of its own. With dynamic dimensions, a
+    query without rows is predicted without the graph.
 
     The lists of categories of a query are static: pass the same lists on
     every call, *e.g.*, a pandas ``Categorical`` with fixed categories. Lists

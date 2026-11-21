@@ -60,7 +60,9 @@ class RecipeExecution:
         assert self._y_locations is not None
         return len(self._y_locations)
 
-    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[int, int]]]:
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
         processors = [
             self.recipe.features,
             self.recipe.target,
