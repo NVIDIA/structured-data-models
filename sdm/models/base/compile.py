@@ -86,6 +86,11 @@ def compile_predict(
         force_parameter_static_shapes=False,
         inline_single_use_invoke_subgraph=False,
     )(compiled)
+    # Inductor would order the kernels for the sizes of the first compile,
+    # which costs time and memory after a fit of another size.
+    compiled = torch._inductor.config.patch(
+        reorder_for_peak_memory=False,
+    )(compiled)
     shapes = dynamic_shapes or model._dynamic_shapes
     # The lists of categories are dynamic in any case, as in the query.
     names = {"categories"}
