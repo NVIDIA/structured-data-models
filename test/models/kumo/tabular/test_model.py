@@ -480,8 +480,9 @@ def test_compile_predict_query_categories(
         dynamic_shapes=dynamic_shapes,
     )
     # Every query has its own categories, whichever dimensions are dynamic;
-    # "c" is not a fitted one, and the first query has none at all.
-    for categories in ([], ["b", "a"], ["a", "c", "b"], ["c"]):
+    # "c" is not a fitted one. A query with an empty list is predicted
+    # without the graph.
+    for categories in (["b", "a"], ["a", "c", "b"], ["c"], []):
         query = table(categories)
         torch.testing.assert_close(
             actual=predict(query).numerical,

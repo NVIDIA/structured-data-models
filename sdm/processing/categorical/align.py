@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from typing import Literal, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 
 from sdm import (
@@ -400,6 +399,9 @@ class AlignCategories(EnsembleProcessor):
         for column_index, input_categories in enumerate(
             _iter_categories(table.categorical)
         ):
+            if input_categories.numel() == 0:
+                continue
+
             lookup_by_categories = lookups_by_column[column_index]
             pending_categories: set[int] = set()
             for batch_categories in fitted_categories:
@@ -456,16 +458,19 @@ class AlignCategories(EnsembleProcessor):
         ):
             lookups_by_column[column_index][identity] = lookup
 
-        for column_index, lookup_by_categories in enumerate(lookups_by_column):
+        for column_index, input_categories in enumerate(
+            _iter_categories(table.categorical)
+        ):
+            if input_categories.numel() == 0:
+                continue
+            lookup_by_categories = lookups_by_column[column_index]
             lookups = [
                 lookup_by_categories[id(batch_categories[column_index])]
                 for batch_categories in fitted_categories
             ]
             column_codes = codes[..., column_index]
             mask = column_codes >= 0
-            # The padding keeps the index of a missing value in bounds if the
-            # list of categories is empty.
-            lookup = F.pad(torch.stack(lookups), (0, 1), value=-1)
+            lookup = torch.stack(lookups)
             indices = column_codes.clamp_min(0).long()
             aligned_codes[..., column_index] = torch.where(
                 mask,
