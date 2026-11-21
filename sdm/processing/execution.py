@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import NamedTuple, cast, overload
 
 import torch
@@ -59,6 +59,17 @@ class RecipeExecution:
         r"""The number of fitted members."""
         assert self._y_locations is not None
         return len(self._y_locations)
+
+    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[str, int]]]:
+        processors = [
+            self.recipe.features,
+            self.recipe.target,
+            *(self._related_processors or {}).values(),
+        ]
+        for processor in processors:
+            for module in _iter_modules(processor):
+                if isinstance(module, sp.Processor):
+                    yield from module._dynamic_dims()
 
     @overload
     def fit_transform(

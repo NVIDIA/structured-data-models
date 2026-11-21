@@ -118,7 +118,7 @@ class ICLBlock(torch.nn.Module):
                         entry = entry._apply_tensor(
                             lambda t: _clone(t[..., :kv_heads, :])  # noqa: B023
                         )
-                    cache[cache_key] = entry
+                    cache._record(cache_key, entry, rows=-3)
                     del entry
                 else:
                     x = result

@@ -1580,3 +1580,17 @@ def _materialize(
         stride=stride,
         storage_offset=0,
     )
+
+
+def _mark_dynamic(tensor: Tensor, dim: int) -> None:
+    r"""Mark a dimension as dynamic for :func:`torch.compile`.
+
+    Sizes of zero and one stay static, as a graph specializes on them.
+    """
+    if tensor.size(dim) < 2:
+        return
+    dim %= tensor.dim()
+    if isinstance(tensor, VarLenTensor):
+        tensor._mark_dynamic(dim)
+        return
+    torch._dynamo.mark_dynamic(tensor, dim)

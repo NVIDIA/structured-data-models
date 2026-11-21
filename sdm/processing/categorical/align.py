@@ -392,10 +392,12 @@ class AlignCategories(EnsembleProcessor):
         if single_table:
             codes = codes.unsqueeze(0)
         aligned_codes = torch.full_like(codes, -1)
-        lookups_by_column: list[dict[int, Tensor]] = [
+        # Keyed by the fitted categories themselves, as `id()` would bind
+        # compiled code to the tensors of a single fit.
+        lookups_by_column: list[dict[Tensor, Tensor]] = [
             {} for _ in range(codes.size(-1))
         ]
-        string_requests: list[tuple[int, int, StringTensor, Tensor]] = []
+        string_requests: list[tuple[int, StringTensor, Tensor]] = []
         for column_index, input_categories in enumerate(
             _iter_categories(table.categorical)
         ):
@@ -403,15 +405,16 @@ class AlignCategories(EnsembleProcessor):
                 continue
 
             lookup_by_categories = lookups_by_column[column_index]
-            pending_categories: set[int] = set()
+            pending_categories: set[Tensor] = set()
             for batch_categories in fitted_categories:
                 column_categories = batch_categories[column_index]
-                identity = id(column_categories)
-                lookup = lookup_by_categories.get(identity)
-                if lookup is not None or identity in pending_categories:
+                if (
+                    column_categories in lookup_by_categories
+                    or column_categories in pending_categories
+                ):
                     continue
                 if column_categories.numel() == 0:
-                    lookup_by_categories[identity] = codes.new_full(
+                    lookup_by_categories[column_categories] = codes.new_full(
                         (input_categories.numel(),),
                         -1,
                     )
@@ -424,39 +427,35 @@ class AlignCategories(EnsembleProcessor):
                         "categories"
                     )
                 if isinstance(input_categories, StringTensor):
-                    pending_categories.add(identity)
+                    pending_categories.add(column_categories)
                     string_requests.append(
-                        (
-                            column_index,
-                            identity,
-                            input_categories,
-                            column_categories,
-                        )
+                        (column_index, input_categories, column_categories)
                     )
                     continue
-                lookup_by_categories[identity] = self._category_lookup(
-                    input_categories,
-                    column_categories,
-                    codes,
+                lookup_by_categories[column_categories] = (
+                    self._category_lookup(
+                        input_categories,
+                        column_categories,
+                        codes,
+                    )
                 )
 
         string_lookups = self._string_category_lookups(
             input_categories=tuple(
-                input_categories
-                for _, _, input_categories, _ in string_requests
+                input_categories for _, input_categories, _ in string_requests
             ),
             fitted_categories=tuple(
                 fitted_categories
-                for _, _, _, fitted_categories in string_requests
+                for _, _, fitted_categories in string_requests
             ),
             codes=codes,
         )
-        for (column_index, identity, _, _), lookup in zip(
+        for (column_index, _, column_categories), lookup in zip(
             string_requests,
             string_lookups,
             strict=True,
         ):
-            lookups_by_column[column_index][identity] = lookup
+            lookups_by_column[column_index][column_categories] = lookup
 
         for column_index, input_categories in enumerate(
             _iter_categories(table.categorical)
@@ -465,7 +464,7 @@ class AlignCategories(EnsembleProcessor):
                 continue
             lookup_by_categories = lookups_by_column[column_index]
             lookups = [
-                lookup_by_categories[id(batch_categories[column_index])]
+                lookup_by_categories[batch_categories[column_index]]
                 for batch_categories in fitted_categories
             ]
             column_codes = codes[..., column_index]
