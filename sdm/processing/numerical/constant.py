@@ -4,6 +4,7 @@
 from typing import cast
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
@@ -30,6 +31,8 @@ class DropConstantColumns(EnsembleProcessor):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _kept_index: Tensor | None
+
     def __init__(
         self,
         *,
@@ -50,7 +53,10 @@ class DropConstantColumns(EnsembleProcessor):
 
     def set_extra_state(self, state: object) -> None:
         r""":meta private:"""  # noqa: D415
-        self._kept_indices = cast(tuple[tuple[int, ...], ...], state)
+        self._set_kept_indices(
+            kept_indices=cast(tuple[tuple[int, ...], ...], state),
+            device=self._fitted_state.device,
+        )
 
     def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
         # [N, C] or [..., N, C] -> [C] or [..., C].
@@ -70,6 +76,22 @@ class DropConstantColumns(EnsembleProcessor):
         left, right = values[..., :-1, :], values[..., 1:, :]
         changed = (right != left) & ~(right.isnan() & left.isnan())
         return changed.sum(dim=-2) >= self.threshold
+
+    def _set_kept_indices(
+        self,
+        kept_indices: tuple[tuple[int, ...], ...],
+        device: torch.device,
+    ) -> None:
+        self._kept_indices = kept_indices
+        # Unnamed tables select kept columns by this tensor, so their number
+        # can vary under torch.compile. Set if all members keep the same.
+        self.register_buffer(
+            "_kept_index",
+            torch.tensor(kept_indices[0], dtype=torch.long, device=device)
+            if len(set(kept_indices)) == 1
+            else None,
+            persistent=False,
+        )
 
     @staticmethod
     def _select_columns(
@@ -100,11 +122,19 @@ class DropConstantColumns(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         keep = self._keep_mask(table.numerical).tolist()
-        self._kept_indices = (
-            tuple(index for index, kept in enumerate(keep) if kept),
+        self._set_kept_indices(
+            kept_indices=(
+                tuple(index for index, kept in enumerate(keep) if kept),
+            ),
+            device=table.device,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if table.numerical_columns is None:
+            index = cast(Tensor, self._kept_index)
+            return table.replace_blocks(
+                numerical=table.numerical.index_select(-1, index)
+            )
         return self._select_columns(table, self._kept_indices[0])
 
     def _fit_transform(
@@ -129,7 +159,10 @@ class DropConstantColumns(EnsembleProcessor):
             kept_indices = tuple(
                 index for index, kept in enumerate(keep) if kept
             )
-            self._kept_indices = (kept_indices,) * len(ensemble_table)
+            self._set_kept_indices(
+                kept_indices=(kept_indices,) * len(ensemble_table),
+                device=group.device,
+            )
             return
 
         masks = ensemble_table.replace_groups(
@@ -168,12 +201,23 @@ class DropConstantColumns(EnsembleProcessor):
                 kept_indices_by_member[member_id] = tuple(
                     index for index, kept in enumerate(keep) if kept
                 )
-        self._kept_indices = tuple(kept_indices_by_member)
+        self._set_kept_indices(
+            kept_indices=tuple(kept_indices_by_member),
+            device=groups[0].device,
+        )
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if next(ensemble_table._iter_groups()).numerical_columns is None:
+            return ensemble_table.replace_groups(
+                [
+                    self._transform(group)
+                    for group in ensemble_table._iter_groups()
+                ]
+            )
+
         if len(self._kept_indices) != len(ensemble_table):
             raise RuntimeError(
                 "DropConstantColumns must be fitted with the same number of "
