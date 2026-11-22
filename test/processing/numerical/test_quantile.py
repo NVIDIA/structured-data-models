@@ -153,6 +153,28 @@ def test_quantile_transform_single_quantile_maps_to_zero(
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    ("n_quantiles", "expected_values"),
+    [(1, [0.0, 0.0, 0.0]), (4, [0.0, 0.5, 1.0])],
+)
+def test_quantile_transform_ignores_nan_when_fitting(
+    device: torch.device,
+    n_quantiles: int,
+    expected_values: list[float],
+) -> None:
+    nan = float("nan")
+    inp = torch.tensor([[0.0], [1.0], [2.0], [nan]], device=device)
+    processor = QuantileTransform(n_quantiles=n_quantiles, subsample=None)
+    transformed = processor.fit_transform(TableTensor.from_tensor(inp))
+
+    expected = inp.new_tensor([*expected_values, nan])
+    torch.testing.assert_close(
+        transformed.numerical[:, 0], expected, equal_nan=True
+    )
+    assert processor.inverse_transform(transformed).numerical[-1, 0].isnan()
+
+
+@withCUDA
 def test_quantile_transform_normal_distribution_is_finite_at_bounds(
     device: torch.device,
 ) -> None:

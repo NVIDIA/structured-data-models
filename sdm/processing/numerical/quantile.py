@@ -41,9 +41,9 @@ def _batched_interp(
     # values ``[F, N]`` with boundaries/references as ``[Q]`` or ``[F, Q]``.
     n = boundaries.shape[-1]
     if n == 1:
-        if references.dim() == 1:
-            return references[0].expand_as(values)
-        return references[:, :1].expand_as(values)
+        return torch.where(
+            boundaries.isnan(), torch.nan, references
+        ).expand_as(values)
 
     idx = torch.searchsorted(boundaries, values, right=True).clamp(1, n - 1)
 
@@ -79,6 +79,9 @@ def _batched_interp(
 
 class QuantileTransform(Processor, InvertibleMixin):
     """Map numerical columns through their empirical quantiles.
+
+    NaNs are ignored when fitting and preserved in both transform directions.
+    Columns whose fitted sample contains only NaNs produce NaNs.
 
     QuantileTransform grids are capped by the number of fitted rows and, when
     ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
@@ -172,8 +175,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         sample_columns = (
             input_sample.movedim(-1, -2).reshape(-1, sample_size).contiguous()
         )
-        quantiles = torch.quantile(
-            sample_columns,
+        quantiles = sample_columns.nanquantile(
             references,
             dim=-1,
         )
@@ -245,7 +247,9 @@ class QuantileTransform(Processor, InvertibleMixin):
                 clip_max = _ndtri(1.0 - eps)
                 output = output.clamp(clip_min, clip_max)
 
-            transformed_columns[start:end] = output
+            transformed_columns[start:end] = output.masked_fill_(
+                input_chunk.isnan(), torch.nan
+            )
 
         transformed = transformed_columns.reshape(
             *numerical.shape[:-2],
@@ -296,7 +300,9 @@ class QuantileTransform(Processor, InvertibleMixin):
             )
             output = torch.where(upper_bounds_idx, upper_bound_y, output)
             output = torch.where(lower_bounds_idx, lower_bound_y, output)
-            inverse_columns[start:end] = output
+            inverse_columns[start:end] = output.masked_fill_(
+                input_chunk.isnan(), torch.nan
+            )
 
         inverse = inverse_columns.reshape(
             *numerical.shape[:-2],

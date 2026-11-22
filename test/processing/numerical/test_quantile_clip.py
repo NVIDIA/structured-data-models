@@ -62,6 +62,23 @@ def test_clip_quantiles_default_uses_min_max_bounds(
 
 
 @withCUDA
+def test_clip_quantiles_ignores_nan_when_fitting(device: torch.device) -> None:
+    nan = float("nan")
+    inp = torch.tensor(
+        [[0.0, 10.0], [1.0, 20.0], [2.0, 30.0], [nan, 40.0]],
+        device=device,
+    )
+    table = TableTensor.from_tensor(inp)
+    transformed = ClipQuantiles(q_low=0.25, q_high=0.75).fit_transform(table)
+    expected = torch.tensor(
+        [[0.5, 17.5], [1.0, 20.0], [1.5, 30.0], [nan, 32.5]],
+        device=device,
+    )
+
+    torch.testing.assert_close(transformed.numerical, expected, equal_nan=True)
+
+
+@withCUDA
 def test_clip_quantiles_constant_columns_are_exact(
     device: torch.device,
 ) -> None:

@@ -12,7 +12,9 @@ class ClipQuantiles(Processor):
     """Clamp each numerical column to its fitted quantile bounds.
 
     Values outside the fitted bounds are discarded, so this processor is not
-    invertible. Bounds are fitted independently for each column.
+    invertible. Bounds are fitted independently for each column. NaNs are
+    ignored when fitting and preserved when clipping. Columns fitted only on
+    NaNs produce NaNs.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
@@ -48,8 +50,7 @@ class ClipQuantiles(Processor):
     ) -> None:
         numerical = table.numerical
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
-        q_low, q_high = torch.quantile(
-            numerical,
+        q_low, q_high = numerical.nanquantile(
             quantiles,
             dim=-2,
             keepdim=True,
