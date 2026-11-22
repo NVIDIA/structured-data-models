@@ -163,14 +163,21 @@ def test_quantile_transform_ignores_nan_when_fitting(
     expected_values: list[float],
 ) -> None:
     nan = float("nan")
-    inp = torch.tensor([[0.0], [1.0], [2.0], [nan]], device=device)
-    processor = QuantileTransform(n_quantiles=n_quantiles, subsample=None)
-    transformed = processor.fit_transform(TableTensor.from_tensor(inp))
+    inp = torch.tensor(
+        [[0.0, nan], [1.0, nan], [2.0, nan], [nan, nan]], device=device
+    )
+    processor = QuantileTransform(n_quantiles=n_quantiles, subsample=None).fit(
+        TableTensor.from_tensor(inp)
+    )
+    query = inp.clone()
+    query[:, 1] = 1.0
+    transformed = processor.transform(TableTensor.from_tensor(query))
 
     expected = inp.new_tensor([*expected_values, nan])
     torch.testing.assert_close(
         transformed.numerical[:, 0], expected, equal_nan=True
     )
+    assert transformed.numerical[:, 1].isnan().all()
     assert processor.inverse_transform(transformed).numerical[-1, 0].isnan()
 
 
