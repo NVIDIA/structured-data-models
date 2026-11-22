@@ -293,7 +293,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             else:
                 yield cast(Tensor, value), dims
 
-    def _mark_dynamic(self, names: Collection[str]) -> None:
+    def _mark_dynamic(self, names: Collection[str], **limits: int) -> None:
         r"""Mark the declared dimensions called ``names`` as dynamic.
 
         Marks for :func:`torch.compile` stay on the tensors, so a cache is
@@ -301,13 +301,15 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
         Args:
             names: The names of the dimensions, *e.g.*, ``{"rows"}``.
+            **limits: The largest sizes that a graph may rely on, by name,
+                *e.g.*, ``columns=65_535``.
         """
         if self._dynamic:
             return
         for tensor, dims in self._dynamic_dims():
             for name, dim in dims.items():
                 if name in names:
-                    _mark_dynamic(tensor, dim)
+                    _mark_dynamic(tensor, dim, limit=limits.get(name))
         self._dynamic = True
 
     def __setitem__(self, key: Hashable, value: object) -> None:

@@ -39,6 +39,10 @@ class Processor(torch.nn.Module, abc.ABC):
 
     _fitted_state: Tensor
 
+    # Whether transforms of this fit accept a numerical block without column
+    # names, as compiled predictions pass it.
+    _accepts_unnamed: bool = True
+
     def __init__(self) -> None:
         super().__init__()
         self.register_buffer("_fitted_state", torch.tensor(False))

@@ -303,8 +303,18 @@ class ICLModel(Model):
             class_values=class_values,
             estimator_batch_size=estimator_batch_size,
         )
+        stypes = contexts[0].input_stypes
         cache = Cache(
             recipe_execution=recipe_execution,
+            # Compiled predictions run queries of only these numerical columns
+            # without names, if the default recipe allows it for this fit.
+            # Other recipes and callbacks may read or change the names.
+            numerical_columns=tuple(stypes)
+            if set(stypes.values()) == {Stype.numerical}
+            and recipe is None
+            and recipe_execution._accepts_unnamed()
+            and not callbacks
+            else None,
             kwargs=kwargs,
             num_batches=len(batches),
         )
@@ -335,8 +345,10 @@ class ICLModel(Model):
                         else None
                     ),
                     class_values=class_values[batch],
-                    categorical_mask=categorical_mask,
                     kv_cache_dtype=kv_cache_dtype,
+                )
+                batch_cache._record(
+                    "categorical_mask", categorical_mask, columns=-1
                 )
                 self._forward(
                     x_context=context.x,
@@ -783,7 +795,13 @@ class ICLModel(Model):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context.columns != x_query.columns:
+        # Compiled predictions run numerical features that are named as in
+        # `fit` without names, which a graph would hold as constants.
+        if any(
+            names != x_context.columns[stype]
+            for stype, names in x_query.columns.items()
+            if names is not None or not torch.compiler.is_dynamo_compiling()
+        ):
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )

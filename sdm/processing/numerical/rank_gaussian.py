@@ -49,9 +49,9 @@ class RankGaussian(Processor):
         self.register_buffer("_probabilities", torch.empty(0))
 
     def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[str, int]]]:
-        # Up to `max_knots` knots per column follow the fitted rows.
-        yield self._values, {"rows": -1}
-        yield self._probabilities, {"rows": -1}
+        # [..., C, K]: up to `max_knots` knots per column follow the rows.
+        yield self._values, {"rows": -1, "columns": -2}
+        yield self._probabilities, {"rows": -1, "columns": -2}
 
     def _fit(
         self,

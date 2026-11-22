@@ -68,8 +68,17 @@ class RecipeExecution:
         ]
         for processor in processors:
             for module in _iter_modules(processor):
-                if isinstance(module, sp.Processor):
+                # Processors without a fit hold no state, such as those of
+                # a semantic type that the table lacks.
+                if isinstance(module, sp.Processor) and module.is_fitted:
                     yield from module._dynamic_dims()
+
+    def _accepts_unnamed(self) -> bool:
+        return all(
+            module._accepts_unnamed
+            for module in _iter_modules(self.recipe.features)
+            if isinstance(module, sp.Processor) and module.is_fitted
+        )
 
     @overload
     def fit_transform(

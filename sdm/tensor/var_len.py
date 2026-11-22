@@ -1582,15 +1582,22 @@ def _materialize(
     )
 
 
-def _mark_dynamic(tensor: Tensor, dim: int) -> None:
+def _mark_dynamic(tensor: Tensor, dim: int, limit: int | None = None) -> None:
     r"""Mark a dimension as dynamic for :func:`torch.compile`.
 
-    Sizes of zero and one stay static, as a graph specializes on them.
+    Sizes of zero and one stay static, as a graph specializes on them. A
+    graph may rely on a size of at most ``limit``, so a larger size compiles
+    a graph of its own.
     """
-    if tensor.size(dim) < 2:
+    size = tensor.size(dim)
+    if size < 2:
         return
     dim %= tensor.dim()
     if isinstance(tensor, VarLenTensor):
         tensor._mark_dynamic(dim)
         return
-    torch._dynamo.mark_dynamic(tensor, dim)
+    if limit is None or size > limit:
+        torch._dynamo.mark_dynamic(tensor, dim)
+        return
+    # PyTorch 2.14.1 takes a maximum only together with a minimum.
+    torch._dynamo.mark_dynamic(tensor, dim, min=2, max=limit)
