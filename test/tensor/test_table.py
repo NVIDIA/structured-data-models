@@ -123,6 +123,25 @@ def test_column_names() -> None:
         )
 
 
+def test_unnamed_columns() -> None:
+    tensor = TableTensor(
+        columns={"numerical": None},
+        numerical=torch.randn(4, 3),
+    )
+    assert tensor.size() == (4, 3)
+    assert tensor.numerical_columns is None
+    assert tensor.active_stypes == {Stype.numerical}
+    assert tensor[1:3].numerical_columns is None
+    assert torch.cat([tensor, tensor], dim=-1).size() == (4, 6)
+
+    tensor = TableTensor(
+        columns={"numerical": None},
+        numerical=torch.randn(4, 0),
+    )
+    assert tensor.numerical_columns == ()
+    assert tensor.active_stypes == frozenset()
+
+
 def test_equal() -> None:
     numerical = torch.randn(2, 2)
     categorical = CategoricalTensor(
