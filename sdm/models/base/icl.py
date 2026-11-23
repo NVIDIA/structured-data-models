@@ -108,9 +108,6 @@ class ICLModel(Model):
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
 
-        Inputs with ``requires_grad=True`` enable autograd through
-        differentiable preprocessing, model execution, and postprocessing.
-
         Args:
             x_context: The feature tensor of in-context examples with shape
                 ``[..., R_context, D]`` with ``R_context`` rows and ``D``
@@ -144,12 +141,15 @@ class ICLModel(Model):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        input_requires_grad = _requires_grad(
-            x_context,
-            y_context,
-            x_query,
-            related_context_tables,
-            related_query_tables,
+        inputs = [x_context, y_context, x_query]
+        for tables in (related_context_tables, related_query_tables):
+            if tables is not None:
+                inputs.extend(tables.tables.values())
+        input_requires_grad = any(
+            value.numerical.requires_grad
+            if isinstance(value, TableTensor)
+            else value.requires_grad
+            for value in inputs
         )
         requires_grad = self.training or input_requires_grad
         requires_grad |= any(callback.requires_grad for callback in callbacks)
@@ -407,10 +407,6 @@ class ICLModel(Model):
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
-        Query inputs with ``requires_grad=True`` enable autograd through
-        differentiable preprocessing, model execution, and postprocessing.
-        The fitted context cache remains detached.
-
         .. note::
 
             This method requires a prior call to :meth:`fit`.
@@ -433,7 +429,15 @@ class ICLModel(Model):
             )
 
         callbacks = () if callbacks is None else callbacks
-        input_requires_grad = _requires_grad(x, related_tables)
+        inputs = [x]
+        if related_tables is not None:
+            inputs.extend(related_tables.tables.values())
+        input_requires_grad = any(
+            value.numerical.requires_grad
+            if isinstance(value, TableTensor)
+            else value.requires_grad
+            for value in inputs
+        )
         requires_grad = input_requires_grad or any(
             callback.requires_grad for callback in callbacks
         )
@@ -1003,18 +1007,3 @@ def _unstack(
         )
         for member_out, classes in zip(outs, stacked, strict=True)
     ]
-
-
-def _requires_grad(*inputs: Tensor | RelatedTables | None) -> bool:
-    for value in inputs:
-        if isinstance(value, TableTensor):
-            if value.numerical.requires_grad:
-                return True
-        elif isinstance(value, Tensor):
-            if value.requires_grad:
-                return True
-        elif isinstance(value, RelatedTables) and _requires_grad(
-            *value.tables.values()
-        ):
-            return True
-    return False
