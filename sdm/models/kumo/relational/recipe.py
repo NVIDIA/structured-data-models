@@ -6,9 +6,8 @@ from sdm.models.tabiclv2.recipe import default_recipe as tabicl_recipe
 
 
 def default_recipe() -> sp.Recipe:  # noqa: D103
-    # Add calendar features to related tables:
     return tabicl_recipe().prepend_features(
-        sp.TableDispatch(
+        sp.TableDispatch(  # Add calendar features to related tables:
             related=sp.StypeDispatch(
                 datetime=sp.AddCalendarFields(
                     ("minute", "hour", "weekday", "day_of_month", "month"),

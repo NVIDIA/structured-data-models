@@ -75,5 +75,4 @@ Default Recipe
 
 .. code-block:: python
 
-{% set recipe_module = import_module(cls.__module__.rsplit(".", 1)[0] ~ ".recipe") %}
-{{ recipe_module.default_recipe() | string | indent(3, true) }}
+{{ getmodule(cls).default_recipe() | string | indent(3, true) }}
