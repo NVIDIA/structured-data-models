@@ -8,7 +8,7 @@ from torch import Tensor
 
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
-from sdm.cache import KVCacheEntry
+from sdm.nn import KeyValue
 
 
 class AttentionBackend(abc.ABC):
@@ -22,7 +22,7 @@ class AttentionBackend(abc.ABC):
     def supports(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key_value: KeyValue,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -54,7 +54,7 @@ class AttentionBackend(abc.ABC):
     def forward(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key_value: KeyValue,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -74,7 +74,7 @@ class TorchAttentionBackend(AttentionBackend):
     def supports(  # noqa: D102
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key_value: KeyValue,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -87,7 +87,7 @@ class TorchAttentionBackend(AttentionBackend):
     def forward(  # noqa: D102
         self,
         query: Tensor,  # [B, Q, Hq, C]
-        key_value: KVCacheEntry,  # [B, KV, Hkv, C], [B, KV, Hkv, Cv]
+        key_value: KeyValue,  # [B, KV, Hkv, C], [B, KV, Hkv, Cv]
         *,
         attn_mask: Tensor | None,  # [B, Hq, Q, KV]
         seqused_key_value: Tensor | None,  # [B]
@@ -129,7 +129,7 @@ class FlashAttention3Backend(AttentionBackend):
     def supports(  # noqa: D102
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key_value: KeyValue,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -147,7 +147,7 @@ class FlashAttention3Backend(AttentionBackend):
     def forward(  # noqa: D102
         self,
         query: Tensor,  # [B, Q, Hq, C]
-        key_value: KVCacheEntry,  # [B, KV, Hkv, C]
+        key_value: KeyValue,  # [B, KV, Hkv, C]
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,  # [B]

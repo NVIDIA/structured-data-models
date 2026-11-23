@@ -7,7 +7,8 @@ from typing import cast
 import pytest
 import torch
 
-from sdm.cache import Cache, Float8PerHead, KVCacheEntry
+from sdm.cache import Cache
+from sdm.nn import Float8PerHead, KeyValue
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -15,30 +16,30 @@ from sdm.testing import onlyCUDA, withCUDA
 def test_cache(device: torch.device) -> None:
     cache = Cache(foo="foo")
     assert len(cache) == 1
-    cache["entry"] = KVCacheEntry(key=torch.randn(5), value=torch.randn(5))
+    cache["entry"] = KeyValue(key=torch.randn(5), value=torch.randn(5))
     assert len(cache) == 2
     cache = cache.cpu()
-    assert cast(KVCacheEntry, cache["entry"]).key.is_cpu
-    assert cast(KVCacheEntry, cache["entry"]).value.is_cpu
+    assert cast(KeyValue, cache["entry"]).key.is_cpu
+    assert cast(KeyValue, cache["entry"]).value.is_cpu
 
     if device.type == "cuda":
         cache = cache.pin_memory()
-        assert cast(KVCacheEntry, cache["entry"]).key.is_pinned()
-        assert cast(KVCacheEntry, cache["entry"]).value.is_pinned()
+        assert cast(KeyValue, cache["entry"]).key.is_pinned()
+        assert cast(KeyValue, cache["entry"]).value.is_pinned()
         cache = cache.to(device, non_blocking=True)
-        assert cast(KVCacheEntry, cache["entry"]).key.is_cuda
-        assert cast(KVCacheEntry, cache["entry"]).value.is_cuda
+        assert cast(KeyValue, cache["entry"]).key.is_cuda
+        assert cast(KeyValue, cache["entry"]).value.is_cuda
 
 
 def test_cache_size() -> None:
     cache = Cache(
-        entry=KVCacheEntry(
+        entry=KeyValue(
             key=torch.ones(3, dtype=torch.float32),
             value=torch.ones(2, dtype=torch.int64),
         ),
         nested=[
             Cache(
-                entry=KVCacheEntry(
+                entry=KeyValue(
                     key=torch.ones(5, dtype=torch.bool),
                     value=torch.ones(4, dtype=torch.float16),
                 )
@@ -56,9 +57,7 @@ def test_cache_serialization(
     map_to_device: bool,
 ) -> None:
     nested = Cache(
-        entry=KVCacheEntry(
-            key=torch.arange(6).view(2, 3), value=torch.ones(2, 3)
-        )
+        entry=KeyValue(key=torch.arange(6).view(2, 3), value=torch.ones(2, 3))
     )
     if device.type == "cuda":
         nested = nested.pin_memory()
@@ -84,8 +83,8 @@ def test_cache_serialization(
     assert not cast(torch.Tensor, restored["tensor"]).is_pinned()
 
     load_device = device if map_to_device else torch.device("cpu")
-    expected_entry = cast(KVCacheEntry, nested["entry"])
-    restored_entry = cast(KVCacheEntry, restored_nested["entry"])
+    expected_entry = cast(KeyValue, nested["entry"])
+    restored_entry = cast(KeyValue, restored_nested["entry"])
     for actual, expected in (
         (
             cast(torch.Tensor, restored["tensor"]),
@@ -120,25 +119,25 @@ def test_cache_serialization_without_cuda(
     )
 
 
-def test_kv_cache_entry_scales() -> None:
+def test_key_value_scales() -> None:
     x = torch.ones(2, 3, 1, 4)  # [B, KV, H, C]
-    entry = Float8PerHead().quantize(KVCacheEntry(key=x, value=x))
+    entry = Float8PerHead().quantize(KeyValue(key=x, value=x))
     assert Cache(entry=entry).size() == 2 * 24 * 1 + 2 * 2 * 4
 
 
-def test_kv_cache_entry_rejects_mismatched_kv_cache_dtype() -> None:
+def test_key_value_rejects_mismatched_kv_cache_dtype() -> None:
     x = torch.randn(2, 3, 1, 4)
     with pytest.raises(ValueError, match="do not match"):
-        KVCacheEntry(key=x, value=x, kv_cache_dtype=Float8PerHead())
+        KeyValue(key=x, value=x, kv_cache_dtype=Float8PerHead())
     with pytest.raises(ValueError, match="do not match"):
-        KVCacheEntry(key=x, value=x, key_scale=x, value_scale=x)
+        KeyValue(key=x, value=x, key_scale=x, value_scale=x)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
 def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
     key = torch.randn(2, 5, 3, 4, dtype=dtype)  # [B, KV, H, C]
     value = torch.randn(2, 5, 3, 4, dtype=dtype)
-    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
+    entry = Float8PerHead().quantize(KeyValue(key=key, value=value))
     assert entry.key.dtype == torch.float8_e4m3fn
     assert cast(torch.Tensor, entry.key_scale).size() == (2, 1, 3, 1)
 

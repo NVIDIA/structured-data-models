@@ -238,9 +238,24 @@ def _resolve_reference_alias(
     return missing_reference(app, env, node, content)
 
 
+def _hide_private_bases(
+    _app: Sphinx,
+    _name: str,
+    _obj: type,
+    _options: object,
+    bases: list[type],
+) -> None:
+    bases[:] = [
+        base
+        for base in bases
+        if not getattr(base, "__name__", "").startswith("_")
+    ]
+
+
 def setup(app: Sphinx) -> None:
     """Register Jinja rendering for dynamic autosummary lists."""
     app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
     app.connect("source-read", _render_jinja)
     app.connect("doctree-read", _run_on_doctree_read)
     app.connect("missing-reference", _resolve_reference_alias, priority=400)
+    app.connect("autodoc-process-bases", _hide_private_bases)

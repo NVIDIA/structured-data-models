@@ -9,12 +9,13 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, Linear, ModuleList, Parameter
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
 from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
+    KeyValue,
     LogScale,
     RMSNorm,
     RotaryEmbedding,
@@ -186,7 +187,7 @@ class RowEmbedding(torch.nn.Module):
             key = f"row_embedding.col_block{i}"
             result = col_block(
                 query=x,
-                key_value=cast(KVCacheEntry, cache[key])
+                key_value=cast(KeyValue, cache[key])
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :],
                 seqused_key_value=None

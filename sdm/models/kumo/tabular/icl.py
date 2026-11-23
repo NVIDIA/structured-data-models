@@ -9,9 +9,9 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.nn import LogScale, RMSNorm
+from sdm.nn import KeyValue, LogScale, RMSNorm
 
 
 class ICLBlock(torch.nn.Module):
@@ -95,7 +95,7 @@ class ICLBlock(torch.nn.Module):
                     if last_layer and train_size is None
                     else x,
                     key_value=(
-                        cast(KVCacheEntry, cache[cache_key])
+                        cast(KeyValue, cache[cache_key])
                         if cache is not None and cache.is_replaying
                         else x[..., :R_train, :]
                     ),
@@ -140,7 +140,7 @@ class ICLBlock(torch.nn.Module):
                 if last_layer
                 else x[..., :R_train, :],
             )
-            key_value = KVCacheEntry(
+            key_value = KeyValue(
                 key=entry.key[..., : self.kv_heads, :].contiguous(),
                 value=entry.value[..., : self.kv_heads, :].contiguous(),
             )

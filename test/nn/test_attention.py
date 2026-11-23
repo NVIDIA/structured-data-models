@@ -10,10 +10,11 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import Float8PerHead, KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
+    Float8PerHead,
+    KeyValue,
     QASSMax,
     SoftplusScale,
     TransformerBlock,
@@ -86,7 +87,7 @@ def test_sdpa(
     key = torch.randn(5, num_key_value_heads, channels, device=device)
     value = torch.randn(5, num_key_value_heads, channels, device=device)
 
-    out = module(query=query, key_value=KVCacheEntry(key=key, value=value))
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
 
     expected = reference_sdpa(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
@@ -99,7 +100,7 @@ def test_sdpa(
 
     out = module(
         query=query,
-        key_value=KVCacheEntry(key=key, value=value),
+        key_value=KeyValue(key=key, value=value),
         attn_mask=attn_mask,
     )
     expected = reference_sdpa(
@@ -116,7 +117,7 @@ def test_sdpa(
     value = torch.empty(2, 0, num_key_value_heads, channels, device=device)
     out = module(
         query=query,
-        key_value=KVCacheEntry(key=key, value=value),
+        key_value=KeyValue(key=key, value=value),
     )
     assert out.size() == query.size()
     torch.testing.assert_close(out, torch.zeros_like(query))
@@ -152,7 +153,7 @@ def test_sdpa(
 
     out = module(
         query=query,
-        key_value=KVCacheEntry(key=key, value=value),
+        key_value=KeyValue(key=key, value=value),
         seqused_key_value=seqused_key_value,
     )
 
@@ -199,7 +200,7 @@ def test_sdpa(
         device=device,
     )
 
-    out = module(query=query, key_value=KVCacheEntry(key=key, value=value))
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
     expected = reference_sdpa(
         query=query,
         key=key.expand(-1, num_test, -1, -1, -1),
@@ -218,7 +219,7 @@ def test_sdpa_scale(device: torch.device) -> None:
     key = torch.randn(2, 5, num_heads, channels, device=device)
     value = torch.randn(2, 5, num_heads, channels, device=device)
 
-    out = module(query=query, key_value=KVCacheEntry(key=key, value=value))
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
     expected = reference_sdpa(
         query=query,
         key=key,
@@ -239,7 +240,7 @@ def test_sdpa_additive_bias(device: torch.device) -> None:
 
     out = module(
         query=query,
-        key_value=KVCacheEntry(key=key, value=value),
+        key_value=KeyValue(key=key, value=value),
         attn_mask=bias,
     )
     expected = reference_sdpa(
@@ -267,7 +268,7 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     for tensor in (query, key, value):
         tensor.requires_grad_()
 
-    out = module(query=query, key_value=KVCacheEntry(key=key, value=value))
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
     assert out.size() == (0, 3, 2, value_channels)
     out.sum().backward()
     for tensor in (query, key, value):
@@ -287,7 +288,7 @@ def test_sdpa_errors() -> None:
     with pytest.raises(ValueError, match="Cannot pass both"):
         module(
             query=query,
-            key_value=KVCacheEntry(key=key, value=value),
+            key_value=KeyValue(key=key, value=value),
             seqused_key_value=torch.tensor([1], dtype=torch.int32),
             attn_mask=attn_mask,
         )
@@ -298,7 +299,7 @@ def test_sdpa_errors() -> None:
     ):
         module(
             query=query,
-            key_value=KVCacheEntry(key=key, value=value),
+            key_value=KeyValue(key=key, value=value),
             seqused_key_value=torch.tensor([1], dtype=torch.int64),
         )
 

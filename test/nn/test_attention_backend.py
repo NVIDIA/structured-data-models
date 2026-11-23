@@ -6,8 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import Float8PerHead, KVCacheEntry
-from sdm.nn import SDPA
+from sdm.nn import SDPA, Float8PerHead, KeyValue
 from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
 
@@ -36,7 +35,7 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
     ).transpose(1, 2)
 
     backend = TorchAttentionBackend()
-    key_value = KVCacheEntry(key=key, value=value)
+    key_value = KeyValue(key=key, value=value)
     options = {
         "attn_mask": attn_mask,
         "seqused_key_value": seqused_key_value,
@@ -59,7 +58,7 @@ class _ZeroBackend(AttentionBackend):
     def supports(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key_value: KeyValue,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -72,7 +71,7 @@ class _ZeroBackend(AttentionBackend):
     def forward(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key_value: KeyValue,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -86,7 +85,7 @@ class _ZeroBackend(AttentionBackend):
 def test_sdpa_backend() -> None:
     query = torch.randn(2, 3, 5, 4, 8)  # [..., Q, Hq, C]
     key = torch.randn(2, 3, 7, 4, 8)  # [..., KV, Hkv, C]
-    key_value = KVCacheEntry(key=key, value=torch.randn_like(key))
+    key_value = KeyValue(key=key, value=torch.randn_like(key))
     torch_sdpa = SDPA(num_query_heads=4)
     supported = SDPA(num_query_heads=4, backend=_ZeroBackend(True))
     unsupported = SDPA(num_query_heads=4, backend=_ZeroBackend(False))
