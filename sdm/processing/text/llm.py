@@ -1,13 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: D101, D102
+# ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
 
 import warnings
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Literal, Self, overload
+from typing import TYPE_CHECKING, Any, Literal, Self, overload
 
 import numpy as np
 import pyarrow as pa
@@ -32,10 +32,8 @@ class LLM(torch.nn.Module):
     ) -> None:
         super().__init__()
 
-        import sentence_transformers
-
         if isinstance(model, str):
-            model = sentence_transformers.SentenceTransformer(
+            model = load_model(
                 model,
                 device=str(device) if device is not None else None,
                 model_kwargs={"dtype": dtype} if dtype is not None else None,
@@ -46,15 +44,6 @@ class LLM(torch.nn.Module):
             model.tokenizer.pad_token = model.tokenizer.eos_token
 
         self.model = model.to(device, dtype).eval()
-
-        if self.model.device.type == "cuda":
-            try:
-                self.model.transformers_model.use_kernels = True  # type: ignore
-            except ValueError as e:
-                warn_once(
-                    key="transformers-kernels-missing",
-                    message=f"Transformer {e}, for faster LLM execution.",
-                )
 
     def __deepcopy__(self, memo: dict[int, object]) -> Self:
         return self
@@ -229,3 +218,59 @@ class LLM(torch.nn.Module):
             start = end
 
         pbar.close()
+
+
+def load_model(model: str, **kwargs: Any) -> SentenceTransformer:
+    import huggingface_hub  # noqa: PLC0415
+    import sentence_transformers
+    import transformers
+
+    verbosity = transformers.utils.logging.get_verbosity()
+    model_enabled = transformers.utils.logging.is_progress_bar_enabled()
+    hub_enabled = not huggingface_hub.utils.are_progress_bars_disabled()
+
+    try:
+        transformers.utils.logging.set_verbosity_error()
+        transformers.utils.logging.disable_progress_bar()
+        huggingface_hub.utils.disable_progress_bars()
+
+        try:
+            llm = sentence_transformers.SentenceTransformer(
+                model,
+                local_files_only=True,
+                **kwargs,
+            )
+            if llm.device.type == "cuda":
+                try:
+                    llm.transformers_model.use_kernels = True  # type: ignore
+                except ValueError as e:
+                    warn_once(
+                        key="transformers-kernels-missing",
+                        message=f"Transformer {e}, for faster LLM execution.",
+                    )
+            return llm
+        except OSError:
+            pass
+    finally:
+        transformers.utils.logging.set_verbosity(verbosity)
+        if model_enabled:
+            transformers.utils.logging.enable_progress_bar()
+        if hub_enabled:
+            huggingface_hub.utils.enable_progress_bars()
+        else:
+            huggingface_hub.utils.disable_progress_bars()
+
+    try:
+        transformers.utils.logging.set_verbosity_error()
+        llm = sentence_transformers.SentenceTransformer(model, **kwargs)
+    finally:
+        transformers.utils.logging.set_verbosity(verbosity)
+    if llm.device.type == "cuda":
+        try:
+            llm.transformers_model.use_kernels = True  # type: ignore
+        except ValueError as e:
+            warn_once(
+                key="transformers-kernels-missing",
+                message=f"Transformer {e}, for faster LLM execution.",
+            )
+    return llm

@@ -17,7 +17,7 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
-from sdm.processing.text.llm import LLM
+from sdm.processing.text.llm import LLM, load_model
 
 MODELS: dict[str, tuple[str, int]] = {  # (model_name, num_layers)
     "llama-3.1-8b": ("meta-llama/Llama-3.1-8B", 14),
@@ -121,7 +121,6 @@ class TILE(Processor):
                 f"{', '.join(MODELS)}"
             )
 
-        import sentence_transformers
         import transformers
 
         model, num_layers = MODELS[self.model]
@@ -132,17 +131,12 @@ class TILE(Processor):
         if getattr(config, "layer_types", None) is not None:
             config_kwargs["layer_types"] = config.layer_types[:num_layers]
 
-        verbosity = transformers.utils.logging.get_verbosity()  # type: ignore
-        transformers.utils.logging.set_verbosity_error()  # type: ignore
-        try:
-            llm = sentence_transformers.SentenceTransformer(
-                model,
-                device=str(device) if device is not None else None,
-                config_kwargs=config_kwargs,
-                model_kwargs={"dtype": dtype},
-            )
-        finally:
-            transformers.utils.logging.set_verbosity(verbosity)  # type: ignore
+        llm = load_model(
+            model,
+            device=str(device) if device is not None else None,
+            config_kwargs=config_kwargs,
+            model_kwargs={"dtype": dtype},
+        )
         cast(torch.nn.Module, llm.transformers_model).set_submodule(
             target="norm",
             module=torch.nn.Identity(),
