@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import Float8PerHead, KVCacheEntry
+from sdm.cache import Float8PerHead, KVCacheEntry, QuantizedTensor
 from sdm.nn import SDPA
 from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
@@ -36,7 +36,6 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
     ).transpose(1, 2)
 
     backend = TorchAttentionBackend()
-    key_value = KVCacheEntry(key=key, value=value)
     options = {
         "attn_mask": attn_mask,
         "seqused_key_value": seqused_key_value,
@@ -44,12 +43,12 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
         "dropout_p": 0.0,
         "scale": 0.5,
     }
-    assert backend.supports(query, key_value, **options)
-    out = backend.forward(query, key_value, **options)
+    assert backend.supports(query, key, value, **options)
+    out = backend.forward(query, key, value, **options)
     torch.testing.assert_close(out, expected)
 
-    quantized = Float8PerHead().quantize(key_value)
-    assert not backend.supports(query, quantized, **options)
+    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
+    assert not backend.supports(query, *entry.unbind(), **options)
 
 
 class _ZeroBackend(AttentionBackend):
@@ -59,7 +58,8 @@ class _ZeroBackend(AttentionBackend):
     def supports(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -67,12 +67,17 @@ class _ZeroBackend(AttentionBackend):
         dropout_p: float,
         scale: float | None,
     ) -> bool:
-        return self.supported and key_value.kv_cache_dtype is None
+        return (
+            self.supported
+            and isinstance(key, Tensor)
+            and isinstance(value, Tensor)
+        )
 
     def forward(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -95,10 +100,15 @@ def test_sdpa_backend() -> None:
     expected = torch_sdpa(query, key, value)
     torch.testing.assert_close(unsupported(query, key, value), expected)
 
-    # Backends that can't read quantized key/value projections get them
-    # dequantized:
-    key_value = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    assert supported(query, key_value).eq(0).all()
-    dequantized = key_value.dequantize(query.dtype)
+    # Backends that can't read quantized keys or values get them dequantized:
+    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
+    quantized_key, quantized_value = entry.unbind()
+    assert supported(query, quantized_key, quantized_value).eq(0).all()
+    dequantized = entry.dequantize(query.dtype)
     expected = torch_sdpa(query, dequantized.key, dequantized.value)
-    torch.testing.assert_close(torch_sdpa(query, key_value), expected)
+    out = torch_sdpa(query, quantized_key, quantized_value)
+    torch.testing.assert_close(out, expected)
+    expected = torch_sdpa(query, key, dequantized.value)
+    torch.testing.assert_close(
+        torch_sdpa(query, key, quantized_value), expected
+    )

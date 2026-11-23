@@ -2,27 +2,29 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import abc
+from typing import cast
 
 import torch
 from torch import Tensor
 
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
-from sdm.cache import KVCacheEntry
+from sdm.cache import QuantizedTensor
 
 
 class AttentionBackend(abc.ABC):
     r"""Base class for attention kernels of an attention layer.
 
     A backend computes scaled dot-product attention on inputs with flattened
-    batch dimensions, reading key/value projections in their storage format.
+    batch dimensions, reading keys and values in their storage format.
     """
 
     @abc.abstractmethod
     def supports(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -39,8 +41,10 @@ class AttentionBackend(abc.ABC):
 
         Args:
             query: Queries with shape ``[B, Q, Hq, C]``.
-            key_value: Key/value projections with shapes ``[B, KV, Hkv, C]``
-                and ``[B, KV, Hkv, Cv]``.
+            key: Keys with shape ``[B, KV, Hkv, C]``, possibly as a
+                :class:`~sdm.cache.QuantizedTensor`.
+            value: Values with shape ``[B, KV, Hkv, Cv]``, possibly as a
+                :class:`~sdm.cache.QuantizedTensor`.
             attn_mask: Boolean or additive attention mask broadcastable to
                 ``[B, Hq, Q, KV]``. ``None`` if ``seqused_key_value`` is given.
             seqused_key_value: Valid key/value lengths with shape ``[B]``.
@@ -54,7 +58,8 @@ class AttentionBackend(abc.ABC):
     def forward(
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -74,7 +79,8 @@ class TorchAttentionBackend(AttentionBackend):
     def supports(  # noqa: D102
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -82,12 +88,13 @@ class TorchAttentionBackend(AttentionBackend):
         dropout_p: float,
         scale: float | None,
     ) -> bool:
-        return key_value.kv_cache_dtype is None
+        return isinstance(key, Tensor) and isinstance(value, Tensor)
 
     def forward(  # noqa: D102
         self,
         query: Tensor,  # [B, Q, Hq, C]
-        key_value: KVCacheEntry,  # [B, KV, Hkv, C], [B, KV, Hkv, Cv]
+        key: Tensor | QuantizedTensor,  # [B, KV, Hkv, C]
+        value: Tensor | QuantizedTensor,  # [B, KV, Hkv, Cv]
         *,
         attn_mask: Tensor | None,  # [B, Hq, Q, KV]
         seqused_key_value: Tensor | None,  # [B]
@@ -95,7 +102,7 @@ class TorchAttentionBackend(AttentionBackend):
         dropout_p: float,
         scale: float | None,
     ) -> Tensor:  # [B, Q, Hq, Cv]
-        key, value = key_value.key, key_value.value
+        key, value = cast(Tensor, key), cast(Tensor, value)
         if seqused_key_value is not None:
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index < seqused_key_value[:, None]  # [B, KV]
@@ -129,7 +136,8 @@ class FlashAttention3Backend(AttentionBackend):
     def supports(  # noqa: D102
         self,
         query: Tensor,
-        key_value: KVCacheEntry,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,
@@ -138,7 +146,8 @@ class FlashAttention3Backend(AttentionBackend):
         scale: float | None,
     ) -> bool:
         return (
-            key_value.kv_cache_dtype is None
+            isinstance(key, Tensor)
+            and isinstance(value, Tensor)
             and attn_mask is None
             and not is_causal
             and dropout_p == 0.0
@@ -147,7 +156,8 @@ class FlashAttention3Backend(AttentionBackend):
     def forward(  # noqa: D102
         self,
         query: Tensor,  # [B, Q, Hq, C]
-        key_value: KVCacheEntry,  # [B, KV, Hkv, C]
+        key: Tensor | QuantizedTensor,  # [B, KV, Hkv, C]
+        value: Tensor | QuantizedTensor,  # [B, KV, Hkv, C]
         *,
         attn_mask: Tensor | None,
         seqused_key_value: Tensor | None,  # [B]
@@ -157,8 +167,8 @@ class FlashAttention3Backend(AttentionBackend):
     ) -> Tensor:  # [B, Q, Hq, C]
         return flash_attention(
             query=query,
-            key=key_value.key,
-            value=key_value.value,
+            key=cast(Tensor, key),
+            value=cast(Tensor, value),
             lengths=seqused_key_value,
             scale=scale,
         )

@@ -20,6 +20,41 @@ from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
 
 
+class _QuantizedTensor(NamedTuple):
+    qdata: Tensor
+    scale: Tensor
+    kv_cache_dtype: "KVCacheDType"
+
+
+class QuantizedTensor(_QuantizedTensor, DeviceMixin):
+    r"""A tensor stored as quantized values and scales.
+
+    Args:
+        qdata: The quantized values.
+        scale: Scales broadcastable to ``qdata``.
+        kv_cache_dtype: The storage dtype of ``qdata`` and ``scale``.
+    """
+
+    def dequantize(self, dtype: torch.dtype) -> Tensor:
+        r"""Returns ``qdata * scale`` in ``dtype``.
+
+        Args:
+            dtype: The target dtype.
+        """
+        return self.qdata.to(dtype).mul_(self.scale)
+
+    def _tensors(self) -> Iterator[Tensor]:
+        yield self.qdata
+        yield self.scale
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.__class__(
+            qdata=fn(self.qdata),
+            scale=fn(self.scale),
+            kv_cache_dtype=self.kv_cache_dtype,
+        )
+
+
 class _KVCacheEntry(NamedTuple):
     key: Tensor
     value: Tensor
@@ -58,6 +93,28 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         if self.kv_cache_dtype is None:
             return self
         return self.kv_cache_dtype.dequantize(self, dtype)
+
+    def unbind(
+        self,
+    ) -> tuple[Tensor | QuantizedTensor, Tensor | QuantizedTensor]:
+        r"""Returns the key and value projections.
+
+        Quantized projections are returned as :class:`QuantizedTensor`.
+        """
+        if self.kv_cache_dtype is None:
+            return self.key, self.value
+        return (
+            QuantizedTensor(
+                qdata=self.key,
+                scale=cast(Tensor, self.key_scale),
+                kv_cache_dtype=self.kv_cache_dtype,
+            ),
+            QuantizedTensor(
+                qdata=self.value,
+                scale=cast(Tensor, self.value_scale),
+                kv_cache_dtype=self.kv_cache_dtype,
+            ),
+        )
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
