@@ -144,9 +144,8 @@ class KumoForecast(ICLModel):
 
     def default_recipe(self) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_recipe(
-            missingness=isinstance(self.model, _KumoForecastMissingness),
-        )
+        missingness = isinstance(self.model, _KumoForecastMissingness)
+        return default_recipe(missingness)
 
     def _load_from_pretrained(
         self,
