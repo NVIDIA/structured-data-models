@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import pandas as pd
 import pytest
@@ -13,6 +13,29 @@ from sdm import RelationalData, Stype, TableTensor, infer_stypes
 @pytest.fixture
 def device() -> torch.device:
     return torch.device("cpu")
+
+
+@pytest.fixture
+def assert_close_ulp() -> Callable[[torch.Tensor, torch.Tensor], None]:
+    def check(actual: torch.Tensor, expected: torch.Tensor) -> None:
+        assert actual.shape == expected.shape
+        assert actual.dtype == expected.dtype
+        assert actual.device == expected.device
+        finite = expected.isfinite()
+        torch.testing.assert_close(actual.isfinite(), finite)
+        torch.testing.assert_close(
+            actual[~finite], expected[~finite], rtol=0, atol=0, equal_nan=True
+        )
+        lower = expected.nextafter(torch.full_like(expected, -torch.inf))
+        upper = expected.nextafter(torch.full_like(expected, torch.inf))
+        torch.testing.assert_close(
+            actual[finite],
+            actual[finite].clamp(min=lower[finite], max=upper[finite]),
+            rtol=0,
+            atol=0,
+        )
+
+    return check
 
 
 @pytest.fixture

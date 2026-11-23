@@ -102,7 +102,8 @@ def rms_norm_cast(
     x: Tensor,
     weight: Tensor | None,
     eps: float,
-    rope: tuple[Tensor, Tensor] | None = None,
+    rope: tuple[Tensor, Tensor] | None,
+    dtype: torch.dtype,
 ) -> Tensor:
     x = x.contiguous()
     if weight is not None:
@@ -116,7 +117,7 @@ def rms_norm_cast(
     rows = x.numel() // channels
     block_rows = 8
     grid = ((rows + block_rows - 1) // block_rows,)
-    out = torch.empty_like(x, dtype=torch.get_autocast_dtype("cuda"))
+    out = torch.empty_like(x, dtype=dtype)
     with torch.cuda.device(x.device):
         cast(Any, _rms_norm_cast_kernel)[grid](
             x,
