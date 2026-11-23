@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from sdm.cache import Float8PerHead, KVCacheEntry
-from sdm.nn import SDPA
+from sdm.nn import SDPA, Attention
 from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
 
@@ -97,8 +97,15 @@ def test_sdpa_backend() -> None:
 
     # Backends that can't read quantized key/value projections get them
     # dequantized:
-    key_value = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    assert supported(query, key_value).eq(0).all()
-    dequantized = key_value.dequantize(query.dtype)
-    expected = torch_sdpa(query, dequantized.key, dequantized.value)
-    torch.testing.assert_close(torch_sdpa(query, key_value), expected)
+    module = Attention(channels=32, num_query_heads=4)
+    torch.nn.init.normal_(module.out_lin.weight)
+    x = torch.randn(2, 5, 32)
+    _, key_value = module(
+        query=x,
+        return_key_value=True,
+        kv_cache_dtype=Float8PerHead(),
+    )
+    expected = module(query=x, key_value=key_value.dequantize(x.dtype))
+    torch.testing.assert_close(module(query=x, key_value=key_value), expected)
+    module.sdpa.backend = _ZeroBackend(True)
+    assert module(query=x, key_value=key_value).eq(0).all()
