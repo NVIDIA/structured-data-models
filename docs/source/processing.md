@@ -28,7 +28,6 @@ In particular:
 Each model defines a default recipe that closely mimics the preprocessing and postprocessing routines of its official implementation (*e.g.*, take a look at the default recipe of {py:class}`~sdm.models.TabICLv2`).
 
 Recipes are plain Python objects, so they can be inspected, copied and modified.
-Call `model.default_recipe()` on a model instance to get a fresh recipe for its configuration.
 This makes it easy to keep the default model contract while changing one part of the pipeline.
 For example, {py:class}`~sdm.models.TabICLv2` does not consume raw {py:attr}`~sdm.Stype.datetime` columns directly.
 To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, prepend a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:

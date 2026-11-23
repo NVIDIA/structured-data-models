@@ -35,7 +35,7 @@ class Model(torch.nn.Module, abc.ABC):
 
     @abc.abstractmethod
     def default_recipe(self) -> Recipe:
-        r"""Return a new processing recipe for this model's configuration."""
+        r"""Return the default processing recipe for this model."""
 
     def clear(self) -> None:
         r"""Clear any cached state."""
