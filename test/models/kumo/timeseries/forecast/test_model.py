@@ -75,3 +75,32 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
+
+
+def test_missingness_placeholder() -> None:
+    model = KumoForecast(missingness=True, pretrained=False)
+    with pytest.raises(
+        NotImplementedError, match="Missingness-aware forecasting"
+    ):
+        model(torch.empty(96, 0), torch.randn(96, 1), torch.empty(24, 0))
+
+    with pytest.raises(NotImplementedError, match="checkpoint loading"):
+        KumoForecast(missingness=True)
+
+
+def test_missingness_rollout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forecast(self: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
+        assert x.size(-1) == 96
+        assert x.isnan().any()
+        return x[..., -1:] + torch.arange(1, 25, device=x.device)
+
+    monkeypatch.setattr(
+        forecasting._KumoForecastMissingness, "forward", forecast
+    )
+    model = KumoForecast(missingness=True, pretrained=False)
+    history = torch.zeros(96, 2)
+    history[-2] = torch.nan
+    out = model(history[:, 1:], history[:, :1], torch.empty(49, 0))
+    torch.testing.assert_close(
+        out.numerical, torch.arange(1, 50, dtype=torch.float32).unsqueeze(-1)
+    )
