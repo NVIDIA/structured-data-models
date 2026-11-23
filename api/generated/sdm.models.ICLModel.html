@@ -312,8 +312,8 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.models.ICLModel.supports_context_only_columns"><code class="docutils literal notranslate"><span class="pre">ICLModel.supports_context_only_columns</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supports_multi_target"><code class="docutils literal notranslate"><span class="pre">ICLModel.supports_multi_target</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.supports_related_tables"><code class="docutils literal notranslate"><span class="pre">ICLModel.supports_related_tables</span></code></a></li>
-<li><a class="reference internal" href="#sdm.models.ICLModel.default_recipe"><code class="docutils literal notranslate"><span class="pre">ICLModel.default_recipe()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.clear"><code class="docutils literal notranslate"><span class="pre">ICLModel.clear()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.ICLModel.default_recipe"><code class="docutils literal notranslate"><span class="pre">ICLModel.default_recipe()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.fit"><code class="docutils literal notranslate"><span class="pre">ICLModel.fit()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.forward"><code class="docutils literal notranslate"><span class="pre">ICLModel.forward()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.ICLModel.predict"><code class="docutils literal notranslate"><span class="pre">ICLModel.predict()</span></code></a></li>
@@ -405,23 +405,23 @@ model are initialized.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.models.ICLModel.default_recipe">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.ICLModel.default_recipe" title="Link to this definition">#</a></dt>
-<dd><p>Return the default processing recipe for this model.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="sdm.models.ICLModel.clear">
 <span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.models.ICLModel.clear" title="Link to this definition">#</a></dt>
 <dd><p>Clear any cached state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.models.ICLModel.default_recipe">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.ICLModel.default_recipe" title="Link to this definition">#</a></dt>
+<dd><p>Return the default processing recipe for this model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -568,7 +568,7 @@ stacked estimator outputs with shape <code class="docutils literal notranslate">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=5988ac86"></script>
+      <script src="../../_static/documentation_options.js?v=517e1640"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
