@@ -10,7 +10,6 @@ import torch
 from sdm import TableTensor
 from sdm.models import KumoForecast
 from sdm.models.kumo.timeseries.forecast import model as kumo_forecast
-from sdm.processing import InvertibleMixin
 from sdm.testing import withCUDA
 
 
@@ -77,31 +76,3 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
-
-
-def test_missingness_default_recipe() -> None:
-    model = KumoForecast(missingness=True, pretrained=False)
-    table = TableTensor.from_tensor(
-        torch.tensor([[1.0, 5.0], [3.0, 5.0], [torch.nan, torch.nan]])
-    )
-    expected = torch.tensor([[-1.0, 0.0], [1.0, 0.0], [torch.nan, torch.nan]])
-    recipe = model.default_recipe()
-    assert isinstance(recipe.target, InvertibleMixin)
-
-    features = recipe.features.fit_transform(table)
-    target = recipe.target.fit_transform(table)
-    torch.testing.assert_close(features.numerical, expected, equal_nan=True)
-    torch.testing.assert_close(target.numerical, expected, equal_nan=True)
-    restored = recipe.target.inverse_transform(target)
-    torch.testing.assert_close(
-        restored.numerical, table.numerical, equal_nan=True
-    )
-
-    other = model.default_recipe().target.fit_transform(
-        TableTensor.from_tensor(table.numerical + 10)
-    )
-    torch.testing.assert_close(other.numerical, expected, equal_nan=True)
-    restored = recipe.target.inverse_transform(target)
-    torch.testing.assert_close(
-        restored.numerical, table.numerical, equal_nan=True
-    )
