@@ -438,7 +438,6 @@ class _KumoForecastMissingness(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.context_size = context_size
         self.prediction_size = prediction_size
