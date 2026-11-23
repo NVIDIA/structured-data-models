@@ -1,0 +1,53 @@
+{
+  "skill_name": "sdm-tabular-prediction",
+  "evals": [
+    {
+      "id": "sdm-integer-label-classification",
+      "prompt": "Show me Python code to use KumoTabular in SDM on my pandas DataFrames `context_df` and `holdout_df`. I've already split them by date. Both have `account_id`, `plan_code` (an integer plan ID), `monthly_spend`, `churn_flag`, and `closed_at` (recorded after the outcome). `churn_flag` is 0 for accounts that churned and 1 for accounts that stayed. I want churn probabilities alongside the holdout account IDs and ROC AUC. Both classes are present in each split. Just show the code.",
+      "expected_output": "Uses `sdm.models.KumoTabular` and `TableTensor` with the existing split. Uses `plan_code` as categorical, uses the same feature schema on both sides, and represents `churn_flag` as a categorical context target. Keeps `account_id` for output and `churn_flag` for scoring, and excludes `closed_at` from features. Uses the probability for class 0 and the corresponding binary labels for ROC AUC, and preserves holdout row alignment.",
+      "assertions": [
+        "Uses the supplied context and holdout split and passes only plan_code and monthly_spend as features to both tables",
+        "Marks plan_code and the integer churn_flag target as categorical and uses the same feature semantic types for context and holdout",
+        "Uses class 0 as the positive label and computes ROC AUC from probabilities with binary labels that mark class 0 as positive",
+        "Returns one probability per holdout account in the original row order"
+      ],
+      "expected_skill": "sdm-tabular-prediction",
+      "expected_script": null
+    },
+    {
+      "id": "sdm-cached-scoring-batches",
+      "prompt": "Write a Python function that scores an iterator of pandas DataFrames using one fixed labeled reference table and SDM's TabICLv2. The reference has `tenure_months`, `monthly_spend`, and a string `renewed` label (`yes` or `no`). Each incoming batch has the same two features and a `row_id`, but columns can arrive in different orders. Return the `yes` probability for each input row with its `row_id`. I'd like to avoid recomputing the reference for each batch. Just show the code.",
+      "expected_output": "Constructs the TabICLv2 context with a categorical target and one feature schema. Calls `fit` once, reuses the same fixed schema and fitted model for `predict` on each batch, and calls `clear` after scoring. Associates the named `yes` score with the original `row_id` in each batch.",
+      "assertions": [
+        "Calls TabICLv2.fit once before the batch loop, calls predict once per batch, and clears the fitted context after scoring",
+        "Builds context and query features in the same order with the same semantic types, excluding row_id and renewed",
+        "Selects the yes probability by class label and pairs it with row_id in the batch's original row order"
+      ],
+      "expected_skill": "sdm-tabular-prediction",
+      "expected_script": null
+    },
+    {
+      "id": "sdm-tabfm-regression-output",
+      "prompt": "I have pandas DataFrames called `sales_context` and `sales_query`. The input columns are `floor_area` and `building_age`, and the context table also has `sale_price` in dollars. Show me how to use pretrained TabFM from SDM to get one predicted price per query row. I've accepted the TabFM weights license. Please provide code for a single prediction call.",
+      "expected_output": "Uses the SDM `TabFM` wrapper configured for regression, passes `sale_price` as a numerical context target, and supplies matching feature tables. Reads the point predictions by the `pred` column name and returns one price per query row.",
+      "assertions": [
+        "Uses sdm.models.TabFM for regression and passes a single numerical sale_price target",
+        "Uses a one-shot in-context call with matching feature names and semantic types and excludes sale_price from the feature tables",
+        "Extracts one point prediction per query row from the pred column by name"
+      ],
+      "expected_skill": "sdm-tabular-prediction",
+      "expected_script": null
+    },
+    {
+      "id": "sdm-routing-sklearn-classifier",
+      "prompt": "Show me how to fit and evaluate a scikit-learn LogisticRegression using my pandas DataFrame `df`. The features are `tenure_months` and `monthly_spend`, and the binary target is `renewed` (1 means yes). A train/test split and ROC AUC are enough. Please use scikit-learn.",
+      "expected_output": "Uses scikit-learn logistic regression, holds out test rows, and computes ROC AUC from the held-out scores for class 1. The request stays in scikit-learn and does not activate the SDM skill.",
+      "assertions": [
+        "Fits a scikit-learn LogisticRegression on training data and evaluates class 1 scores on held-out rows",
+        "Does not load or use sdm-tabular-prediction or introduce SDM APIs"
+      ],
+      "expected_skill": null,
+      "expected_script": null
+    }
+  ]
+}
