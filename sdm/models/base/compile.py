@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from torch import Tensor
@@ -17,34 +17,18 @@ from sdm import CategoricalTensor, TableTensor
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
 
-ModelT = TypeVar("ModelT", bound="ICLModel")
-
 
 @dataclass(frozen=True)
 class DynamicShapes:
     r"""The dimensions that a compiled graph of a model keeps dynamic.
 
-    A model declares them with :func:`dynamic_shapes`, and
-    :func:`compile_predict` marks them.
+    A model returns its default from ``ICLModel._default_dynamic_shapes``,
+    and :func:`compile_predict` marks them.
     """
 
     #: The dimensions of the query. Rows (``-2``) require that the model and
     #: its recipe predict every query row independently of the other rows.
     query: tuple[int, ...] = ()
-
-
-def dynamic_shapes(**dims: Any) -> Callable[[type[ModelT]], type[ModelT]]:
-    r"""Declare the :class:`DynamicShapes` of a model.
-
-    Args:
-        **dims: The fields of :class:`DynamicShapes`.
-    """
-
-    def decorator(cls: type[ModelT]) -> type[ModelT]:
-        cls._dynamic_shapes = DynamicShapes(**dims)
-        return cls
-
-    return decorator
 
 
 def compile_predict(
@@ -54,16 +38,16 @@ def compile_predict(
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
-    One graph serves queries of any size along the :class:`DynamicShapes`
-    that ``model`` declares, and with any categories. Uncompiled
+    One graph serves queries of any size along the default
+    :class:`DynamicShapes` of ``model``, and with any categories. Uncompiled
     ``model.predict`` serves a query without rows, and a query with a
     categorical column that has no categories, neither in the query nor in
     the fitted table.
 
     Args:
         model: The model.
-        dynamic_shapes: The dimensions to mark as dynamic instead of those
-            that ``model`` declares, *e.g.*, ``DynamicShapes(query=(-2,))``
+        dynamic_shapes: The dimensions to mark as dynamic instead of the
+            default of ``model``, *e.g.*, ``DynamicShapes(query=(-2,))``
             for the query rows. ``DynamicShapes()`` marks none: the query
             shape is static, and every new shape compiles another graph. A
             dimension that the model cannot keep dynamic fails to compile.
@@ -76,7 +60,7 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
-    shapes = dynamic_shapes or model._dynamic_shapes
+    shapes = dynamic_shapes or model._default_dynamic_shapes()
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]

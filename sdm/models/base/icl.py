@@ -58,9 +58,6 @@ class ICLModel(Model):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
-    #: The dimensions that a compiled :meth:`predict` keeps dynamic.
-    _dynamic_shapes: ClassVar[DynamicShapes] = DynamicShapes()
-
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
@@ -506,6 +503,10 @@ class ICLModel(Model):
             :meth:`predict` itself is not compiled.
         """
         return compile_predict(self, **kwargs)
+
+    def _default_dynamic_shapes(self) -> DynamicShapes:
+        r"""Return the default dynamic shapes of a compiled :meth:`predict`."""
+        return DynamicShapes()
 
     # Abstract Methods ########################################################
 
