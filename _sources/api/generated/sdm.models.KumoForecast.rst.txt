@@ -61,7 +61,7 @@ Model Details
      - Point predictions per target and time step
 
    * - **Missing Values**
-     - Zero imputation in the default recipe
+     - Handled natively with ``missingness=True``, zero imputation in the default recipe otherwise
 
    * - **Pretraining Scope**
      - Up to 512 rows
