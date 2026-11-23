@@ -98,7 +98,18 @@ def test_sdpa_backend() -> None:
     # Backends that can't read quantized key/value projections get them
     # dequantized:
     key_value = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    assert supported(query, key_value).eq(0).all()
+    assert supported(query, **key_value._asdict()).eq(0).all()
     dequantized = key_value.dequantize(query.dtype)
     expected = torch_sdpa(query, dequantized.key, dequantized.value)
-    torch.testing.assert_close(torch_sdpa(query, key_value), expected)
+    out = torch_sdpa(query, **key_value._asdict())
+    torch.testing.assert_close(out, expected)
+
+    # Scales without their storage dtype are rejected:
+    with pytest.raises(ValueError, match="do not match"):
+        torch_sdpa(
+            query,
+            key=key_value.key,
+            value=key_value.value,
+            key_scale=key_value.key_scale,
+            value_scale=key_value.value_scale,
+        )

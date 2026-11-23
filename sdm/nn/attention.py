@@ -4,7 +4,7 @@
 """Attention modules for structured tensor models."""
 
 import math
-from typing import Any, Literal, cast, overload
+from typing import Any, Literal, overload
 
 import torch
 import torch.nn.functional as F
@@ -72,12 +72,15 @@ class SDPA(torch.nn.Module):
     def forward(
         self,
         query: Tensor,  # [..., Q, Hq, C]
-        key: Tensor | KVCacheEntry,  # [..., KV, Hkv, C]
-        value: Tensor | None = None,  # [..., KV, Hkv, C]
+        key: Tensor,  # [..., KV, Hkv, C]
+        value: Tensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
         is_causal: bool = False,
+        key_scale: Tensor | None = None,
+        value_scale: Tensor | None = None,
+        kv_cache_dtype: KVCacheDType | None = None,
     ) -> Tensor:  # [..., Q, Hq, C]
         r"""The forward pass.
 
@@ -86,18 +89,20 @@ class SDPA(torch.nn.Module):
                 ``Q`` is the query sequence length, ``Hq`` is the number of
                 query attention heads (``num_query_heads``), and ``C`` is the
                 channels per head.
-            key: The key tensor with shape ``[..., KV, Hkv, C]``, or
-                key/value projections as a :class:`~sdm.cache.KVCacheEntry`.
+            key: The key tensor with shape ``[..., KV, Hkv, C]``.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, C]``, or
-                ``None`` if ``key`` is a :class:`~sdm.cache.KVCacheEntry`.
+            value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
                 For boolean masks, entries set to ``True`` participate in
                 attention. Floating-point masks act as additive bias.
             is_causal: Apply an upper-left causal attention mask.
+            key_scale: Scales of a quantized ``key``.
+            value_scale: Scales of a quantized ``value``.
+            kv_cache_dtype: The storage dtype of quantized ``key`` and
+                ``value``, as in a :class:`~sdm.cache.KVCacheEntry`.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
@@ -105,12 +110,13 @@ class SDPA(torch.nn.Module):
         if query.numel() == 0:
             return query
 
-        key_value = (
-            key
-            if isinstance(key, KVCacheEntry)
-            else KVCacheEntry(key=key, value=cast(Tensor, value))
+        key_value = KVCacheEntry(
+            key=key,
+            value=value,
+            key_scale=key_scale,
+            value_scale=value_scale,
+            kv_cache_dtype=kv_cache_dtype,
         )
-        key, value = key_value.key, key_value.value
 
         if attn_mask is not None and seqused_key_value is not None:
             raise ValueError(
@@ -166,7 +172,7 @@ class SDPA(torch.nn.Module):
 
         if (  # Softmax over a single key is one, so skip SDPA:
             key_size[0] == 1
-            and key_value.kv_cache_dtype is None
+            and kv_cache_dtype is None
             and (attn_mask is None or attn_mask.dtype == torch.bool)
             and seqused_key_value is None
             and not torch.is_grad_enabled()
@@ -469,10 +475,14 @@ class Attention(torch.nn.Module):
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
-            key=entry,  # [..., KV, Hkv, C // Hq]
+            key=entry.key,  # [..., KV, Hkv, C // Hq]
+            value=entry.value,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
             attn_mask=attn_mask,  # [..., Hq, Q, KV]
             is_causal=is_causal,
+            key_scale=entry.key_scale,
+            value_scale=entry.value_scale,
+            kv_cache_dtype=entry.kv_cache_dtype,
         )  # [..., Q, Hq, C // Hq]
 
         out = out.flatten(-2, -1)  # [..., Q, C]
