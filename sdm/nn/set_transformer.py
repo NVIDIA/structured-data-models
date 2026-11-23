@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from torch.nn import Parameter
 
-from sdm.cache import KVCacheDType, KVCacheEntry
+from sdm.cache import KVCacheEntry, QuantizationScheme
 from sdm.nn import TransformerBlock
 
 
@@ -74,7 +74,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -88,7 +88,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -102,7 +102,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -115,7 +115,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         *,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -125,20 +125,21 @@ class InducedTransformerBlock(torch.nn.Module):
             query: The query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: The key/value tensor with shape ``[..., KV, C]`` or
-                precomputed key/value projections as a
-                :class:`~sdm.cache.KVCacheEntry`.
+            key_value: The key/value tensor with shape ``[..., KV, C]``, or a
+                :class:`KVCacheEntry` returned for ``return_key_value=True``
+                to attend to its keys and values again.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., KV]``.
                 Entries set to ``True`` participate in attention.
-            return_key_value: Whether to return the computed key and value
-                projections for the final attention site alongside the output.
-            kv_cache_dtype: The storage dtype of the returned key and value
-                projections. Attention uses the stored values, as when
-                replaying them.
+            return_key_value: Whether to return the keys and values of the
+                final attention site as a :class:`KVCacheEntry` alongside the
+                output.
+            kv_cache_dtype: The quantization scheme of the returned keys and
+                values, *e.g.*, :class:`Float8PerHead`. Attention uses the
+                stored values, as when replaying them.
             batch_size_limit: Maximum number of batch elements processed at
                 once.
             out: The output tensor.
@@ -146,7 +147,7 @@ class InducedTransformerBlock(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
             ``False``. Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KVCacheEntry`.
+            :class:`KVCacheEntry`.
         """
         if not isinstance(key_value, KVCacheEntry):
             if key_value is None:

@@ -36,15 +36,15 @@ class AttentionBackend(abc.ABC):
 
         The result must depend on neither the batch size nor the number of
         queries, so that a layer uses the same kernel when recording and
-        replaying its cache. Backends without gradients decline calls that
-        need them.
+        replaying its cache. Backends decline quantized tensors they cannot
+        read, and backends without gradients decline calls that need them.
 
         Args:
             query: Queries with shape ``[B, Q, Hq, C]``.
             key: Keys with shape ``[B, KV, Hkv, C]``, possibly as a
-                :class:`~sdm.cache.QuantizedTensor`.
+                :class:`~sdm.nn.QuantizedTensor`.
             value: Values with shape ``[B, KV, Hkv, Cv]``, possibly as a
-                :class:`~sdm.cache.QuantizedTensor`.
+                :class:`~sdm.nn.QuantizedTensor`.
             attn_mask: Boolean or additive attention mask broadcastable to
                 ``[B, Hq, Q, KV]``. ``None`` if ``seqused_key_value`` is given.
             seqused_key_value: Valid key/value lengths with shape ``[B]``.

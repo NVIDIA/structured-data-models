@@ -12,7 +12,7 @@ from torch import Tensor
 from torch.nn import Linear
 
 from sdm._memory import chunk_memory_limit
-from sdm.cache import KVCacheDType, KVCacheEntry, QuantizedTensor
+from sdm.cache import KVCacheEntry, QuantizationScheme, QuantizedTensor
 from sdm.nn import QueryScaling
 from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
@@ -86,14 +86,12 @@ class SDPA(torch.nn.Module):
                 ``Q`` is the query sequence length, ``Hq`` is the number of
                 query attention heads (``num_query_heads``), and ``C`` is the
                 channels per head.
-            key: The key tensor with shape ``[..., KV, Hkv, C]``, or a
-                :class:`~sdm.cache.QuantizedTensor` with ``qdata`` of that
-                shape.
+            key: The key tensor with shape ``[..., KV, Hkv, C]``, possibly
+                as a :class:`QuantizedTensor`.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, C]``, or a
-                :class:`~sdm.cache.QuantizedTensor` with ``qdata`` of that
-                shape.
+            value: The value tensor with shape ``[..., KV, Hkv, C]``, possibly
+                as a :class:`QuantizedTensor`.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
@@ -118,15 +116,7 @@ class SDPA(torch.nn.Module):
         ):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
 
-        key_data = key.qdata if isinstance(key, QuantizedTensor) else key
-        value_data = (
-            value.qdata if isinstance(value, QuantizedTensor) else value
-        )
-        batch_shapes = [
-            query.size()[:-3],
-            key_data.size()[:-3],
-            value_data.size()[:-3],
-        ]
+        batch_shapes = [query.size()[:-3], key.shape[:-3], value.shape[:-3]]
         if seqused_key_value is not None:
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
@@ -147,13 +137,13 @@ class SDPA(torch.nn.Module):
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1).squeeze(-2)
             else:
-                key_len = key_data.size(-3)
+                key_len = key.shape[-3]
             query = self.query_scaling(query, key_len=key_len)
 
         # Broadcast and flatten batch dimensions => [B, S, H, C].
         query_size = query.size()[-3:]
-        key_size = key_data.size()[-3:]
-        value_size = value_data.size()[-3:]
+        key_size = key.shape[-3:]
+        value_size = value.shape[-3:]
 
         # FlashAttention rejects empty batches before PyTorch 2.10.
         if key_size[0] == 0 or 0 in batch_shape:
@@ -162,8 +152,8 @@ class SDPA(torch.nn.Module):
             )
             if torch.is_grad_enabled():
                 # Summing an empty slice gives zero and keeps backward working.
-                for tensor in (query, key_data, value_data, attn_mask):
-                    if tensor is not None and tensor.requires_grad:
+                for tensor in (query, key, value, attn_mask):
+                    if isinstance(tensor, Tensor) and tensor.requires_grad:
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
@@ -329,7 +319,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -344,7 +334,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[True],
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -359,7 +349,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -373,7 +363,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -381,9 +371,9 @@ class Attention(torch.nn.Module):
             query: The query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: The key/value tensor with shape ``[..., KV, C]`` or
-                precomputed key/value projections as a
-                :class:`~sdm.cache.KVCacheEntry`.
+            key_value: The key/value tensor with shape ``[..., KV, C]``, or a
+                :class:`KVCacheEntry` returned for ``return_key_value=True``
+                to attend to its keys and values again.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -397,17 +387,17 @@ class Attention(torch.nn.Module):
             key_pos: Key positions with shape ``[..., KV]`` passed to
                 ``key_transform``.
             is_causal: Apply an upper-left causal attention mask.
-            return_key_value: Whether to return the computed key and value
-                projections alongside the attention output.
-            kv_cache_dtype: The storage dtype of the returned key and value
-                projections. Attention uses the stored values, as when
-                replaying them.
+            return_key_value: Whether to return the keys and values as a
+                :class:`KVCacheEntry` alongside the attention output.
+            kv_cache_dtype: The quantization scheme of the returned keys and
+                values, *e.g.*, :class:`Float8PerHead`. Attention uses the
+                stored values, as when replaying them.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
             ``False``.
             Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KVCacheEntry`.
+            :class:`KVCacheEntry`.
         """
         gate = self.gate(query) if self.gate is not None else None
 
@@ -422,15 +412,13 @@ class Attention(torch.nn.Module):
                 if self.qkv_lin.bias is not None
                 else None,
             )
-            if key_value.kv_cache_dtype is None and (
-                key_value.key.dtype != query.dtype
-                or key_value.value.dtype != query.dtype
-            ):
-                raise ValueError(
-                    f"Key/value projections were cached under dtypes "
-                    f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
-                    f"the query has dtype '{query.dtype}'"
-                )
+            for tensor in (key_value.key, key_value.value):
+                if isinstance(tensor, Tensor) and tensor.dtype != query.dtype:
+                    raise ValueError(
+                        f"Key/value projections were cached under dtype "
+                        f"'{tensor.dtype}' but the query has dtype "
+                        f"'{query.dtype}'"
+                    )
         elif key_value is None:
             query, key, value = self.qkv_lin(query).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -472,13 +460,16 @@ class Attention(torch.nn.Module):
         elif return_key_value:
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
-            entry = KVCacheEntry(key=key.to(value.dtype), value=value)
+            key = key.to(value.dtype)
             if kv_cache_dtype is not None:
-                entry = kv_cache_dtype.quantize(entry)
-            entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
+                key = kv_cache_dtype.quantize(key)
+                value = kv_cache_dtype.quantize(value)
+            entry = KVCacheEntry(key=key, value=value)._apply_tensor(
+                lambda tensor: tensor.contiguous()
+            )
         else:
             entry = KVCacheEntry(key=key, value=value)
-        key, value = entry.unbind()
+        key, value = entry.key, entry.value
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -581,7 +572,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -598,7 +589,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[True],
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -615,7 +606,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -631,7 +622,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -641,9 +632,9 @@ class TransformerBlock(torch.nn.Module):
             query: The query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: The key/value tensor with shape ``[..., KV, C]`` or
-                precomputed key/value projections as a
-                :class:`~sdm.cache.KVCacheEntry`.
+            key_value: The key/value tensor with shape ``[..., KV, C]``, or a
+                :class:`KVCacheEntry` returned for ``return_key_value=True``
+                to attend to its keys and values again.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -657,11 +648,11 @@ class TransformerBlock(torch.nn.Module):
             key_pos: Key positions with shape ``[..., KV]`` passed to
                 ``key_transform``.
             is_causal: Apply an upper-left causal attention mask.
-            return_key_value: Whether to return the computed key and value
-                projections alongside the block output.
-            kv_cache_dtype: The storage dtype of the returned key and value
-                projections. Attention uses the stored values, as when
-                replaying them.
+            return_key_value: Whether to return the keys and values as a
+                :class:`KVCacheEntry` alongside the block output.
+            kv_cache_dtype: The quantization scheme of the returned keys and
+                values, *e.g.*, :class:`Float8PerHead`. Attention uses the
+                stored values, as when replaying them.
             batch_size_limit: Maximum number of batch elements processed at
                 once. Only an integer limit applies in compiled code, which
                 would otherwise recompile when the number of chunks changes.
@@ -671,7 +662,7 @@ class TransformerBlock(torch.nn.Module):
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
             ``False``.
             Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KVCacheEntry`.
+            :class:`KVCacheEntry`.
         """
         if isinstance(key_value, KVCacheEntry):
             key_pos = None
@@ -708,7 +699,7 @@ class TransformerBlock(torch.nn.Module):
             if isinstance(key_value, Tensor):
                 key_value_length = key_value.size(-2)
             elif isinstance(key_value, KVCacheEntry):
-                key_value_length = key_value.key.size(-3)
+                key_value_length = key_value.key.shape[-3]
 
             batch_size_limit = self.auto_batch_size_limit(
                 device=query.device,
@@ -840,7 +831,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
 
@@ -928,7 +919,7 @@ def _batch_shape(
     if isinstance(key_value, Tensor):
         shapes.append(key_value.size()[:-2])
     elif isinstance(key_value, KVCacheEntry):
-        shapes += [key_value.key.size()[:-3], key_value.value.size()[:-3]]
+        shapes += [key_value.key.shape[:-3], key_value.value.shape[:-3]]
     if seqused_key_value is not None:
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:

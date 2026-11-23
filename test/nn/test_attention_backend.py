@@ -6,8 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import Float8PerHead, KVCacheEntry, QuantizedTensor
-from sdm.nn import SDPA
+from sdm.nn import SDPA, Float8PerHead, QuantizedTensor
 from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
 
@@ -47,8 +46,9 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
     out = backend.forward(query, key, value, **options)
     torch.testing.assert_close(out, expected)
 
-    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    assert not backend.supports(query, *entry.unbind(), **options)
+    fp8 = Float8PerHead()
+    assert not backend.supports(query, fp8.quantize(key), value, **options)
+    assert not backend.supports(query, key, fp8.quantize(value), **options)
 
 
 class _ZeroBackend(AttentionBackend):
@@ -101,14 +101,15 @@ def test_sdpa_backend() -> None:
     torch.testing.assert_close(unsupported(query, key, value), expected)
 
     # Backends that can't read quantized keys or values get them dequantized:
-    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    quantized_key, quantized_value = entry.unbind()
+    fp8 = Float8PerHead()
+    quantized_key = fp8.quantize(key)
+    quantized_value = fp8.quantize(value)
+    dequantized_key = quantized_key.dequantize(query.dtype)
+    dequantized_value = quantized_value.dequantize(query.dtype)
     assert supported(query, quantized_key, quantized_value).eq(0).all()
-    dequantized = entry.dequantize(query.dtype)
-    expected = torch_sdpa(query, dequantized.key, dequantized.value)
     out = torch_sdpa(query, quantized_key, quantized_value)
+    expected = torch_sdpa(query, dequantized_key, dequantized_value)
     torch.testing.assert_close(out, expected)
-    expected = torch_sdpa(query, key, dequantized.value)
-    torch.testing.assert_close(
-        torch_sdpa(query, key, quantized_value), expected
-    )
+    out = torch_sdpa(query, key, quantized_value)
+    expected = torch_sdpa(query, key, dequantized_value)
+    torch.testing.assert_close(out, expected)
