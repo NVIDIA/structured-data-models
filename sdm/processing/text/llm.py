@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: D101, D102
+# ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
 
@@ -221,7 +221,7 @@ class LLM(torch.nn.Module):
 
 
 def load_model(model: str, **kwargs: Any) -> SentenceTransformer:
-    import huggingface_hub
+    import huggingface_hub  # noqa: PLC0415
     import sentence_transformers
     import transformers
 
