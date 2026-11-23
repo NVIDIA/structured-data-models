@@ -97,7 +97,6 @@ class LLM(torch.nn.Module):
     ) -> Iterator[
         tuple[Tensor, Tensor, Tensor, Tensor] | tuple[Tensor, Tensor]
     ]:
-
         if max_length is None:
             max_length = self.model.max_seq_length
         elif self.model.max_seq_length is not None:

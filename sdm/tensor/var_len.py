@@ -538,6 +538,23 @@ class VarLenTensor(Tensor):
         r"""Whether this tensor has a validity mask."""
         return self._valid is not None
 
+    def _mark_dynamic(self, dim: int) -> None:
+        r"""Mark a dimension as dynamic for :func:`torch.compile`.
+
+        Args:
+            dim: The non-negative dimension.
+        """
+        for tensor in (self, self._layout):
+            torch._dynamo.mark_dynamic(tensor, dim)
+        for storage in (self._offset, self._valid):
+            if storage is not None:
+                torch._dynamo.mark_dynamic(storage, 0)
+        # Unbacked, as strings with zero or one characters in total would
+        # otherwise compile another graph. The constructor checks the bound.
+        torch._dynamo.decorators.mark_unbacked(
+            self._data, 0, max=torch.iinfo(self._offset.dtype).max
+        )
+
     # Decorators ##############################################################
 
     @classmethod
