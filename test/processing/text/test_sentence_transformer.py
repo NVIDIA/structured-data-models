@@ -34,6 +34,7 @@ def test_sentence_transformer(device: torch.device) -> None:
         model="sentence-transformers-testing/stsb-bert-tiny-safetensors",
         postprocess=[sp.Standardize(), sp.PCA(2)],
         batch_size=2,
+        show_progress=False,
         device=device,
         dtype=torch.float32,
     )
