@@ -75,14 +75,3 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
-
-
-def test_missingness_placeholder() -> None:
-    model = KumoForecast(missingness=True, pretrained=False)
-    with pytest.raises(
-        NotImplementedError, match="Missingness-aware forecasting"
-    ):
-        model(torch.empty(96, 0), torch.randn(96, 1), torch.empty(24, 0))
-
-    with pytest.raises(NotImplementedError, match="checkpoint loading"):
-        KumoForecast(missingness=True)
