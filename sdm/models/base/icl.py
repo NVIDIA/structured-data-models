@@ -108,6 +108,9 @@ class ICLModel(Model):
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
 
+        Inputs with ``requires_grad=True`` enable autograd through
+        differentiable preprocessing, model execution, and postprocessing.
+
         Args:
             x_context: The feature tensor of in-context examples with shape
                 ``[..., R_context, D]`` with ``R_context`` rows and ``D``
@@ -141,7 +144,14 @@ class ICLModel(Model):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training
+        input_requires_grad = _requires_grad(
+            x_context,
+            y_context,
+            x_query,
+            related_context_tables,
+            related_query_tables,
+        )
+        requires_grad = self.training or input_requires_grad
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         context_only_columns = None
@@ -175,7 +185,13 @@ class ICLModel(Model):
         )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
-            inference_mode("no_grad" if requires_grad else "inference"),
+            inference_mode(
+                "grad"
+                if input_requires_grad
+                else "no_grad"
+                if requires_grad
+                else "inference"
+            ),
         ):
             contexts = recipe_execution.fit_transform(
                 x=x_context,
@@ -187,7 +203,13 @@ class ICLModel(Model):
             )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
-            inference_mode("no_grad" if requires_grad else "inference"),
+            inference_mode(
+                "grad"
+                if input_requires_grad
+                else "no_grad"
+                if requires_grad
+                else "inference"
+            ),
         ):
             queries = recipe_execution.transform(
                 x=x_query,
@@ -199,6 +221,7 @@ class ICLModel(Model):
             queries=queries,
             estimator_batch_size=estimator_batch_size,
             callbacks=callbacks,
+            requires_grad=requires_grad,
             generator=generator,
             **kwargs,
         )
@@ -384,6 +407,10 @@ class ICLModel(Model):
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
+        Query inputs with ``requires_grad=True`` enable autograd through
+        differentiable preprocessing, model execution, and postprocessing.
+        The fitted context cache remains detached.
+
         .. note::
 
             This method requires a prior call to :meth:`fit`.
@@ -406,7 +433,10 @@ class ICLModel(Model):
             )
 
         callbacks = () if callbacks is None else callbacks
-        requires_grad = any(callback.requires_grad for callback in callbacks)
+        input_requires_grad = _requires_grad(x, related_tables)
+        requires_grad = input_requires_grad or any(
+            callback.requires_grad for callback in callbacks
+        )
 
         if self._cache is None:
             raise RuntimeError(
@@ -439,7 +469,13 @@ class ICLModel(Model):
         ) as caches:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode("no_grad" if requires_grad else "inference"),
+                inference_mode(
+                    "grad"
+                    if input_requires_grad
+                    else "no_grad"
+                    if requires_grad
+                    else "inference"
+                ),
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
@@ -570,6 +606,7 @@ class ICLModel(Model):
         *,
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
+        requires_grad: bool = False,
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> list[TableTensor]:
@@ -579,7 +616,7 @@ class ICLModel(Model):
         ``recipe.output``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training
+        requires_grad |= self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         if estimator_batch_size == 1 and len(contexts) > 1:
@@ -591,6 +628,7 @@ class ICLModel(Model):
                         queries=(query,),
                         estimator_batch_size=1,
                         callbacks=callbacks,
+                        requires_grad=requires_grad,
                         generator=generator,
                         **kwargs,
                     )
@@ -965,3 +1003,18 @@ def _unstack(
         )
         for member_out, classes in zip(outs, stacked, strict=True)
     ]
+
+
+def _requires_grad(*inputs: Tensor | RelatedTables | None) -> bool:
+    for value in inputs:
+        if isinstance(value, TableTensor):
+            if value.numerical.requires_grad:
+                return True
+        elif isinstance(value, Tensor):
+            if value.requires_grad:
+                return True
+        elif isinstance(value, RelatedTables) and _requires_grad(
+            *value.tables.values()
+        ):
+            return True
+    return False
