@@ -33,10 +33,9 @@ class Model(torch.nn.Module, abc.ABC):
         self._cache: Cache | None = None
         self._transfer_streams: dict[torch.device, torch.cuda.Stream] = {}
 
-    @classmethod
     @abc.abstractmethod
-    def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model."""
+    def default_recipe(self) -> Recipe:
+        r"""Return a new processing recipe for this model's configuration."""
 
     def clear(self) -> None:
         r"""Clear any cached state."""

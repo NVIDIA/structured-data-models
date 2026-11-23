@@ -142,10 +142,11 @@ class KumoForecast(ICLModel):
 
         self.eval()
 
-    @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(self) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_recipe()
+        return default_recipe(
+            missingness=isinstance(self.model, _KumoForecastMissingness),
+        )
 
     def _load_from_pretrained(
         self,
