@@ -5,14 +5,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, TableTensor
+from sdm import TableTensor
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -39,10 +39,12 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries of any size along the default
-    :class:`DynamicShapes` of ``model``, and with any categories. Uncompiled
-    ``model.predict`` serves a query without rows, and a query with a
-    categorical column that has no categories, neither in the query nor in
-    the fitted table.
+    :class:`DynamicShapes` of ``model``. With dynamic shapes, a query without
+    rows is predicted without the graph.
+
+    The lists of categories of a query are static: pass the same lists on
+    every call, *e.g.*, a pandas ``Categorical`` with fixed categories. Lists
+    with another number of categories or characters compile another graph.
 
     Args:
         model: The model.
@@ -51,7 +53,6 @@ def compile_predict(
             for the query rows. ``DynamicShapes()`` marks none: the query
             shape is static, and every new shape compiles another graph. A
             dimension that the model cannot keep dynamic fails to compile.
-            The lists of categories are dynamic in any case.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -61,6 +62,9 @@ def compile_predict(
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     compiled = torch.compile(model.predict, **kwargs)
     shapes = dynamic_shapes or model._default_dynamic_shapes()
+    # Without dynamic shapes, none of the steps below are needed.
+    if shapes == DynamicShapes():
+        return compiled
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -68,69 +72,31 @@ def compile_predict(
         **kwargs: Any,
     ) -> TableTensor:
         rows = x.size(-2)
-        dims = {dim % x.dim() for dim in shapes.query}
+        if rows == 0:
+            return model.predict(x, *args, **kwargs)
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows.
+        # Without a copy, queries that are different slices of one table, such
+        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
+        dims = {dim % x.dim() for dim in shapes.query}
         repeat = (
             rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
         )
-        query = x
-        if rows > 0 and isinstance(x, TableTensor):
-            query = _categories(model, x, copy=repeat)
-        if rows == 0 or query is None:
-            return model.predict(x, *args, **kwargs)
-        # Without a copy, queries that are different slices of one table, such
-        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
-        query = (
-            torch.cat([query, query], dim=-2)
+        x = (
+            torch.cat([x, x], dim=-2)
             if repeat
-            else query.clone(memory_format=torch.contiguous_format)
+            else x.clone(memory_format=torch.contiguous_format)
         )
-        _mark_dynamic(query, dims)
-        out = compiled(query, *args, **kwargs)
+        _mark_dynamic(x, dims)
+        out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if repeat else out
 
     return predict
 
 
-def _categories(
-    model: ICLModel,
-    x: TableTensor,
-    copy: bool,
-) -> TableTensor | None:
-    # Like the rows, a list of categories needs two or more entries. A column
-    # of missing values takes the fitted list, as no row points into it, and
-    # a single category is repeated. `torch.cat` would share the other lists
-    # with the caller, so they are copied before they get marked.
-    categories = x.categorical.categories
-    if not copy and all(category.size(0) > 1 for category in categories):
-        return x
-    fitted = cast(
-        "Mapping[str, Tensor]",
-        (model._cache or {}).get("categories", {}),
-    )
-    new_categories = []
-    for name, category in zip(x.categorical_columns, categories, strict=True):
-        if category.size(0) == 0:
-            category = fitted.get(name, category)
-        if category.size(0) == 0:
-            return None
-        if category.size(0) == 1:
-            category = torch.cat([category, category])
-        elif copy:
-            category = category.clone()
-        new_categories.append(category)
-    return x.replace_blocks(
-        categorical=CategoricalTensor(
-            code=x.categorical.code,
-            categories=new_categories,
-        ),
-    )
-
-
 def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:
-    if isinstance(tensor, TableTensor):
-        tensor._mark_dynamic(dims)
-        return
     for dim in dims:
-        torch._dynamo.mark_dynamic(tensor, dim)
+        if isinstance(tensor, TableTensor):
+            tensor._mark_dynamic(dim)
+        else:
+            torch._dynamo.mark_dynamic(tensor, dim)
