@@ -8,8 +8,16 @@ import torch
 from torch._dynamo.testing import CompileCounter
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
+from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
+from sdm.models.base.compile import DynamicShapes
 from sdm.testing import onlyMPS
 
 
@@ -371,7 +379,7 @@ def test_estimator_batching_many_classes(
 
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("task", ["classification", "regression"])
-def test_compile_predict_static_shapes(
+def test_compile_predict(
     task: Literal["classification", "regression"],
 ) -> None:
     model = _build(task, "small")
@@ -390,6 +398,15 @@ def test_compile_predict_static_shapes(
                 StringTensor.from_list([["a" * (i % 5)] for i in range(48)]),
                 columns=["text"],
             ),
+            TableTensor(
+                columns={Stype.id: ("string_id", "integer_id")},
+                id=ColumnarTensor(
+                    (
+                        StringTensor.from_list([str(i) for i in range(48)]),
+                        torch.arange(48),
+                    )
+                ),
+            ),
         ],
         dim=-1,
     )
@@ -402,20 +419,82 @@ def test_compile_predict_static_shapes(
     model.fit(x[:40], y, num_estimators=4)
 
     counter = CompileCounter()
-    predict = model._compile_predict(
-        backend=counter,
-        fullgraph=True,
-        dynamic=False,
-    )
-    # Queries of the same size reuse one graph.
-    for _ in range(2):
+    predict = model._compile_predict(backend=counter, fullgraph=True)
+    # Queries of any number of rows, including one and none, reuse one graph.
+    for query in (x[40:], x[41:44], x[42:43], x[40:40]):
         torch.testing.assert_close(
-            actual=predict(x[40:]).numerical,
-            expected=model.predict(x[40:]).numerical,
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
             atol=1e-4,
             rtol=1e-4,
         )
     assert counter.frame_count == 1
+
+    # Callbacks see a single row as it is.
+    capture = CaptureInputs()
+    predict(x[42:43], callbacks=[capture])
+    assert capture.inputs[0][0].size(-2) == 1
+
+    # The caller chooses the dynamic dimensions. Queries of 8, 3 and 1 rows
+    # compile 3 graphs without dynamic rows, and 1 graph with them.
+    for shapes, graphs in (
+        (DynamicShapes(), 3),
+        (DynamicShapes(query=(0,)), 1),
+    ):
+        counter = CompileCounter()
+        predict = model._compile_predict(
+            backend=counter,
+            dynamic_shapes=shapes,
+        )
+        for query in (x[40:], x[41:44], x[42:43]):
+            predict(query)
+        assert counter.frame_count == graphs
+
+
+@pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("dynamic_shapes", [None, DynamicShapes()])
+def test_compile_predict_query_categories(
+    dynamic_shapes: DynamicShapes | None,
+) -> None:
+    def table(categories: list[str]) -> TableTensor:
+        code = torch.arange(6, dtype=torch.int32)
+        code = code % len(categories) if categories else code.fill_(-1)
+        return TableTensor(
+            columns={
+                Stype.numerical: ("x", "y"),
+                Stype.categorical: ("color",),
+            },
+            numerical=torch.randn(6, 2),
+            categorical=CategoricalTensor(
+                code=code.unsqueeze(-1),
+                # A column of missing values has an empty list of integers.
+                categories=(
+                    StringTensor.from_list(categories)
+                    if categories
+                    else torch.empty(0, dtype=torch.long),
+                ),
+            ),
+        )
+
+    model = _build("regression", "small")
+    model.fit(table(["a", "b"]), torch.randn(6, 1))
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        dynamic_shapes=dynamic_shapes,
+    )
+    # Every query has its own categories, whichever dimensions are dynamic;
+    # the first one has none, and "c" is not a fitted one.
+    for categories in ([], ["b", "a"], ["a", "c", "b"], ["c"]):
+        query = table(categories)
+        torch.testing.assert_close(
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        assert counter.frame_count == 1
 
 
 @onlyMPS
