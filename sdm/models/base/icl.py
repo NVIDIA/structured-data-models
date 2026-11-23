@@ -10,6 +10,7 @@ import torch
 from torch import Tensor
 
 from sdm import (
+    EnsembleTable,
     Recipe,
     RelatedTables,
     Stype,
@@ -146,7 +147,11 @@ class ICLModel(Model):
             if tables is not None:
                 inputs.extend(tables.tables.values())
         input_requires_grad = any(
-            value.numerical.requires_grad
+            any(
+                group.numerical.requires_grad for group in value._iter_groups()
+            )
+            if isinstance(value, EnsembleTable)
+            else value.numerical.requires_grad
             if isinstance(value, TableTensor)
             else value.requires_grad
             for value in inputs
@@ -433,7 +438,11 @@ class ICLModel(Model):
         if related_tables is not None:
             inputs.extend(related_tables.tables.values())
         input_requires_grad = any(
-            value.numerical.requires_grad
+            any(
+                group.numerical.requires_grad for group in value._iter_groups()
+            )
+            if isinstance(value, EnsembleTable)
+            else value.numerical.requires_grad
             if isinstance(value, TableTensor)
             else value.requires_grad
             for value in inputs
