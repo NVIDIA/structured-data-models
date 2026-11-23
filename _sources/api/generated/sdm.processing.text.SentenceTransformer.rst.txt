@@ -17,4 +17,4 @@ Capabilities
    * - **Handled Semantic Types**
      - ``text``
    * - **Requires Fitting**
-     - ❌
+     - instance-specific
