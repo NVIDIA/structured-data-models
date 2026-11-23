@@ -65,8 +65,7 @@ class _RecordingModel(ICLModel):
         assert table is not None
         return table.select_stypes(Stype.numerical)
 
-    @classmethod
-    def default_recipe(cls) -> sp.Recipe:
+    def default_recipe(self) -> sp.Recipe:
         return sp.Recipe()
 
 
@@ -115,8 +114,7 @@ class _ClassFrequencyModel(ICLModel):
             numerical=frequency.expand(*x_query.size()[:-1], -1),
         )
 
-    @classmethod
-    def default_recipe(cls) -> sp.Recipe:
+    def default_recipe(self) -> sp.Recipe:
         return sp.Recipe()
 
 
