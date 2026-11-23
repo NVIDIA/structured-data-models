@@ -75,4 +75,4 @@ Default Recipe
 
 .. code-block:: python
 
-{{ cls.default_recipe() | string | indent(3, true) }}
+{{ getmodule(cls).default_recipe() | string | indent(3, true) }}

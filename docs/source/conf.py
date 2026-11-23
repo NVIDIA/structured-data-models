@@ -54,6 +54,7 @@ autosummary_generate = True
 autosummary_context = {
     "import_module": importlib.import_module,
     "getdoc": inspect.getdoc,
+    "getmodule": inspect.getmodule,
 }
 autodoc_member_order = "bysource"
 autodoc_use_legacy_class_based = True

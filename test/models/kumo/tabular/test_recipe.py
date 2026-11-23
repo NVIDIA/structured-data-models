@@ -6,7 +6,7 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, EnsembleTable, TableTensor
-from sdm.models.kumo.tabular import KumoTabular
+from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.testing import withCUDA
 
 
@@ -28,7 +28,7 @@ def test_default_recipe_preserves_missing_values(device: torch.device) -> None:
             categories=(torch.arange(2, device=device),),
         ),
     )
-    recipe = KumoTabular.default_recipe()
+    recipe = default_recipe()
 
     output = recipe.features.fit_transform_ensemble(
         EnsembleTable.from_table(features, num_members=2)
@@ -62,7 +62,7 @@ def test_default_recipe_flips_numbers_but_not_codes() -> None:
             categories=(torch.arange(3),),
         ),
     )
-    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+    output = default_recipe().features.fit_transform_ensemble(
         EnsembleTable.from_table(features, num_members=8)
     )
 
@@ -88,7 +88,7 @@ def test_default_recipe_keeps_values_distinct_beside_outliers() -> None:
     numerical = torch.arange(100.0).unsqueeze(-1)
     numerical[0] = 1e12
 
-    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+    output = default_recipe().features.fit_transform_ensemble(
         EnsembleTable.from_table(
             TableTensor.from_tensor(numerical),
             num_members=8,
@@ -114,7 +114,7 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
         ),
     )
 
-    output = KumoTabular.default_recipe().features.fit_transform_ensemble(
+    output = default_recipe().features.fit_transform_ensemble(
         EnsembleTable.from_table(features, num_members=2)
     )
 
@@ -126,7 +126,7 @@ def test_default_recipe_adds_category_counts(cardinality: int) -> None:
 
 
 def test_default_recipe_reduces_outputs_per_task() -> None:
-    recipe = KumoTabular.default_recipe()
+    recipe = default_recipe()
     dispatch = next(
         module
         for module in recipe.output.modules()

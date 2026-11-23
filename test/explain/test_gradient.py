@@ -46,8 +46,7 @@ class _LinearModel(ICLModel):
             )
         return table.replace_blocks(numerical=numerical)
 
-    @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(self) -> Recipe:
         return Recipe()
 
 

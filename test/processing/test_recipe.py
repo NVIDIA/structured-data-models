@@ -6,7 +6,8 @@ import torch
 
 import sdm.processing as sp
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.models import KumoTabular, TabICLv2
+from sdm.models.kumo.tabular.recipe import default_recipe as kumo_recipe
+from sdm.models.tabiclv2.recipe import default_recipe as tabicl_recipe
 from sdm.testing import withCUDA
 
 
@@ -29,7 +30,7 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
 
 def test_recipe_initialization_compiles(compilation: None) -> None:
     def initialize(value: torch.Tensor) -> torch.Tensor:
-        recipe = KumoTabular.default_recipe()
+        recipe = kumo_recipe()
         return value + recipe.features.requires_fit
 
     compiled = torch.compile(initialize, backend="eager", fullgraph=True)
@@ -94,7 +95,7 @@ def test_recipe_rejects_task_dispatch_in_target() -> None:
 
 @withCUDA
 def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
-    recipe = TabICLv2.default_recipe()
+    recipe = tabicl_recipe()
 
     features = TableTensor(
         numerical=torch.randn(8, 2, device=device),
@@ -131,7 +132,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     torch.testing.assert_close(restored.numerical, target.numerical)
 
     # The original categorical column uses sparse codes 1 and 3.
-    transformed = TabICLv2.default_recipe().target.fit_transform(
+    transformed = tabicl_recipe().target.fit_transform(
         features.select_columns("cat_0")
     )
     assert transformed.categorical.unique().sort().values.tolist() == [0, 1]

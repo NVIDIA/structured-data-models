@@ -175,8 +175,7 @@ class Chronos2(ICLModel):
             **kwargs,
         )
 
-    @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(self) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
