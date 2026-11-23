@@ -1,0 +1,194 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from typing import Any, cast
+
+import torch
+import triton
+import triton.language as tl
+from torch import Tensor
+
+
+# References:
+# - FlashAttention-2: https://arxiv.org/abs/2307.08691
+# - Attention Quantization for Tabular Foundation Models: https://arxiv.org/abs/2609.13031
+@triton.jit
+def _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel(
+    q_ptr,
+    k_ptr,
+    v_ptr,
+    q_scale_ptr,
+    k_scale_ptr,
+    v_scale_ptr,
+    out_ptr,
+    n_q_heads: tl.constexpr,
+    n_kv_heads: tl.constexpr,
+    # TODO: Avoid recompiling for each query and context length.
+    n_queries: tl.constexpr,
+    n_context: tl.constexpr,
+    head_dim: tl.constexpr,
+    attn_scale: tl.constexpr,
+    block_q: tl.constexpr,
+    block_kv: tl.constexpr,
+    acc_flush_tiles: tl.constexpr,
+    scale_weights_in_exp: tl.constexpr,
+    fuse_score_scale: tl.constexpr,
+) -> None:
+    """Write attention outputs for one query tile and head per program.
+
+    Each program keeps a ``[block_q, head_dim]`` query tile and loops over
+    context tiles of ``block_kv`` rows. Both matrix multiplications use
+    the full head width.
+    """
+    query_block, batch_query_head = tl.program_id(0), tl.program_id(1)
+    batch = batch_query_head // n_q_heads
+    query_head = batch_query_head % n_q_heads
+    # Grouped-query attention shares K/V heads when n_q_heads > n_kv_heads.
+    batch_kv_head = batch * n_kv_heads + query_head // (
+        n_q_heads // n_kv_heads
+    )
+    # Tensors may exceed 2**31 elements, so widen per-head offsets to int64.
+    q_offset = batch_query_head.to(tl.int64) * n_queries * head_dim
+    kv_offset = batch_kv_head.to(tl.int64) * n_context * head_dim
+    rows = query_block * block_q + tl.arange(0, block_q)
+    cols = tl.arange(0, block_kv)
+    dims = tl.arange(0, head_dim)
+    q = tl.load(
+        q_ptr + q_offset + rows[:, None] * head_dim + dims[None, :],
+        mask=rows[:, None] < n_queries,
+        other=0.0,
+    )
+    # Restore Q/K magnitudes and convert natural-exponential scores to base 2.
+    score_scale = (
+        tl.load(q_scale_ptr + batch_query_head)
+        * tl.load(k_scale_ptr + batch_kv_head)
+        * attn_scale
+        * 1.4426950408889634
+    )
+    value_scale = tl.load(v_scale_ptr + batch_kv_head)
+    row_max = tl.full((block_q,), -float("inf"), tl.float32)
+    weight_sum = tl.full((block_q,), 0, tl.float32)
+    acc = tl.full((block_q, head_dim), 0, tl.float32)
+    if acc_flush_tiles > 0:
+        outer_acc = tl.full((block_q, head_dim), 0, tl.float32)
+        outer_max = tl.full((block_q,), -float("inf"), tl.float32)
+    for start in range(tl.cdiv(n_context, block_kv)):  # ty: ignore[invalid-argument-type]
+        # 1. Tiled QK^T: reduce over channels to get [block_q, block_kv].
+        indices = start * block_kv + cols
+        k = tl.load(
+            k_ptr + kv_offset + indices[None, :] * head_dim + dims[:, None],
+            mask=indices[None, :] < n_context,
+            other=0.0,
+        )
+        score = tl.dot(q, k, max_num_imprecise_acc=32)
+
+        # 2. Online softmax: update row maxima and weight sums across tiles.
+        if fuse_score_scale and attn_scale > 0:
+            score = tl.where(
+                indices[None, :] < n_context, score, -float("inf")
+            )
+            new_max = tl.maximum(row_max, tl.max(score, 1) * score_scale)  # ty: ignore[invalid-argument-type]
+            shift = new_max - 8.0 if scale_weights_in_exp else new_max
+            weights = tl.exp2(score * score_scale - shift[:, None])
+        else:
+            score = tl.where(
+                indices[None, :] < n_context,
+                score * score_scale,
+                -float("inf"),
+            )
+            new_max = tl.maximum(row_max, tl.max(score, 1))  # ty: ignore[invalid-argument-type]
+            if scale_weights_in_exp:
+                weights = tl.exp2(score - (new_max[:, None] - 8.0))
+            else:
+                weights = tl.exp2(score - new_max[:, None])
+        correction = tl.exp2(row_max - new_max)
+        weight_sum = weight_sum * correction + tl.sum(weights, 1)  # ty: ignore[invalid-argument-type]
+        acc *= correction[:, None]
+
+        # 3. Tiled weights-V: reduce over context to get [block_q, head_dim].
+        v_offsets = indices[:, None] + dims[None, :] * n_context
+        v = tl.load(
+            v_ptr + kv_offset + v_offsets,
+            mask=indices[:, None] < n_context,
+            other=0.0,
+        )
+        acc = tl.dot(
+            (weights if scale_weights_in_exp else weights * 256.0).to(
+                tl.float8e4nv
+            ),
+            v,
+            acc,
+            max_num_imprecise_acc=32,
+        )
+        # Periodically flush the dot accumulator to FP32 for long L4 contexts.
+        if acc_flush_tiles > 0:  # noqa: SIM102 - constexpr guard avoids modulo zero.
+            if ((start + 1) % acc_flush_tiles == 0) | (  # ty: ignore[unsupported-operator]
+                start + 1 == tl.cdiv(n_context, block_kv)  # ty: ignore[invalid-argument-type]
+            ):
+                outer_acc = (
+                    outer_acc * tl.exp2(outer_max - new_max)[:, None] + acc
+                )
+                outer_max = new_max
+                acc = tl.full((block_q, head_dim), 0, tl.float32)
+        row_max = new_max
+    if acc_flush_tiles > 0:
+        acc = outer_acc
+    # After all tiles, divide accumulated weighted values by the weight sum.
+    out = acc * value_scale / weight_sum[:, None]
+    if not scale_weights_in_exp:
+        out *= 1.0 / 256.0
+    tl.store(
+        out_ptr + q_offset + rows[:, None] * head_dim + dims[None, :],
+        out,
+        mask=rows[:, None] < n_queries,
+    )
+
+
+def attn_fwd__qk_e4m3__pv_e4m3__scale_head(
+    q: Tensor,
+    k: Tensor,
+    v: Tensor,
+    qs: Tensor,
+    ks: Tensor,
+    vs: Tensor,
+    dtype: torch.dtype,
+    query_tile: int,
+    scale: float | None = None,
+    context_tile: int = 64,
+    warps: int = 4,
+    stages: int = 2,
+    accumulation_chunk: int = 0,
+    scale_weights_in_exp: bool = False,
+    fuse_score_scale: bool = False,
+) -> Tensor:
+    b, h, m, d = q.shape
+    if k.size(1) == 0 or h % k.size(1):
+        raise ValueError("The number of K/V heads must divide the query heads")
+    n = k.size(-2)
+    # Q/K are [batch, heads, sequence, channels]; V is transposed.
+    output = q.new_empty(q.shape, dtype=dtype)
+    grid = (triton.cdiv(m, query_tile), b * h)  # ty: ignore[invalid-argument-type]
+    with torch.cuda.device(q.device):
+        cast(Any, _attn_fwd__qk_e4m3__pv_e4m3__scale_head_kernel)[grid](
+            q,
+            k,
+            v,
+            qs,
+            ks,
+            vs,
+            output,
+            n_q_heads=h,
+            n_kv_heads=k.size(1),
+            n_queries=m,
+            n_context=n,
+            head_dim=d,
+            attn_scale=d**-0.5 if scale is None else scale,
+            block_q=query_tile,
+            block_kv=context_tile,
+            acc_flush_tiles=accumulation_chunk,
+            scale_weights_in_exp=scale_weights_in_exp,
+            fuse_score_scale=fuse_score_scale,
+            num_warps=warps,
+            num_stages=stages,
+        )
+    return output

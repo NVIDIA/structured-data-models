@@ -27,14 +27,13 @@ from torch.nn import (
     Linear,
     ModuleList,
     Parameter,
-    RMSNorm,
     Sequential,
 )
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.models.tabfm.block import TabFMTransformerBlock
 from sdm.models.tabfm.cell_embedding import CellEmbedding
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding
+from sdm.nn import InducedTransformerBlock, RMSNorm, RotaryEmbedding
 
 
 class RowEmbedding(torch.nn.Module):
