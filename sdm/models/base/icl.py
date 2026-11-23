@@ -305,15 +305,6 @@ class ICLModel(Model):
             kwargs=kwargs,
             num_batches=len(batches),
         )
-        if isinstance(x, TableTensor):
-            # A compiled prediction gives them to query columns without any.
-            cache["categories"] = dict(
-                zip(
-                    x.categorical_columns,
-                    x.categorical.categories,
-                    strict=True,
-                )
-            )
         for i, batch in enumerate(batches):
             with inference_mode("no_grad"):
                 context = _stack_context(contexts[batch])
