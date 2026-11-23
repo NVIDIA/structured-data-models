@@ -56,6 +56,7 @@ class PCA(Processor):
 
         x = table.numerical
         self._set_buffer("mean", x.mean(dim=-2, keepdim=True))
+        x = x - self.mean
 
         *_, R, C = x.size()
         num_components = min(R, C, self.num_components)
@@ -72,10 +73,10 @@ class PCA(Processor):
                 solver = "full"
 
         if solver == "eigh":
-            components = _pca_eigh(x, num_components, self.mean)
+            components = _pca_eigh(x, num_components)
         elif solver == "qr":
             components = _pca_qr(
-                x - self.mean,
+                x,
                 num_components=num_components,
                 num_iterations=self.num_iterations,
                 num_oversamples=self.num_oversamples,
@@ -83,7 +84,7 @@ class PCA(Processor):
             )
         elif solver == "lu":
             components = _pca_lu(
-                x - self.mean,
+                x,
                 num_components=num_components,
                 num_iterations=self.num_iterations,
                 num_oversamples=self.num_oversamples,
@@ -91,7 +92,7 @@ class PCA(Processor):
             )
         else:
             assert solver == "full"
-            components = _pca_full(x - self.mean, num_components)
+            components = _pca_full(x, num_components)
 
         index = components.abs().argmax(dim=-2, keepdim=True)
         components *= components.gather(-2, index).sign()
@@ -123,9 +124,8 @@ def _pca_full(x: Tensor, num_components: int) -> Tensor:
     return vh[..., :num_components, :].transpose(-2, -1)
 
 
-def _pca_eigh(x: Tensor, num_components: int, mean: Tensor) -> Tensor:
+def _pca_eigh(x: Tensor, num_components: int) -> Tensor:
     cov = x.transpose(-2, -1) @ x
-    cov -= x.size(-2) * (mean.transpose(-2, -1) @ mean)
     _, eigvec = torch.linalg.eigh(cov)
     return eigvec[..., -num_components:].flip(-1)
 
