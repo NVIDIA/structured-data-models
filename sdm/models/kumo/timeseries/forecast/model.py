@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 import torch
 from torch import Tensor
@@ -57,12 +57,10 @@ class KumoForecast(ICLModel):
 
     Args:
         cross_channel: Whether to mix variates after encoding.
+        missingness: Whether to select the missingness-aware model variant
+            (using 96-step context and 24-step forecast blocks).
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-        missingness: Whether to select the missingness-aware variant with a
-            96-step context and 24-step forecast blocks. Requires
-            ``cross_channel=True`` and ``alpha=1``. Prediction and checkpoint
-            loading for this variant are not implemented yet.
 
     Additional Forward Parameters:
         alpha (float): Blend weight between direct and retrieved forecasts.
@@ -107,22 +105,28 @@ class KumoForecast(ICLModel):
     def __init__(
         self,
         cross_channel: bool = True,
+        missingness: bool = False,
         pretrained: bool = True,
         device: torch.device | str | None = None,
-        *,
-        missingness: bool = False,
     ) -> None:
         super().__init__(task=Task.regression)
-        self.missingness = missingness
         self.cross_channel = cross_channel
-        if missingness and not cross_channel:
-            raise ValueError(
-                "Missingness-aware forecasting requires cross_channel=True"
+
+        if missingness and not self.cross_channel:
+            self.cross_channel = True
+            warn_once(
+                key="kumo-forecast-missingness-and-cross-channel",
+                message=(
+                    f"`cross_channel=False` will be ignored in "
+                    f"{self.__class__.__name__}(missingness=True)."
+                ),
             )
 
         self.model: _KumoForecast | _KumoForecastMissingness
         if missingness:
-            self.model = _KumoForecastMissingness()
+            self.model = _KumoForecastMissingness(
+                device="meta" if pretrained else device,
+            )
         else:
             self.model = _KumoForecast(
                 cross_channel=cross_channel,
@@ -130,30 +134,34 @@ class KumoForecast(ICLModel):
             )
 
         if pretrained:
-            self._load_from_pretrained(cross_channel, device=device)
+            self._load_from_pretrained(
+                cross_channel=cross_channel,
+                missingness=missingness,
+                device=device,
+            )
 
         self.eval()
 
     @classmethod
-    def default_recipe(cls, missingness: bool = False) -> Recipe:
+    def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_recipe(missingness=missingness)
+        return default_recipe()
 
     def _load_from_pretrained(
         self,
-        use_cross_channel: bool,
+        cross_channel: bool,
+        missingness: bool,
         device: torch.device | str | None,
     ) -> KumoForecast:
-        if self.missingness:
-            raise NotImplementedError(
-                "Missingness-aware checkpoint loading is not implemented yet"
-            )
         device = torch.get_default_device() if device is None else device
+
+        if missingness:
+            raise NotImplementedError
 
         path = download_checkpoint(
             repo_id="nvidia/Kumo-Forecast",
             filename="run8_best_model_cr.pt"
-            if use_cross_channel
+            if cross_channel
             else "moment_head_512_6hr.pt",
             revision="abff20a58834638b28227ff4ab934f26206e4b09",
         )
@@ -174,11 +182,6 @@ class KumoForecast(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
-        if self.missingness:
-            if alpha != 1:
-                raise ValueError("DARR is not supported with missingness=True")
-            if kwargs.get("recipe") is None:
-                kwargs["recipe"] = self.default_recipe(missingness=True)
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
@@ -226,6 +229,12 @@ class KumoForecast(ICLModel):
                 f"Expected 'alpha' between zero and one (got {alpha})"
             )
 
+        if isinstance(self.model, _KumoForecastMissingness) and alpha != 1.0:
+            raise ValueError(
+                f"DARR is not supported in "
+                f"{self.__class__.__name__}(missingness=True)"
+            )
+
         if y_context.size(-2) < self.model.context_size:
             raise ValueError(
                 f"Expected at least {self.model.context_size} context rows "
@@ -258,9 +267,9 @@ class KumoForecast(ICLModel):
         # Forecast:
         last_x = x[..., -self.model.context_size :]
         if use_darr:
-            model = cast(_KumoForecast, self.model)
-            encoded, mean, scale = model.encode(last_x)  # [..., C, P, D]
-            out = model.decode(encoded, mean, scale)
+            assert isinstance(self.model, _KumoForecast)
+            encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
+            out = self.model.decode(encoded, mean, scale)
         else:
             out = self.model(last_x)
 
@@ -276,7 +285,8 @@ class KumoForecast(ICLModel):
         out = out[..., :horizon]
 
         if use_darr:  # Memory-based Retrieval:
-            key = model.encode_memory(
+            assert isinstance(self.model, _KumoForecast)
+            key = self.model.encode_memory(
                 x=x,
                 horizon=memory_horizon,
                 batch_size=batch_size,
@@ -305,16 +315,6 @@ class KumoForecast(ICLModel):
         return TableTensor(
             columns={Stype.numerical: y_context.numerical_columns},
             numerical=out,
-        )
-
-
-class _KumoForecastMissingness(torch.nn.Module):
-    context_size = 96
-    prediction_size = 24
-
-    def forward(self, x: Tensor) -> Tensor:
-        raise NotImplementedError(
-            "Missingness-aware forecasting is not implemented yet"
         )
 
 
@@ -427,3 +427,24 @@ class _KumoForecast(torch.nn.Module):
             x = self.cross_channel(x)  # [..., C, N, D]
 
         return x, mean, scale
+
+
+class _KumoForecastMissingness(torch.nn.Module):
+    def __init__(
+        self,
+        context_size: int = 96,
+        prediction_size: int = 24,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.context_size = context_size
+        self.prediction_size = prediction_size
+
+    def forward(
+        self,
+        x: Tensor,  # [..., C, R]
+    ) -> Tensor:  # [..., C, prediction_size]
+        raise NotImplementedError

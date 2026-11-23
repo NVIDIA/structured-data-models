@@ -4,11 +4,7 @@
 import sdm.processing as sp
 
 
-def default_recipe(missingness: bool = False) -> sp.Recipe:  # noqa: D103
-    if missingness:
-        # Preserve gaps until observed-history normalization is implemented.
-        return sp.Recipe(output=sp.AverageEstimators())
-
+def default_recipe() -> sp.Recipe:  # noqa: D103
     # Frozen statistics from standardizer.pkl in nvidia/Kumo-Forecast:
     mean = -5.671202659606934
     scale = 8.693312644958496
