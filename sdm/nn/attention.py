@@ -4,7 +4,7 @@
 """Attention modules for structured tensor models."""
 
 import math
-from typing import Any, Literal, cast, overload
+from typing import Any, Literal, overload
 
 import torch
 import torch.nn.functional as F
@@ -72,8 +72,7 @@ class SDPA(torch.nn.Module):
     def forward(
         self,
         query: Tensor,  # [..., Q, Hq, C]
-        key: Tensor | KVCacheEntry,  # [..., KV, Hkv, C]
-        value: Tensor | None = None,  # [..., KV, Hkv, C]
+        key_value: KVCacheEntry,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
@@ -86,12 +85,10 @@ class SDPA(torch.nn.Module):
                 ``Q`` is the query sequence length, ``Hq`` is the number of
                 query attention heads (``num_query_heads``), and ``C`` is the
                 channels per head.
-            key: The key tensor with shape ``[..., KV, Hkv, C]``, or
-                key/value projections as a :class:`~sdm.cache.KVCacheEntry`.
+            key_value: The key and value projections with shape
+                ``[..., KV, Hkv, C]`` as a :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, C]``, or
-                ``None`` if ``key`` is a :class:`~sdm.cache.KVCacheEntry`.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
@@ -105,11 +102,6 @@ class SDPA(torch.nn.Module):
         if query.numel() == 0:
             return query
 
-        key_value = (
-            key
-            if isinstance(key, KVCacheEntry)
-            else KVCacheEntry(key=key, value=cast(Tensor, value))
-        )
         key, value = key_value.key, key_value.value
 
         if attn_mask is not None and seqused_key_value is not None:
@@ -469,7 +461,7 @@ class Attention(torch.nn.Module):
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
-            key=entry,  # [..., KV, Hkv, C // Hq]
+            key_value=entry,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
             attn_mask=attn_mask,  # [..., Hq, Q, KV]
             is_causal=is_causal,

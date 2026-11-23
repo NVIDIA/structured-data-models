@@ -86,19 +86,18 @@ class _ZeroBackend(AttentionBackend):
 def test_sdpa_backend() -> None:
     query = torch.randn(2, 3, 5, 4, 8)  # [..., Q, Hq, C]
     key = torch.randn(2, 3, 7, 4, 8)  # [..., KV, Hkv, C]
-    value = torch.randn_like(key)
+    key_value = KVCacheEntry(key=key, value=torch.randn_like(key))
     torch_sdpa = SDPA(num_query_heads=4)
     supported = SDPA(num_query_heads=4, backend=_ZeroBackend(True))
     unsupported = SDPA(num_query_heads=4, backend=_ZeroBackend(False))
 
-    assert supported(query, key, value).eq(0).all()
-    expected = torch_sdpa(query, key, value)
-    torch.testing.assert_close(unsupported(query, key, value), expected)
+    assert supported(query, key_value).eq(0).all()
+    expected = torch_sdpa(query, key_value)
+    torch.testing.assert_close(unsupported(query, key_value), expected)
 
     # Backends that can't read quantized key/value projections get them
     # dequantized:
-    key_value = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    assert supported(query, key_value).eq(0).all()
-    dequantized = key_value.dequantize(query.dtype)
-    expected = torch_sdpa(query, dequantized.key, dequantized.value)
-    torch.testing.assert_close(torch_sdpa(query, key_value), expected)
+    quantized = Float8PerHead().quantize(key_value)
+    assert supported(query, quantized).eq(0).all()
+    expected = torch_sdpa(query, quantized.dequantize(query.dtype))
+    torch.testing.assert_close(torch_sdpa(query, quantized), expected)
