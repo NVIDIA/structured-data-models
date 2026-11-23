@@ -88,7 +88,7 @@ class LLM(torch.nn.Module):
         self,
         text: pa.Array,
         output_type: Literal["token", "sentence"],
-        batch_size: int | None = 64,
+        batch_size: int | None = 32,
         max_batch_tokens: int | None = 65_536,
         max_length: int | None = None,
         deduplicate: bool = False,
@@ -97,6 +97,9 @@ class LLM(torch.nn.Module):
     ) -> Iterator[
         tuple[Tensor, Tensor, Tensor, Tensor] | tuple[Tensor, Tensor]
     ]:
+        if len(text) == 0:
+            return
+
         if max_length is None:
             max_length = self.model.max_seq_length
         elif self.model.max_seq_length is not None:
@@ -207,7 +210,8 @@ class LLM(torch.nn.Module):
                 attn_mask = inputs["attention_mask"].to(emb.device)
                 yield index, emb, offset, attn_mask
             else:
-                emb = out["sentence_embedding"].to(device, dtype)
+                emb = out["sentence_embedding"][..., : self.model.truncate_dim]
+                emb = emb.to(device, dtype)
                 yield index, emb
 
             start = end
