@@ -246,7 +246,7 @@ class FP8AttentionBackend(AttentionBackend):
         wide = channels == 256 or (channels == 128 and context >= 32768)
         blackwell = channels == 64 and torch.cuda.get_device_capability(
             query.device
-        ) == (12, 0)
+        ) in {(12, 0), (12, 1)}
 
         out = _attn_fwd__qk_e4m3__pv_e4m3__scale_head(
             q=query.transpose(1, 2).contiguous(),  # [B, Hq, Q, C]
