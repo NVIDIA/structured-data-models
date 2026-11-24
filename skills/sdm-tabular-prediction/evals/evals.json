@@ -32,7 +32,7 @@
     },
     {
       "id": "sdm-predictions-csv",
-      "prompt": "I've attached home sales data at /workspace/input/home-sales.csv. Use pretrained KumoTabular from SDM to predict the median sale price from floor_area and building_age. Use sales before March 1, 2025 as context and sales on or after that date to see how well it does. Run the predictions and save /workspace/output/predictions.csv with sale_id, actual_sale_price, and predicted_sale_price for each held-out sale in the input order. Tell me the mean absolute error in dollars and where you saved the file. The small checkpoint on CPU is fine.",
+      "prompt": "Use a pretrained SDM model to predict median sale prices from floor_area and building_age in /workspace/input/home-sales.csv. Hold out sales from March 1, 2025 onward. Save the held-out sale_id, actual_sale_price, and predicted_sale_price in input order to /workspace/output/predictions.csv. Report the file path and MAE in dollars.",
       "expected_output": "Reads the supplied CSV and runs pretrained KumoTabular regression with the chronological split. Uses the q500 median prediction and saves a CSV pairing each held-out sale ID with its actual and predicted price. Reports the held-out mean absolute error in dollars and the path to the written file.",
       "assertions": [
         "Loads the supplied CSV, uses only pre-March 1 sales as context, and reserves the later sale prices for scoring",

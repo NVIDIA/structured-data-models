@@ -1,6 +1,6 @@
 ---
 name: sdm-tabular-prediction
-description: Run or evaluate single-table classification and regression with NVIDIA Structured Data Models (SDM) using KumoTabular as the default pretrained tabular foundation model. Covers TableTensor inputs, in-context prediction, cached fit and predict, class probabilities, and regression quantiles.
+description: Runs single-table classification and regression with NVIDIA Structured Data Models (SDM), a PyTorch-native library. Defaults to KumoTabular, a pretrained tabular foundation model. Use for in-context prediction from labeled tables, including holdout evaluation, batch scoring, and exporting predictions.
 license: Apache-2.0
 ---
 
