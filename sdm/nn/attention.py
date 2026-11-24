@@ -376,9 +376,10 @@ class Attention(torch.nn.Module):
             key_pos: Key positions with shape ``[..., KV]`` passed to
                 ``key_transform``.
             is_causal: Apply an upper-left causal attention mask.
-            return_key_value: Whether to return the computed key and value
-                projections alongside the attention output.
-            kv_cache_dtype: The storage dtype of the returned key and value
+            return_key_value: Whether to return the key and value projections
+                alongside the attention output. A :class:`~sdm.nn.KeyValue`
+                ``key_value`` is returned as is.
+            kv_cache_dtype: The storage dtype of the computed key and value
                 projections, *e.g.*, :class:`~sdm.nn.Float8PerHead`.
                 Attention uses the stored values, as when replaying them.
 
