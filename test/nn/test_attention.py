@@ -14,6 +14,7 @@ from sdm.nn import (
     SDPA,
     Attention,
     Float8PerHead,
+    KeyValue,
     QASSMax,
     SoftplusScale,
     TransformerBlock,
@@ -86,7 +87,7 @@ def test_sdpa(
     key = torch.randn(5, num_key_value_heads, channels, device=device)
     value = torch.randn(5, num_key_value_heads, channels, device=device)
 
-    out = module(query=query, key=key, value=value)
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
 
     expected = reference_sdpa(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
@@ -99,8 +100,7 @@ def test_sdpa(
 
     out = module(
         query=query,
-        key=key,
-        value=value,
+        key_value=KeyValue(key=key, value=value),
         attn_mask=attn_mask,
     )
     expected = reference_sdpa(
@@ -117,8 +117,7 @@ def test_sdpa(
     value = torch.empty(2, 0, num_key_value_heads, channels, device=device)
     out = module(
         query=query,
-        key=key,
-        value=value,
+        key_value=KeyValue(key=key, value=value),
     )
     assert out.size() == query.size()
     torch.testing.assert_close(out, torch.zeros_like(query))
@@ -154,8 +153,7 @@ def test_sdpa(
 
     out = module(
         query=query,
-        key=key,
-        value=value,
+        key_value=KeyValue(key=key, value=value),
         seqused_key_value=seqused_key_value,
     )
 
@@ -202,7 +200,7 @@ def test_sdpa(
         device=device,
     )
 
-    out = module(query=query, key=key, value=value)
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
     expected = reference_sdpa(
         query=query,
         key=key.expand(-1, num_test, -1, -1, -1),
@@ -221,7 +219,7 @@ def test_sdpa_scale(device: torch.device) -> None:
     key = torch.randn(2, 5, num_heads, channels, device=device)
     value = torch.randn(2, 5, num_heads, channels, device=device)
 
-    out = module(query=query, key=key, value=value)
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
     expected = reference_sdpa(
         query=query,
         key=key,
@@ -240,7 +238,11 @@ def test_sdpa_additive_bias(device: torch.device) -> None:
     value = torch.randn_like(key)
     bias = torch.randn(2, 2, 1, 5, device=device, requires_grad=True)
 
-    out = module(query=query, key=key, value=value, attn_mask=bias)
+    out = module(
+        query=query,
+        key_value=KeyValue(key=key, value=value),
+        attn_mask=bias,
+    )
     expected = reference_sdpa(
         query=query,
         key=key,
@@ -266,7 +268,7 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     for tensor in (query, key, value):
         tensor.requires_grad_()
 
-    out = module(query=query, key=key, value=value)
+    out = module(query=query, key_value=KeyValue(key=key, value=value))
     assert out.size() == (0, 3, 2, value_channels)
     out.sum().backward()
     for tensor in (query, key, value):
@@ -286,8 +288,7 @@ def test_sdpa_errors() -> None:
     with pytest.raises(ValueError, match="Cannot pass both"):
         module(
             query=query,
-            key=key,
-            value=value,
+            key_value=KeyValue(key=key, value=value),
             seqused_key_value=torch.tensor([1], dtype=torch.int32),
             attn_mask=attn_mask,
         )
@@ -298,8 +299,7 @@ def test_sdpa_errors() -> None:
     ):
         module(
             query=query,
-            key=key,
-            value=value,
+            key_value=KeyValue(key=key, value=value),
             seqused_key_value=torch.tensor([1], dtype=torch.int64),
         )
 
@@ -413,6 +413,12 @@ def test_attention_kv_cache(qassmax: bool) -> None:
         key_value=kv,
         attn_mask=attn_mask,
     )
+    replay_out, replay_kv = module(
+        query=query,
+        key_value=kv,
+        attn_mask=attn_mask,
+        return_key_value=True,
+    )
 
     self_out, self_kv = module(query=query, return_key_value=True)
     self_cached_out = module(query=query, key_value=self_kv)
@@ -421,6 +427,9 @@ def test_attention_kv_cache(qassmax: bool) -> None:
     assert kv.value.size() == (2, 5, num_heads, channels // num_heads)
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+    torch.testing.assert_close(replay_out, direct_out)
+    torch.testing.assert_close(replay_kv.key, kv.key)
+    torch.testing.assert_close(replay_kv.value, kv.value)
     torch.testing.assert_close(self_cached_out, self_out)
 
 
