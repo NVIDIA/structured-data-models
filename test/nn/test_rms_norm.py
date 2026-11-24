@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import warnings
+from collections.abc import Callable
 from typing import Literal
 
 import pytest
@@ -32,6 +33,7 @@ def test_rms_norm(
     normalized_shape: int | list[int],
     dtype: torch.dtype,
     autocast: bool,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
 ) -> None:
     reference = torch.nn.RMSNorm(
         normalized_shape=normalized_shape,
@@ -75,8 +77,12 @@ def test_rms_norm(
         and isinstance(normalized_shape, int)
     ):
         expected = expected.to(torch.bfloat16)
-
-    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+        assert_close_ulp(actual, expected)
+        torch.testing.assert_close(
+            actual[0, 0], expected[0, 0], rtol=0, atol=0
+        )
+    else:
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 @withCUDA

@@ -57,6 +57,8 @@ class KumoForecast(ICLModel):
 
     Args:
         cross_channel: Whether to mix variates after encoding.
+        missingness: Whether to select the missingness-aware model variant
+            (using 96-step context and 24-step forecast blocks).
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
 
@@ -96,44 +98,73 @@ class KumoForecast(ICLModel):
     )
     metadata: ClassVar[Mapping[str, str]] = {
         "Output": "Point predictions per target and time step",
-        "Missing Values": "Zero imputation in the default recipe",
+        "Missing Values": (
+            "Handled natively with ``missingness=True``, zero imputation in "
+            "the default recipe otherwise"
+        ),
         "Pretraining Scope": "Up to 512 rows",
     }
 
     def __init__(
         self,
         cross_channel: bool = True,
+        missingness: bool = False,
         pretrained: bool = True,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=Task.regression)
+        self.cross_channel = cross_channel
 
-        self.model = _KumoForecast(
-            cross_channel=cross_channel,
-            device="meta" if pretrained else device,
-        )
+        if missingness and not self.cross_channel:
+            self.cross_channel = True
+            warn_once(
+                key="kumo-forecast-missingness-and-cross-channel",
+                message=(
+                    f"`cross_channel=False` will be ignored in "
+                    f"{self.__class__.__name__}(missingness=True)."
+                ),
+            )
+
+        self.model: _KumoForecast | _KumoForecastMissingness
+        if missingness:
+            self.model = _KumoForecastMissingness(
+                device="meta" if pretrained else device,
+            )
+        else:
+            self.model = _KumoForecast(
+                cross_channel=cross_channel,
+                device="meta" if pretrained else device,
+            )
 
         if pretrained:
-            self._load_from_pretrained(cross_channel, device=device)
+            self._load_from_pretrained(
+                cross_channel=cross_channel,
+                missingness=missingness,
+                device=device,
+            )
 
         self.eval()
 
-    @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(self) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_recipe()
+        missingness = isinstance(self.model, _KumoForecastMissingness)
+        return default_recipe(missingness)
 
     def _load_from_pretrained(
         self,
-        use_cross_channel: bool,
+        cross_channel: bool,
+        missingness: bool,
         device: torch.device | str | None,
     ) -> KumoForecast:
         device = torch.get_default_device() if device is None else device
 
+        if missingness:
+            raise NotImplementedError
+
         path = download_checkpoint(
             repo_id="nvidia/Kumo-Forecast",
             filename="run8_best_model_cr.pt"
-            if use_cross_channel
+            if cross_channel
             else "moment_head_512_6hr.pt",
             revision="abff20a58834638b28227ff4ab934f26206e4b09",
         )
@@ -201,6 +232,12 @@ class KumoForecast(ICLModel):
                 f"Expected 'alpha' between zero and one (got {alpha})"
             )
 
+        if isinstance(self.model, _KumoForecastMissingness) and alpha != 1.0:
+            raise ValueError(
+                f"DARR is not supported in "
+                f"{self.__class__.__name__}(missingness=True)"
+            )
+
         if y_context.size(-2) < self.model.context_size:
             raise ValueError(
                 f"Expected at least {self.model.context_size} context rows "
@@ -217,7 +254,7 @@ class KumoForecast(ICLModel):
 
         x = y_context.numerical.transpose(-1, -2)  # [..., C, R]
         if x_context_only is not None and x_context_only.size(-1) > 0:
-            if self.model.cross_channel is None and not use_darr:
+            if not self.cross_channel and not use_darr:
                 warn_once(
                     key="kumo-forecast-historical-covariate",
                     message=(
@@ -232,8 +269,12 @@ class KumoForecast(ICLModel):
 
         # Forecast:
         last_x = x[..., -self.model.context_size :]
-        encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
-        out = self.model.decode(encoded, mean, scale)
+        if use_darr:
+            assert isinstance(self.model, _KumoForecast)
+            encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
+            out = self.model.decode(encoded, mean, scale)
+        else:
+            out = self.model(last_x)
 
         # Autoregressive Forecasts:
         if horizon > prediction_size and (alpha != 0 or not use_darr):
@@ -247,6 +288,7 @@ class KumoForecast(ICLModel):
         out = out[..., :horizon]
 
         if use_darr:  # Memory-based Retrieval:
+            assert isinstance(self.model, _KumoForecast)
             key = self.model.encode_memory(
                 x=x,
                 horizon=memory_horizon,
@@ -388,3 +430,23 @@ class _KumoForecast(torch.nn.Module):
             x = self.cross_channel(x)  # [..., C, N, D]
 
         return x, mean, scale
+
+
+class _KumoForecastMissingness(torch.nn.Module):
+    def __init__(
+        self,
+        context_size: int = 96,
+        prediction_size: int = 24,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.context_size = context_size
+        self.prediction_size = prediction_size
+
+    def forward(
+        self,
+        x: Tensor,  # [..., C, R]
+    ) -> Tensor:  # [..., C, prediction_size]
+        raise NotImplementedError

@@ -967,6 +967,16 @@ class TableTensor(Tensor):
         r"""The schema of this table."""
         return TableSchema(columns=self._columns)
 
+    def _mark_dynamic(self, dim: int) -> None:
+        r"""Mark a dimension as dynamic for :func:`torch.compile`.
+
+        Args:
+            dim: The non-negative dimension.
+        """
+        torch._dynamo.mark_dynamic(self, dim)
+        self._text._mark_dynamic(dim)
+        self._id._mark_dynamic(dim)
+
     def is_same_schema(self, other: TableTensor) -> bool:
         r"""Whether ``other`` has the same schema layout.
 

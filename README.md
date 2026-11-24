@@ -20,6 +20,7 @@
 - **Models:** Reference implementations of structured data foundation models, including tabular models ([`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2), [`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular), *etc*), relational models ([`KumoRelational`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoRelational)), and time series models ([`Chronos2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.Chronos2), [`KumoForecast`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoForecast), [`TimesFM3`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TimesFM3), [`KumoAnomaly`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoAnomaly), *etc*), built on a unified interface with room for future model families.
 - **Tensor semantics:** PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing:** Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
+- **Synthetic data generation:** Distributions over synthetic training datasets, including SCM priors for `KumoTabular`.
 
 ## Installation
 
@@ -45,7 +46,7 @@ pip install git+https://github.com/NVIDIA/structured-data-models.git
 
 - **[`TabICLv2`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
 - **[`TabFM`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.TabFM)** from Kong *et al.*: [TabFM: A Zero-Shot Foundation Model for Tabular Data](https://arxiv.org/abs/2609.37959) (CoRR '26)
-- **[`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular Sets a New Accuracy-Efficiency Frontier for Tabular Prediction](https://huggingface.co/blog/nvidia/kumo-tabular) ('26)
+- **[`KumoTabular`](https://nvidia.github.io/structured-data-models/api/generated/sdm.models.KumoTabular)** from Qu *et al.*: [NVIDIA Kumo Tabular: Pushing the Accuracy–Efficiency Frontier for Tabular Prediction](https://arxiv.org/abs/2611.23001) (CoRR '26)
 
 **Relational Foundation Models:**
 
@@ -122,5 +123,6 @@ Third-party software and separately distributed model assets are documented in [
 - [**`sdm/models/timestral/`**](sdm/models/timestral/) contains code derived from [`Timestral`](https://github.com/mistralai/timestral) under the Apache License 2.0; its terms are distributed in [`sdm/models/timestral/LICENSE`](sdm/models/timestral/LICENSE).
 - [**`sdm/models/kumo/relational/NOTICE`**](sdm/models/kumo/relational/NOTICE) documents [`KumoRelational`](sdm/models/kumo/relational/)'s reuse of [`TabICLv2`](sdm/models/tabiclv2/)-derived components.
 - [**`sdm/models/kumo/timeseries/anomaly/NOTICE`**](sdm/models/kumo/timeseries/anomaly/NOTICE) documents [`KumoAnomaly`](sdm/models/kumo/timeseries/anomaly)'s attribution to [DPM-Solver](https://github.com/LuChengTHU/dpm-solver).
+- [**`sdm/processing/text/tile.py`**](sdm/processing/text/tile.py) contains code derived from [`TILE`](https://github.com/soda-inria/tile) under the BSD 3-Clause License; its terms are distributed in [`third_party/tile/LICENSE`](third_party/tile/LICENSE).
 - [**`third_party/pytorch/`**](third_party/pytorch/) contains the BSD 3-Clause License for material adapted from [PyTorch](https://github.com/pytorch/pytorch) in [`CONTRIBUTING.md`](CONTRIBUTING.md); its terms are distributed in [`third_party/pytorch/LICENSE`](third_party/pytorch/LICENSE).
 - [**`third_party/contributor-covenant/`**](third_party/contributor-covenant/) contains the MIT License for [Contributor Covenant version 1.4](https://www.contributor-covenant.org/version/1/4/code-of-conduct); its terms are distributed in [`third_party/contributor-covenant/LICENSE`](third_party/contributor-covenant/LICENSE).

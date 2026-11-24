@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import importlib
+from collections.abc import Callable
 
 import pytest
 import torch
 import torch.nn.functional as F
 
-from sdm._kernels import rmsnorm_cast
+from sdm._kernels import rms_norm_cast
 from sdm.nn import RotaryEmbedding
 from sdm.testing import onlyCUDA, withCUDA
 
@@ -19,11 +20,12 @@ from sdm.testing import onlyCUDA, withCUDA
 @pytest.mark.parametrize("affine", [False, True])
 @pytest.mark.parametrize("strided", [False, True])
 @pytest.mark.parametrize("channels", [32, 64])
-def test_rmsnorm_cast(
+def test_rms_norm_cast(
     dtype: torch.dtype,
     affine: bool,
     strided: bool,
     channels: int,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
 ) -> None:
     current_device = torch.cuda.current_device()
     device = torch.device(
@@ -57,11 +59,18 @@ def test_rmsnorm_cast(
         torch.autocast("cuda", dtype=output_dtype),
     ):
         expected = F.rms_norm(x, (channels,), weight, eps).to(output_dtype)
-        actual = rmsnorm_cast(x, weight, eps)
+        actual = rms_norm_cast(x, weight, eps)
 
     assert torch.cuda.current_device() == current_device
+    # Native RMSNorm may sum in a different float32 order (e.g., CuTeDSL in
+    # PyTorch 2.15), which can move the output by one rounding step.
+    assert_close_ulp(actual, expected)
     torch.testing.assert_close(
-        actual, expected, rtol=0, atol=0, equal_nan=True
+        actual[0, [0, 2, 3]],
+        expected[0, [0, 2, 3]],
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
 
 
@@ -74,7 +83,7 @@ def test_rmsnorm_cast(
         ((0, 64), torch.bfloat16),
     ],
 )
-def test_rmsnorm_cast_fallback(
+def test_rms_norm_cast_fallback(
     device: torch.device,
     shape: tuple[int, int],
     dtype: torch.dtype,
@@ -83,35 +92,35 @@ def test_rmsnorm_cast_fallback(
     weight = torch.randn(shape[-1], device=device, dtype=dtype)
     with (
         torch.inference_mode(),
-        torch.autocast(device.type, dtype=torch.bfloat16, enabled=False),
+        torch.autocast(device.type, dtype=torch.float16, enabled=False),
     ):
-        actual = rmsnorm_cast(x, weight, 1e-6)
-        expected = F.rms_norm(x, (shape[-1],), weight, 1e-6).to(torch.bfloat16)
+        actual = rms_norm_cast(x, weight, 1e-6)
+        expected = F.rms_norm(x, (shape[-1],), weight, 1e-6)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 @onlyCUDA
-def test_rmsnorm_cast_without_triton(
+def test_rms_norm_cast_without_triton(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = importlib.import_module("sdm._kernels.rmsnorm_cast")
-    monkeypatch.setattr(module, "_triton_rmsnorm_cast", None)
+    module = importlib.import_module("sdm._kernels.rms_norm_cast")
+    monkeypatch.setattr(module, "_triton_rms_norm_cast", None)
     x = torch.randn(2, 64, device="cuda", dtype=torch.bfloat16)
     weight = torch.randn(64, device="cuda")
     with torch.inference_mode(), torch.autocast("cuda", dtype=x.dtype):
-        actual = rmsnorm_cast(x, weight, 1e-6)
+        actual = rms_norm_cast(x, weight, 1e-6)
         expected = F.rms_norm(x, (64,), weight, 1e-6).to(x.dtype)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 @onlyCUDA
-def test_rmsnorm_cast_grad_fallback() -> None:
+def test_rms_norm_cast_grad_fallback() -> None:
     x = torch.randn(
         2, 64, device="cuda", dtype=torch.bfloat16, requires_grad=True
     )
     weight = torch.randn(64, device="cuda", requires_grad=True)
     with torch.autocast("cuda", dtype=x.dtype):
-        actual = rmsnorm_cast(x, weight, 1e-6)
+        actual = rms_norm_cast(x, weight, 1e-6)
         expected = F.rms_norm(x, (64,), weight, 1e-6).to(x.dtype)
     actual_grads = torch.autograd.grad(actual.sum(), (x, weight))
     expected_grads = torch.autograd.grad(expected.sum(), (x, weight))
@@ -124,10 +133,11 @@ def test_rmsnorm_cast_grad_fallback() -> None:
 )
 @pytest.mark.parametrize("channels", [32, 64, 128, 256, 512])
 @pytest.mark.parametrize("strided", [False, True])
-def test_rmsnorm_cast_rope(
+def test_rms_norm_cast_rope(
     dtype: torch.dtype,
     channels: int,
     strided: bool,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
 ) -> None:
     rope = RotaryEmbedding(
         channels=channels,
@@ -152,21 +162,71 @@ def test_rmsnorm_cast_rope(
     tables = (freq.cos().to(dtype), freq.sin().to(dtype))
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
-        actual = rmsnorm_cast(x, weight, 1e-6, rope=tables)
+        actual = rms_norm_cast(x, weight, 1e-6, rope=tables)
         expected = F.rms_norm(rope(x), (channels,), weight, 1e-6).to(
             torch.float16
         )
 
-    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert_close_ulp(actual, expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32]
+)
+@pytest.mark.parametrize("rope_enabled", [False, True])
+@pytest.mark.parametrize("strided", [False, True])
+def test_rms_norm_cast_without_autocast(
+    dtype: torch.dtype,
+    rope_enabled: bool,
+    strided: bool,
+    assert_close_ulp: Callable[[torch.Tensor, torch.Tensor], None],
+) -> None:
+    x = torch.randn(
+        2, 257, 4, 128 if strided else 64, device="cuda", dtype=dtype
+    )
+    if strided:
+        x = x[..., ::2]
+    weight = torch.randn(64, device=x.device)
+    rope = None
+    tables = None
+    if rope_enabled:
+        rope = RotaryEmbedding(
+            channels=64,
+            layout="split_half",
+            requires_grad=False,
+            device=x.device,
+        )
+        seq = torch.arange(x.size(-3), device=x.device, dtype=torch.float32)
+        freq = seq[:, None] * rope.inv_freq[None, :]
+        tables = (freq.cos().to(dtype), freq.sin().to(dtype))
+    # A disabled autocast context still configures a dtype. The output keeps
+    # the input dtype instead.
+    with (
+        torch.inference_mode(),
+        torch.autocast(
+            "cuda",
+            dtype=torch.float16 if dtype == torch.bfloat16 else torch.bfloat16,
+            enabled=False,
+        ),
+    ):
+        actual = rms_norm_cast(x, weight, 1e-6, rope=tables)
+        expected = F.rms_norm(
+            x if rope is None else rope(x), (64,), weight, 1e-6
+        )
+    if dtype == torch.float32:
+        torch.testing.assert_close(actual, expected)
+    else:
+        assert_close_ulp(actual, expected)
 
 
 @withCUDA
-def test_rmsnorm_cast_rope_grad_fallback(device: torch.device) -> None:
+def test_rms_norm_cast_rope_grad_fallback(device: torch.device) -> None:
     x = torch.randn(2, 5, 3, 64, device=device)
     freq = torch.randn(5, 32, device=device, requires_grad=True)
     tables = (freq.cos(), freq.sin())
     with torch.autocast(device.type, dtype=torch.bfloat16):
-        actual = rmsnorm_cast(x, None, 1e-6, rope=tables)
+        actual = rms_norm_cast(x, None, 1e-6, rope=tables)
         cos, sin = (table.unsqueeze(-2) for table in tables)
         x1, x2 = x.chunk(2, dim=-1)
         rotated = torch.cat((x1 * cos - x2 * sin, x2 * cos + x1 * sin), -1)

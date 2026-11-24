@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from contextlib import nullcontext
-from functools import partial
+from typing import Any
 
 import pytest
 import torch
 
 from sdm import TableTensor
 from sdm.models import KumoForecast
-from sdm.models.kumo.timeseries.forecast import model as forecasting
+from sdm.models.kumo.timeseries.forecast import model as kumo_forecast
 from sdm.testing import withCUDA
 
 
@@ -28,18 +28,19 @@ def test_forward(
     alpha: float,
     device: torch.device,
 ) -> None:
-    monkeypatch.setattr(
-        forecasting,
-        "_KumoForecast",
-        partial(
-            forecasting._KumoForecast,
-            channels=32,
-            hidden_channels=48,
-            num_layers=2,
-            num_heads=4,
-            cross_channel_heads=4,
-        ),
-    )
+
+    class _KumoForecast(kumo_forecast._KumoForecast):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(
+                channels=32,
+                hidden_channels=48,
+                num_layers=2,
+                num_heads=4,
+                cross_channel_heads=4,
+                **kwargs,
+            )
+
+    monkeypatch.setattr(kumo_forecast, "_KumoForecast", _KumoForecast)
     model = KumoForecast(cross_channel, pretrained=False, device=device)
 
     # Past and past-and-future covariates:

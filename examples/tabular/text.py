@@ -55,10 +55,12 @@ if args.text_processor != "none":
         text_processor = sp.TFIDF(ngram_range=(4, 6), max_features=256)
     else:
         text_processor = [
-            sp.SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2"),
-            sp.PCA(64),
+            sp.SentenceTransformer(
+                "sentence-transformers/all-MiniLM-L6-v2",
+                postprocess=sp.PCA(64),
+            ),
         ]
-    recipe.prepend_features(sp.StypeDispatch(text=text_processor))
+    recipe.prepend_features(text_processor)
 
 
 with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):

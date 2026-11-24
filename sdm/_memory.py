@@ -63,9 +63,15 @@ def split_size(num_items: int, item_bytes: int, device: torch.device) -> int:
 
     On CUDA devices, chunks fit :func:`chunk_memory_limit`, unless a single
     item exceeds the limit. Autograd keeps the memory of every chunk, so one
-    chunk holds all items elsewhere or while gradients are enabled.
+    chunk holds all items elsewhere or while gradients are enabled. Compiled
+    code also uses one chunk: a new number of chunks would force a recompile.
     """
-    if device.type != "cuda" or torch.is_grad_enabled() or item_bytes == 0:
+    if (
+        device.type != "cuda"
+        or torch.is_grad_enabled()
+        or torch.compiler.is_dynamo_compiling()
+        or item_bytes == 0
+    ):
         return max(num_items, 1)
     limit = max(chunk_memory_limit(device), 1)
     capacity = max(limit // item_bytes, 1)

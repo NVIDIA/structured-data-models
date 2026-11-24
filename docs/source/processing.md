@@ -36,7 +36,8 @@ To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, prepend a {py
 import sdm
 import sdm.processing as sp
 
-recipe = sdm.models.TabICLv2.default_recipe().prepend_features(
+model = sdm.models.TabICLv2()
+recipe = model.default_recipe().prepend_features(
     sp.StypeDispatch(
         datetime=sp.AddCalendarFields(
             fields=("minute", "hour", "weekday", "day_of_month", "month"),

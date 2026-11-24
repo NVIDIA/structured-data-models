@@ -1,7 +1,13 @@
+# Copyright (c) 2025, Félix Lefebvre
+# Licensed under the BSD 3-Clause License; see third_party/tile/LICENSE.
+
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# ruff: noqa: D205
+
 import math
+from typing import cast
 
 import numpy as np
 import pyarrow as pa
@@ -9,7 +15,19 @@ import pyarrow.compute as pc
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
+from sdm.processing.text.llm import LLM, load_model
+
+MODELS: dict[str, tuple[str, int]] = {  # (model_name, num_layers)
+    "llama-3.1-8b": ("meta-llama/Llama-3.1-8B", 14),
+    "llama-3.1-70b": ("meta-llama/Llama-3.1-70B", 32),
+    "llama-3.2-1b": ("meta-llama/Llama-3.2-1B", 10),
+    "llama-3.2-3b": ("meta-llama/Llama-3.2-3B", 11),
+    "qwen3-0.6b": ("Qwen/Qwen3-0.6B-Base", 16),
+    "qwen3-4b": ("Qwen/Qwen3-4B-Base", 20),
+    "qwen3-8b": ("Qwen/Qwen3-8B-Base", 19),
+}
 
 
 def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
@@ -54,3 +72,208 @@ def textify(table: TableTensor) -> tuple[pa.Array, Tensor]:
         pa.scalar(" ", dtype),
     )
     return array.combine_chunks(), span
+
+
+class TILE(Processor):
+    r"""The text cell embedding processor from the `"TILE: Bridging LLMs and
+    Table Foundation Models for Tabular Learning with Strings"
+    <https://arxiv.org/abs/2610.17065>`_ paper.
+
+    Each row is serialized as one text, one sentence per cell. An LLM embeds
+    this text, and token embeddings are mean-pooled for each text cell.
+    Optional postprocessing transforms these embeddings independently per text
+    column, for example to reduce dimensionality.
+
+    Args:
+        model: The model name, one of ``"llama-3.1-8b"``, ``"llama-3.1-70b"``,
+            ``"llama-3.2-1b"``, ``"llama-3.2-3b"``, ``"qwen3-0.6b"``,
+            ``"qwen3-4b"``, or ``"qwen3-8b"``.
+        postprocess: Optional postprocessing routine, applied independently for
+            each text column.
+        batch_size: The maximum batch size of the model. Adjusting the batch
+            size can significantly improve processing speed. The optimal value
+            depends on your hardware, model size, precision, and input length.
+        max_batch_tokens: The maximum number of tokens to process per batch.
+        show_progress: Whether to display a progress bar with token throughput.
+        device: The device.
+        dtype: The dtype.
+    """
+
+    handles_stypes = (Stype.text,)
+
+    def __init__(
+        self,
+        model: str = "qwen3-0.6b",
+        postprocess: object = None,
+        *,
+        batch_size: int | None = 32,
+        max_batch_tokens: int | None = 65_536,
+        show_progress: bool = True,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype = torch.bfloat16,
+    ) -> None:
+        super().__init__()
+
+        self.model = model
+        if self.model not in MODELS:
+            raise ValueError(
+                f"Unsupported model {self.model!r}. Supported models: "
+                f"{', '.join(MODELS)}"
+            )
+
+        import transformers
+
+        model, num_layers = MODELS[self.model]
+        config_kwargs: dict[str, object] = {
+            "num_hidden_layers": num_layers,
+        }
+        config = transformers.AutoConfig.from_pretrained(model)
+        if getattr(config, "layer_types", None) is not None:
+            config_kwargs["layer_types"] = config.layer_types[:num_layers]
+
+        llm = load_model(
+            model,
+            device=str(device) if device is not None else None,
+            config_kwargs=config_kwargs,
+            model_kwargs={"dtype": dtype},
+        )
+        cast(torch.nn.Module, llm.transformers_model).set_submodule(
+            target="norm",
+            module=torch.nn.Identity(),
+        )
+
+        self.requires_fit = False
+        if postprocess is not None:
+            postprocess = Processor.as_processor(postprocess)
+            self.requires_fit = postprocess.requires_fit
+
+        self.llm = LLM(llm, padding_side="right")
+        self.postprocess = postprocess
+        self.batch_size = batch_size
+        self.max_batch_tokens = max_batch_tokens
+        self.show_progress = show_progress
+        self.skip_first = len(self.llm.model.tokenizer("")["input_ids"]) == 0
+
+    def _embed(self, table: TableTensor) -> Tensor:  # [..., R, C, D]
+        columns = tuple(
+            column
+            for stype, _ in table.items()
+            for column in table.columns[stype]
+        )
+        positions = [columns.index(column) for column in table.text_columns]
+
+        text, span = textify(table)
+        span = span.view(len(text), table.size(-1), 2)[:, positions]
+        span = span.to(self.llm.model.device)
+
+        D = self.llm.model.transformers_model.config.hidden_size  # type: ignore
+        out = table.numerical.new_empty(
+            (len(text), len(positions), D),
+            device=self.llm.model.device,
+        )
+        for (  # Mean pool embeddings for each text cell:
+            index,  # [R]
+            emb,  # [R, T, D]
+            offset,  # [R, T, 2]
+            mask,  # [R, T]
+        ) in self.llm(
+            text,
+            output_type="token",
+            batch_size=self.batch_size,
+            max_batch_tokens=self.max_batch_tokens,
+            show_progress=self.show_progress,
+            dtype=out.dtype,
+        ):
+            start, end = span[index].unbind(dim=-1)
+            mask = mask & (offset[..., 1] > offset[..., 0])
+            if self.skip_first:
+                mask[..., 0] = False
+            weight = (  # Match tokens to text cells:
+                mask[:, None, :]
+                & (offset[:, None, :, 0] < end[:, :, None])
+                & (offset[:, None, :, 1] > start[:, :, None])
+            ).to(out.dtype)  # [R, C, T]
+            weight /= weight.sum(dim=-1, keepdim=True).clamp(min=1)
+            out[index] = weight.bmm(emb)  # [R, C, D]
+
+        return out.view(*table.size()[:-1], *out.size()[-2:])  # [..., R, C, D]
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        assert self.postprocess is not None
+        self.postprocess.fit(
+            TableTensor.from_tensor(self._embed(table).movedim(-2, -3)),
+            generator=generator,
+        )
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        out = self._embed(table)
+
+        if self.postprocess is not None:
+            out = self.postprocess.transform(
+                TableTensor.from_tensor(out.movedim(-2, -3))
+            ).numerical.movedim(-2, -3)  # [..., R, C, D]
+
+        out = TableTensor(
+            columns={
+                Stype.numerical: tuple(
+                    f"{column}__emb{i}"
+                    for column in table.text_columns
+                    for i in range(out.size(-1))
+                )
+            },
+            numerical=out.flatten(-2).to(table.device),
+        )
+
+        return cast(
+            TableTensor,
+            torch.cat([table.drop_stypes(Stype.text), out], dim=-1),
+        )
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        out = self._embed(table)
+
+        if self.postprocess is not None:
+            out = self.postprocess.fit_transform(
+                TableTensor.from_tensor(out.movedim(-2, -3)),
+                generator=generator,
+            ).numerical.movedim(-2, -3)  # [..., R, C, D]
+
+        out = TableTensor(
+            columns={
+                Stype.numerical: tuple(
+                    f"{column}__emb{i}"
+                    for column in table.text_columns
+                    for i in range(out.size(-1))
+                )
+            },
+            numerical=out.flatten(-2).to(table.device),
+        )
+
+        return cast(
+            TableTensor,
+            torch.cat([table.drop_stypes(Stype.text), out], dim=-1),
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.postprocess is None:
+            return (
+                f"{' ' * indent}{self.__class__.__name__}("
+                f"model={self.model!r})"
+            )
+        return (
+            f"{' ' * indent}{self.__class__.__name__}(\n"
+            f"{' ' * (indent + 2)}model={self.model!r},\n"
+            f"{' ' * (indent + 2)}postprocess="
+            f"{self.postprocess.__repr__(indent=indent + 2)[indent + 2 :]},\n"
+            f"{' ' * indent})"
+        )

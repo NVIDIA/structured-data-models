@@ -54,6 +54,7 @@ autosummary_generate = True
 autosummary_context = {
     "import_module": importlib.import_module,
     "getdoc": inspect.getdoc,
+    "getmodule": inspect.getmodule,
 }
 autodoc_member_order = "bysource"
 autodoc_use_legacy_class_based = True
@@ -189,6 +190,9 @@ _reference_aliases = {
     "SDPA": "sdm.nn.SDPA",
     "Stype.categorical": "sdm.Stype.categorical",
     "Stype.text": "sdm.Stype.text",
+    "Activation": "sdm.prior.Activation",
+    "Schema": "sdm.prior.tabular.Schema",
+    "T | MixtureConverter[T]": "sdm.prior.MixtureConverter",
     "sdm.processing.AlignCategories": (
         "sdm.processing.categorical.AlignCategories"
     ),

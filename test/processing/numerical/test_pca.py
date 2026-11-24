@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from typing import Literal
 
 import pytest
 import torch
@@ -10,11 +11,15 @@ from sdm import TableTensor
 from sdm.processing import PCA
 
 
+@pytest.mark.parametrize("solver", ["auto", "full", "eigh", "qr", "lu"])
 @pytest.mark.parametrize("shape", [(20, 5), (2, 3, 4, 4)])
-def test_basic(shape: tuple[int, ...]) -> None:
+def test_basic(
+    solver: Literal["auto", "full", "eigh", "qr", "lu"],
+    shape: tuple[int, ...],
+) -> None:
     data = torch.eye(math.prod(shape[:-1]), shape[-1]).view(shape)
     table = TableTensor.from_tensor(data)
-    output = PCA(num_components=2).fit_transform(table)
+    output = PCA(num_components=2, solver=solver).fit_transform(table)
     assert output.numerical.size() == (*shape[:-1], 2)
     assert output.numerical_columns == ("pca_0", "pca_1")
 

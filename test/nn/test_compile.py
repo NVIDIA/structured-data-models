@@ -7,6 +7,7 @@ from collections.abc import Callable
 import pytest
 import torch
 from torch import Tensor
+from torch._dynamo.testing import CompileCounter
 
 from sdm.nn import (
     SDPA,
@@ -182,6 +183,63 @@ def test_sdpa_compile_dynamic_batch() -> None:
         expected = module(query=query, key=key, value=value)
         out = fullgraph(module)(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
+
+
+def test_sdpa_compile_batch_above_kernel_limit() -> None:
+    module = SDPA(num_query_heads=2).eval()
+    counter = CompileCounter()
+    compiled = torch.compile(module, fullgraph=True, backend=counter)
+    with torch.inference_mode():
+        for batch_size in [3, 65_536]:
+            query = torch.randn(batch_size, 4, 2, 8)
+            key = torch.randn(batch_size, 5, 2, 8)
+            value = torch.randn_like(key)
+            for tensor in (query, key, value):
+                torch._dynamo.mark_dynamic(tensor, 0)
+            expected = module(query=query, key=key, value=value)
+            out = compiled(query=query, key=key, value=value)
+            torch.testing.assert_close(out, expected)
+    assert counter.frame_count == 1
+
+
+@pytest.mark.parametrize(
+    ("dtype", "mask_dtype"),
+    [(torch.float32, torch.float16), (torch.float64, torch.float64)],
+)
+def test_sdpa_compile_dynamic_batch_autocast(
+    dtype: torch.dtype,
+    mask_dtype: torch.dtype,
+) -> None:
+    module = SDPA(num_query_heads=2).eval()
+    query = torch.randn(3, 4, 2, 8, dtype=dtype)
+    key = torch.randn(3, 5, 2, 8, dtype=dtype)
+    value = torch.randn_like(key)
+    attn_mask = torch.randn(3, 2, 4, 5, dtype=mask_dtype)
+    for tensor in (query, key, value, attn_mask):
+        torch._dynamo.mark_dynamic(tensor, 0)
+    with torch.inference_mode(), torch.autocast("cpu", torch.bfloat16):
+        expected = module(query, key, value, attn_mask=attn_mask)
+        out = torch.compile(module, fullgraph=True)(
+            query, key, value, attn_mask=attn_mask
+        )
+    assert out.dtype == expected.dtype
+    torch.testing.assert_close(out, expected)
+
+
+def test_transformer_block_compile_dynamic_batch() -> None:
+    module = TransformerBlock(
+        channels=8, num_query_heads=2, mlp=torch.nn.Identity()
+    ).eval()
+    counter = CompileCounter()
+    compiled = torch.compile(module, fullgraph=True, backend=counter)
+    with torch.inference_mode():
+        for batch_size in [3, 65_536]:
+            query = torch.randn(batch_size, 4, 8)
+            torch._dynamo.mark_dynamic(query, 0)
+            expected = module(query=query, batch_size_limit="auto")
+            out = compiled(query=query, batch_size_limit="auto")
+            torch.testing.assert_close(out, expected)
+    assert counter.frame_count == 1
 
 
 @withCUDA

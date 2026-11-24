@@ -16,6 +16,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base.compile import DynamicShapes
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -64,9 +65,9 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 
 
 class KumoTabular(ICLModel):
-    r"""The tabular foundation model from `"NVIDIA Kumo Tabular Sets a New
-    Accuracy-Efficiency Frontier for Tabular Prediction"
-    <https://huggingface.co/blog/nvidia/kumo-tabular>`__.
+    r"""The tabular foundation model from the `"NVIDIA Kumo Tabular: Pushing
+    the Accuracy-Efficiency Frontier for Tabular Prediction"
+    <https://arxiv.org/abs/2611.23001>`__ paper.
 
     .. figure:: /images/kumo_tabular.svg
         :width: 100%
@@ -110,7 +111,7 @@ class KumoTabular(ICLModel):
     supports_context_only_columns: ClassVar[bool] = False
     supports_related_tables: ClassVar[bool] = False
 
-    paper: ClassVar[str] = "https://huggingface.co/blog/nvidia/kumo-tabular"
+    paper: ClassVar[str] = "https://arxiv.org/abs/2611.23001"
     source: ClassVar[str] = (
         "https://github.com/NVIDIA/structured-data-models/tree/main/sdm/models/kumo/tabular"
     )
@@ -160,8 +161,7 @@ class KumoTabular(ICLModel):
 
         self.eval()
 
-    @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(self) -> Recipe:
         r"""
         .. warning::
             Each estimator uses at most 500 columns. For wide tables, some
@@ -170,6 +170,9 @@ class KumoTabular(ICLModel):
             coverage possible.
         """  # noqa: D212
         return default_recipe()
+
+    def _default_dynamic_shapes(self) -> DynamicShapes:
+        return DynamicShapes(query=(-2,))
 
     def _load_from_pretrained(
         self,
