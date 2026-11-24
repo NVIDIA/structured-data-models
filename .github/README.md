@@ -24,7 +24,7 @@ gh run rerun "<Run ID>"
 
 ### 2. Run GPU CI
 
-A maintainer can post this comment on the PR, including on a draft. Replace `<SHA>` with the commit SHA to test.
+A maintainer can post this comment on a PR, including a draft. Replace `<SHA>` with the commit SHA to test.
 
 ```
 /ok to test <SHA>
