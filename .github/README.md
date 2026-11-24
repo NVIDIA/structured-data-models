@@ -1,8 +1,8 @@
 # Continuous Integration
 
-## Pull request checks
+## Trigger additional checks on pull requests
 
-By default, pull request CI runs lint, CPU tests, and documentation checks. You can trigger additional checks on a PR.
+By default, pull request CI runs lint, CPU tests, and documentation checks.
 
 ### 1. Run the full test suite
 
