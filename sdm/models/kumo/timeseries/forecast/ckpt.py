@@ -1,11 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# ruff: noqa: D103
+
 import torch
 from torch import Tensor
 
 
-def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
+def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
     out = {
         "lin.weight": ckpt["patch_embedding.value_embedding.weight"],
         "icl.relative_attention_bias.weight": ckpt[
@@ -56,4 +58,23 @@ def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
         ):
             out["cross_channel." + new] = ckpt["cross_channel_attn." + old]
 
+    return out
+
+
+def remap_missingness_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
+    out = {
+        key.replace("cross_channel.block.attn.", "cross_channel.attn."): value
+        for key, value in remap_ckpt(ckpt).items()
+    }
+    out.update(
+        mask_token=ckpt["mask_token"],
+        mask_embedding=ckpt["patch_embedding.mask_embedding"],
+    )
+    out["revin.prior"] = ckpt["normalizer._global_stdev"].squeeze(0)
+    out["revin.initialized"] = ckpt["normalizer._global_stdev_initialized"]
+    for key, value in ckpt.items():
+        if key.startswith(("obs_attn_bias.", "missingness_adapter.")):
+            out[key] = value
+    for suffix in ("residual_gate", "channel_embed.weight"):
+        out["cross_channel." + suffix] = ckpt["cross_channel_attn." + suffix]
     return out
