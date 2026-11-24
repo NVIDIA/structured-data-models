@@ -2,7 +2,7 @@
 
 For installation and usage, see the [project README](../README.md).
 
-- **Default checks.** Pull requests run lint, CPU tests, and documentation checks. The copy PR bot automatically syncs ready-for-review PRs to `pull-request/<number>`, which triggers GPU tests.
+- **Default checks.** Pull requests run lint, CPU tests, and documentation checks.
 
 - **Approve GPU testing.** A maintainer can post this command as a PR comment, replacing `<SHA>` with the commit SHA to test. This also works on draft PRs.
 
