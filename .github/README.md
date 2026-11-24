@@ -16,7 +16,7 @@ Replace `<PR Number>` with the PR number.
 gh pr edit "<PR Number>" --add-label ci-full-test
 ```
 
-If CI already read the labels, trigger a new **Test** run by pushing a commit or closing and reopening the PR. For **Test GPU**, select **Re-run all jobs** on the run in GitHub Actions to check the label again. You can also use the run ID from the Actions URL.
+If CI already read the labels, trigger a new [Test](workflows/test.yml) run by pushing a commit or closing and reopening the PR. For [Test GPU](workflows/test-gpu.yml), select **Re-run all jobs** on the run in GitHub Actions to check the label again. You can also use the run ID from the Actions URL.
 
 ```sh
 gh run rerun "<Run ID>"
@@ -40,6 +40,6 @@ A maintainer can post this comment on a PR with changes under `skills/`.
 
 ## PyPI releases
 
-Publish a stable GitHub release for the intended `vX.Y.Z` tag. The **Publish** workflow builds and validates a wheel and source distribution from that tag, then uploads both through PyPI Trusted Publishing. Mark release candidates as prereleases to skip PyPI publishing.
+Publish a stable GitHub release for the intended `vX.Y.Z` tag. The [Publish](workflows/publish.yml) workflow builds and validates a wheel and source distribution from that tag, then uploads both through PyPI Trusted Publishing. Mark release candidates as prereleases to skip PyPI publishing.
 
 Check the **Publish** run in **Actions** and confirm that the released version appears on [PyPI](https://pypi.org/project/structured-data-models/).
