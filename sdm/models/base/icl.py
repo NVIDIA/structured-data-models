@@ -10,6 +10,7 @@ import torch
 from torch import Tensor
 
 from sdm import (
+    EnsembleTable,
     Recipe,
     RelatedTables,
     Stype,
@@ -138,7 +139,21 @@ class ICLModel(Model):
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training
+        inputs = [x_context, y_context, x_query]
+        for tables in (related_context_tables, related_query_tables):
+            if tables is not None:
+                inputs.extend(tables.tables.values())
+        input_requires_grad = any(
+            any(
+                group.numerical.requires_grad for group in value._iter_groups()
+            )
+            if isinstance(value, EnsembleTable)
+            else value.numerical.requires_grad
+            if isinstance(value, TableTensor)
+            else value.requires_grad
+            for value in inputs
+        )
+        requires_grad = self.training or input_requires_grad
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         context_only_columns = None
@@ -172,7 +187,13 @@ class ICLModel(Model):
         )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
-            inference_mode("no_grad" if requires_grad else "inference"),
+            inference_mode(
+                "grad"
+                if input_requires_grad
+                else "no_grad"
+                if requires_grad
+                else "inference"
+            ),
         ):
             contexts = recipe_execution.fit_transform(
                 x=x_context,
@@ -184,7 +205,13 @@ class ICLModel(Model):
             )
         with (
             torch.amp.autocast(x_query.device.type, enabled=False),
-            inference_mode("no_grad" if requires_grad else "inference"),
+            inference_mode(
+                "grad"
+                if input_requires_grad
+                else "no_grad"
+                if requires_grad
+                else "inference"
+            ),
         ):
             queries = recipe_execution.transform(
                 x=x_query,
@@ -196,6 +223,7 @@ class ICLModel(Model):
             queries=queries,
             estimator_batch_size=estimator_batch_size,
             callbacks=callbacks,
+            requires_grad=requires_grad,
             generator=generator,
             **kwargs,
         )
@@ -394,7 +422,22 @@ class ICLModel(Model):
             )
 
         callbacks = () if callbacks is None else callbacks
-        requires_grad = any(callback.requires_grad for callback in callbacks)
+        inputs = [x]
+        if related_tables is not None:
+            inputs.extend(related_tables.tables.values())
+        input_requires_grad = any(
+            any(
+                group.numerical.requires_grad for group in value._iter_groups()
+            )
+            if isinstance(value, EnsembleTable)
+            else value.numerical.requires_grad
+            if isinstance(value, TableTensor)
+            else value.requires_grad
+            for value in inputs
+        )
+        requires_grad = input_requires_grad or any(
+            callback.requires_grad for callback in callbacks
+        )
 
         if self._cache is None:
             raise RuntimeError(
@@ -427,7 +470,13 @@ class ICLModel(Model):
         ) as caches:
             with (
                 torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode("no_grad" if requires_grad else "inference"),
+                inference_mode(
+                    "grad"
+                    if input_requires_grad
+                    else "no_grad"
+                    if requires_grad
+                    else "inference"
+                ),
             ):
                 queries = recipe_execution.transform(x, related_tables)
 
@@ -562,6 +611,7 @@ class ICLModel(Model):
         *,
         estimator_batch_size: int | None = 1,
         callbacks: Sequence[Callback] | None = None,
+        requires_grad: bool = False,
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> list[TableTensor]:
@@ -571,7 +621,7 @@ class ICLModel(Model):
         ``recipe.output``.
         """
         callbacks = () if callbacks is None else callbacks
-        requires_grad = self.training
+        requires_grad |= self.training
         requires_grad |= any(callback.requires_grad for callback in callbacks)
 
         if estimator_batch_size == 1 and len(contexts) > 1:
@@ -583,6 +633,7 @@ class ICLModel(Model):
                         queries=(query,),
                         estimator_batch_size=1,
                         callbacks=callbacks,
+                        requires_grad=requires_grad,
                         generator=generator,
                         **kwargs,
                     )
