@@ -30,7 +30,7 @@ A maintainer can post this comment on a PR, including a draft. Replace `<SHA>` w
 
 ### 3. Run NVSkills CI
 
-A maintainer can post this comment on a PR with changes under `skills/`.
+NVSkills CI applies only to changes under the repository’s top-level `/skills/` directory. A maintainer can post this comment on a PR to request a run.
 
 ```
 /nvskills-ci
