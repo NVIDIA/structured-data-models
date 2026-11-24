@@ -23,8 +23,9 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache
 from sdm.models.tabfm.block import TabFMTransformerBlock
+from sdm.nn import KeyValue
 
 
 class ICLBlock(torch.nn.Module):
@@ -86,7 +87,7 @@ class ICLBlock(torch.nn.Module):
             result = layer(
                 query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
                 key_value=(
-                    cast(KVCacheEntry, cache[key])
+                    cast(KeyValue, cache[key])
                     if cache is not None and cache.is_replaying
                     else x[..., :R_train, :]
                 ),

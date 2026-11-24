@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm.cache import Float8PerHead, KVCacheEntry
+from sdm.nn import Float8PerHead, KeyValue
 
 pytest.importorskip("triton")
 from sdm._kernels.triton.attn_fwd__qk_e4m3__pv_e4m3__scale_head import (
@@ -27,7 +27,7 @@ pytestmark = [
 def quantize(x: Tensor) -> tuple[Tensor, Tensor]:
     # [B, H, S, D] -> FP8 [B, H, S, D] and FP32 per-head scales [B, H, 1, 1].
     x = x.transpose(1, 2)
-    entry = Float8PerHead().quantize(KVCacheEntry(key=x, value=x))
+    entry = Float8PerHead().quantize(KeyValue(key=x, value=x))
     scale = cast(Tensor, entry.key_scale)
     return (
         entry.key.transpose(1, 2).contiguous(),

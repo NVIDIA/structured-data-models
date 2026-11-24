@@ -13,9 +13,9 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, ModuleList, Parameter
 
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding
+from sdm.nn import InducedTransformerBlock, KeyValue, RotaryEmbedding
 from sdm.nn.linear import Linear
 
 
@@ -166,7 +166,7 @@ class RowEmbedding(torch.nn.Module):
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:
-                key_value = cast(KVCacheEntry, cache[key])
+                key_value = cast(KeyValue, cache[key])
             else:
                 key_value = x[..., train_mask, :]
                 if max_keys is not None and key_value.size(-2) > max_keys:
