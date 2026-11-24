@@ -1,4 +1,4 @@
-# Continuous integration
+# Continuous Integration
 
 For installation and usage, see the [project README](../README.md).
 
