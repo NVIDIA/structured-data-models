@@ -79,13 +79,17 @@ def test_forward(
 
 
 @withCUDA
-@pytest.mark.parametrize(("channels", "horizon"), [(1, 24), (3, 49), (13, 49)])
+@pytest.mark.parametrize(
+    ("num_columns", "horizon"),
+    [(1, 24), (3, 49), (13, 49)],
+)
 def test_missingness(
     monkeypatch: pytest.MonkeyPatch,
-    channels: int,
+    num_columns: int,
     horizon: int,
     device: torch.device,
 ) -> None:
+
     class _KumoForecastMissingness(kumo_forecast._KumoForecastMissingness):
         def __init__(self, **kwargs: Any) -> None:
             super().__init__(
@@ -98,26 +102,27 @@ def test_missingness(
             )
 
     monkeypatch.setattr(
-        kumo_forecast, "_KumoForecastMissingness", _KumoForecastMissingness
+        kumo_forecast,
+        "_KumoForecastMissingness",
+        _KumoForecastMissingness,
     )
     model = KumoForecast(missingness=True, pretrained=False, device=device)
-    history = torch.randn(180, channels, device=device)
-    history[::3] = torch.nan
-    history[70:100, -1] = torch.inf
-    if channels > 1:
-        history[:, 1] = torch.nan
-    features, targets = history[:, 2:], history[:, :2]
-    if channels == 3:
-        features = TableTensor.from_tensor(features, columns=["HUFL"])
-        targets = TableTensor.from_tensor(targets, columns=["target", "MULL"])
+    data = torch.randn(180, num_columns, device=device)
+    data[::3] = torch.nan
+    data[70:100, -1] = torch.inf
+    if num_columns > 1:
+        data[:, 1] = torch.nan
+    x, y = data[..., 2:], data[..., :2]
+    if num_columns == 3:
+        x = TableTensor.from_tensor(x, columns=["HUFL"])
+        y = TableTensor.from_tensor(y, columns=["target", "MULL"])
 
-    query = torch.empty(horizon, 0, device=device)
-    out = model(features, targets, query)
-    assert out.size() == (horizon, min(channels, 2))
+    out = model(x, y, x_query=torch.empty(horizon, 0, device=device))
+    assert out.size() == (horizon, min(num_columns, 2))
     assert out.device == device
     assert out.numerical.isfinite().all()
-    if channels == 3:
+    if num_columns == 3:
         assert tuple(out.numerical_columns) == ("target", "MULL")
     if horizon > 24:
-        short = model(features, targets, query[:24])
+        short = model(x, y, x_query=torch.empty(24, 0, device=device))
         torch.testing.assert_close(out.numerical[:24], short.numerical)
