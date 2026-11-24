@@ -1,5 +1,5 @@
 ## Description: <br>
-Run or evaluate single-table classification and regression with NVIDIA Structured Data Models (SDM), using KumoTabular, TabICLv2, or TabFM in the Python sdm package, including TableTensor inputs, in-context prediction, cached fit and predict, class probabilities, and regression quantiles. <br>
+Runs single-table classification and regression with NVIDIA Structured Data Models (SDM), a PyTorch-native library, defaulting to KumoTabular, a pretrained tabular foundation model, for in-context prediction from labeled tables, including holdout evaluation, batch scoring, and exporting predictions. <br>
 
 This skill is ready for commercial/non-commercial use. <br>
 
@@ -9,7 +9,7 @@ NVIDIA <br>
 ### License/Terms of Use: <br>
 Apache 2.0 <br>
 ## Use Case: <br>
-Developers, data scientists, and researchers use this skill to have an agent write and check Python code that runs in-context classification and regression on single-table pandas data with SDM models, while preserving leakage-safe splits, semantic types, and correct alignment of predictions and metrics. Note that TabFM pretrained inference requires acceptance of its noncommercial weights license. <br>
+Developers, data scientists, and researchers use this skill to have an agent write Python code that runs in-context classification or regression on pandas tables with SDM models such as KumoTabular, including preparing leakage-safe context and query rows, holdout evaluation, batch scoring, and exporting predictions. <br>
 
 ### Deployment Geography for Use: <br>
 Global <br>
@@ -27,15 +27,15 @@ Mitigation: Review and scan skill before deployment. <br>
 ## Reference(s): <br>
 - [SDM model API](https://nvidia.github.io/structured-data-models/api/models) <br>
 - [SDM installation](https://nvidia.github.io/structured-data-models/install) <br>
-- [SDM in-context learning guide](https://nvidia.github.io/structured-data-models/icl) <br>
+- [In-context learning guide](https://nvidia.github.io/structured-data-models/icl) <br>
 - [Tabular quickstart example](https://github.com/NVIDIA/structured-data-models/blob/main/examples/tabular/quickstart.py) <br>
 
 
 ## Skill Output: <br>
-**Output Type(s):** [Code, Analysis] <br>
+**Output Type(s):** [Code, Analysis, Files] <br>
 **Output Format:** [Markdown with inline Python code blocks] <br>
 **Output Parameters:** [1D] <br>
-**Other Properties Related to Output:** [None] <br>
+**Other Properties Related to Output:** [Pretrained model constructors can fetch weights on first use; TabFM requires acceptance of its noncommercial weights license for pretrained inference.] <br>
 
 ## Evaluation Agents Used: <br>
 - Claude Code (`aws/anthropic/bedrock-claude-opus-5-5`) <br>
@@ -44,7 +44,7 @@ Mitigation: Review and scan skill before deployment. <br>
 
 
 ## Evaluation Tasks: <br>
-4 evaluation tasks (3 positive, 1 negative), 1 attempt per task, each attempt in its own isolated sandbox pod (`k8s-sandbox`); each task was also attempted without the skill as a baseline. Evaluator version `1.6.10`, evaluation date 2026-11-24. <br>
+3 evaluation tasks (3 positive): sdm-classification, sdm-predictions-csv, and sdm-regression; 1 attempt per task, each in its own isolated sandbox pod (`k8s-sandbox`), with a no-skill baseline for comparison. Evaluation date 2026-11-24, evaluator version `1.6.10`. <br>
 
 ## Evaluation Metrics Used: <br>
 Reported benchmark dimensions: <br>
@@ -66,50 +66,44 @@ Underlying evaluation signals used in this run: <br>
 
 
 ## Evaluation Results: <br>
-> ✅ **Overall verdict: PASS — Recommended for publication**
+**Overall verdict: PASS — Recommended for publication**
 
-### Publication Recommendation
-
-Recommended for publication based on the completed evaluation evidence in this report.
+**Publication Recommendation:** Recommended for publication based on the completed evaluation evidence in this report.
 
 ### Results at a Glance
 
 | Measure | Claude Code (Baseline → Skill Uplift) | Codex (Baseline → Skill Uplift) |
 |---|---:|---:|
-| Overall | 99.8% — baseline ran, but no comparable score was available; uplift unavailable | 86.9% — baseline ran, but no comparable score was available; uplift unavailable |
-| Security | 100.0% → 100.0% (±0.0 points) | 100.0% → 100.0% (±0.0 points) |
-| Correctness | 45.0% → 100.0% (+55.0 points) | 100.0% → 100.0% (±0.0 points) |
-| Discoverability | 100.0% — baseline ran, but no comparable score was available; uplift unavailable | 95.0% — baseline ran, but no comparable score was available; uplift unavailable |
-| Effectiveness | 38.5% → 100.0% (+61.5 points) | 84.4% → 81.3% (-3.1 points) |
-| Efficiency | 99.0% — baseline ran, but no comparable score was available; uplift unavailable | 58.3% — baseline ran, but no comparable score was available; uplift unavailable |
+| Overall | 97.7% — baseline ran, but no comparable score was available; uplift unavailable | 83.6% — baseline ran, but no comparable score was available; uplift unavailable |
+| Security | 100.0% → 100.0% (±0.0 points) | 100.0% → 83.3% (-16.7 points) |
+| Correctness | 20.0% → 100.0% (+80.0 points) | 80.0% → 100.0% (+20.0 points) |
+| Discoverability | 93.3% — baseline ran, but no comparable score was available; uplift unavailable | 90.0% — baseline ran, but no comparable score was available; uplift unavailable |
+| Effectiveness | 10.0% → 100.0% (+90.0 points) | 59.2% → 77.5% (+18.3 points) |
+| Efficiency | 95.0% — baseline ran, but no comparable score was available; uplift unavailable | 67.2% — baseline ran, but no comparable score was available; uplift unavailable |
 
 **How to read this table:** baseline is the same task attempted without the target skill. Scores are rounded to one decimal; threshold-adjacent values use additional precision so their displayed band matches the verdict. Uplift is derived from those displayed scores and shown in percentage points.
 
-Example: `47.0% → 92.0% (+45.0 points)` means the skill-assisted run scored 92.0%, 45.0 percentage points above its 47.0% no-skill baseline.
-
-A partial dimension was calculated from only the available configured signals; review the detailed report before relying on it.
-
-#### Comparison details
+### Comparison details
 
 Shared-source comparisons use the same signals and weights on both conditions. They do not replace the full dimension scores above or change the publication verdict.
 
 | Agent | Dimension | Basis | Baseline → With skill (uplift) | Explanation |
 | --- | --- | --- | --- | --- |
 | claude-code | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| claude-code | Efficiency | Token-only comparison | 98.6% → 98.0% (-0.6 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| claude-code | Efficiency | Token-only comparison | 98.2% → 97.4% (-0.8 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 | codex | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| codex | Efficiency | Token-only comparison | 84.9% → 88.9% (+4.0 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| codex | Efficiency | Token-only comparison | 84.4% → 89.1% (+4.7 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 
 ### Tier Status
 
 | Tier | Purpose | Status | Evidence |
 |---|---|---|---|
-| Tier 1 | Static validation | **PASSED WITH OBSERVATIONS** | 11 validator(s); 13 finding(s) |
+| Tier 1 | Static validation | **PASSED WITH OBSERVATIONS** | 11 validator(s); 12 finding(s) |
 | Tier 2 | Semantic deduplication | **PASSED** | 2 validator(s); 0 finding(s) |
-| Tier 3 | Live agent evaluation | **PASS** | 2 agent(s); 4 task(s) |
+| Tier 3 | Live agent evaluation | **PASS** | 2 agent(s); 3 task(s) |
 
 ## Skill Version(s): <br>
-4294952 (source: git SHA, committed 2026-11-24) <br>
+35606f73 (source: git SHA, committed 2026-11-24) <br>
 
 ## Ethical Considerations: <br>
 NVIDIA believes Trustworthy AI is a shared responsibility and we have established policies and practices to enable development for a wide array of AI applications. When downloaded or used in accordance with our terms of service, developers should work with their internal team to ensure this skill meets requirements for the relevant industry and use case and addresses unforeseen product misuse. <br>

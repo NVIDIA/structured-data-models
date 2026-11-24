@@ -13,8 +13,8 @@ Recommended for publication based on the completed evaluation evidence in this r
 - Evaluation date: 2026-11-24
 - Evaluator version: `1.6.10`
 - Agents: Claude Code (`aws/anthropic/bedrock-claude-opus-5-5`), Codex (`openai/openai/gpt-6.1-sol`)
-- Tasks: 4 evaluation tasks (3 positive, 1 negative)
-- Dataset digest: `sha256:f6ccd12c1324861d0899ad41e2495526143ca7725b07fdc791d8e565259e8806` (skill-evaluator-dataset-snapshot/1)
+- Tasks: 3 evaluation tasks (3 positive)
+- Dataset digest: `sha256:b62fd0a5ba0dccef58d5a25e4712d4ee02fd8a274b6fe96de427a5359e802c78` (skill-evaluator-dataset-snapshot/1)
 - Attempts per task: 1
 - Environment: `k8s-sandbox`
 - Tier 2 evidence: required for publication
@@ -50,18 +50,16 @@ The three-tier evaluation checks whether the skill:
 
 | Measure | Claude Code (Baseline → Skill Uplift) | Codex (Baseline → Skill Uplift) |
 |---|---:|---:|
-| Overall | 99.8% — baseline ran, but no comparable score was available; uplift unavailable | 86.9% — baseline ran, but no comparable score was available; uplift unavailable |
-| Security | 100.0% → 100.0% (±0.0 points) | 100.0% → 100.0% (±0.0 points) |
-| Correctness | 45.0% → 100.0% (+55.0 points) | 100.0% → 100.0% (±0.0 points) |
-| Discoverability | 100.0% — baseline ran, but no comparable score was available; uplift unavailable | 95.0% — baseline ran, but no comparable score was available; uplift unavailable |
-| Effectiveness | 38.5% → 100.0% (+61.5 points) | 84.4% → 81.3% (-3.1 points) |
-| Efficiency | 99.0% — baseline ran, but no comparable score was available; uplift unavailable | 58.3% — baseline ran, but no comparable score was available; uplift unavailable |
+| Overall | 97.7% — baseline ran, but no comparable score was available; uplift unavailable | 83.6% — baseline ran, but no comparable score was available; uplift unavailable |
+| Security | 100.0% → 100.0% (±0.0 points) | 100.0% → 83.3% (-16.7 points) |
+| Correctness | 20.0% → 100.0% (+80.0 points) | 80.0% → 100.0% (+20.0 points) |
+| Discoverability | 93.3% — baseline ran, but no comparable score was available; uplift unavailable | 90.0% — baseline ran, but no comparable score was available; uplift unavailable |
+| Effectiveness | 10.0% → 100.0% (+90.0 points) | 59.2% → 77.5% (+18.3 points) |
+| Efficiency | 95.0% — baseline ran, but no comparable score was available; uplift unavailable | 67.2% — baseline ran, but no comparable score was available; uplift unavailable |
 
 **How to read this table:** baseline is the same task attempted without the target skill. Scores are rounded to one decimal; threshold-adjacent values use additional precision so their displayed band matches the verdict. Uplift is derived from those displayed scores and shown in percentage points.
 
 Example: `47.0% → 92.0% (+45.0 points)` means the skill-assisted run scored 92.0%, 45.0 percentage points above its 47.0% no-skill baseline.
-
-A partial dimension was calculated from only the available configured signals; review the detailed report before relying on it.
 
 ### Comparison details
 
@@ -70,9 +68,9 @@ Shared-source comparisons use the same signals and weights on both conditions. T
 | Agent | Dimension | Basis | Baseline → With skill (uplift) | Explanation |
 | --- | --- | --- | --- | --- |
 | claude-code | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| claude-code | Efficiency | Token-only comparison | 98.6% → 98.0% (-0.6 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| claude-code | Efficiency | Token-only comparison | 98.2% → 97.4% (-0.8 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 | codex | Discoverability | Dimension comparison | N/A | Discoverability is not applicable to the no-skill baseline; there is no installed skill to discover. |
-| codex | Efficiency | Token-only comparison | 84.9% → 88.9% (+4.0 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
+| codex | Efficiency | Token-only comparison | 84.4% → 89.1% (+4.7 points) | Only Token Efficiency is comparable; the full dimension scores use different evaluator sources. |
 
 ## Token Usage
 
@@ -80,17 +78,15 @@ Actual Tier 3 execution usage is reported for every observed agent/case pair and
 
 | Agent | Dataset case | With skill | Without skill | Delta | Change | Coverage |
 |---|---|---:|---:|---:|---:|---|
-| claude-code | All cases | 366,290 | 322,299 | +43,991 | +13.65% | skill 4/4; base 4/4 |
-| claude-code | sdm-cached-scoring-batches | 110,440 | 71,740 | +38,700 | +53.94% | skill 1/1; base 1/1 |
-| claude-code | sdm-integer-label-classification | 110,546 | 71,881 | +38,665 | +53.79% | skill 1/1; base 1/1 |
-| claude-code | sdm-routing-sklearn-classifier | 35,685 | 35,636 | +49 | +0.14% | skill 1/1; base 1/1 |
-| claude-code | sdm-tabfm-regression-output | 109,619 | 143,042 | -33,423 | -23.37% | skill 1/1; base 1/1 |
-| codex | All cases | 140,362 | 144,754 | -4,392 | -3.03% | skill 4/4; base 4/4 |
-| codex | sdm-cached-scoring-batches | 41,457 | 43,335 | -1,878 | -4.33% | skill 1/1; base 1/1 |
-| codex | sdm-integer-label-classification | 39,983 | 34,556 | +5,427 | +15.70% | skill 1/1; base 1/1 |
-| codex | sdm-routing-sklearn-classifier | 21,947 | 17,380 | +4,567 | +26.28% | skill 1/1; base 1/1 |
-| codex | sdm-tabfm-regression-output | 36,975 | 49,483 | -12,508 | -25.28% | skill 1/1; base 1/1 |
-| ALL AGENTS | Dataset aggregate | 506,652 | 467,053 | +39,599 | +8.48% | skill 8/8; base 8/8 |
+| claude-code | All cases | 524,225 | 323,103 | +201,122 | +62.25% | skill 3/3; base 3/3 |
+| claude-code | sdm-classification | 73,068 | 72,468 | +600 | +0.83% | skill 1/1; base 1/1 |
+| claude-code | sdm-predictions-csv | 378,482 | 143,273 | +235,209 | +164.17% | skill 1/1; base 1/1 |
+| claude-code | sdm-regression | 72,675 | 107,362 | -34,687 | -32.31% | skill 1/1; base 1/1 |
+| codex | All cases | 1,145,858 | 1,193,066 | -47,208 | -3.96% | skill 3/3; base 3/3 |
+| codex | sdm-classification | 36,827 | 26,267 | +10,560 | +40.20% | skill 1/1; base 1/1 |
+| codex | sdm-predictions-csv | 1,076,671 | 1,140,780 | -64,109 | -5.62% | skill 1/1; base 1/1 |
+| codex | sdm-regression | 32,360 | 26,019 | +6,341 | +24.37% | skill 1/1; base 1/1 |
+| ALL AGENTS | Dataset aggregate | 1,670,083 | 1,516,169 | +153,914 | +10.15% | skill 6/6; base 6/6 |
 
 Prompt tokens include cached reads, so total tokens are `prompt + completion` (cached is not added twice). The Efficiency score uses `(prompt - cached) + completion`. Change is `100 * (with - without) / without`; negative means fewer tokens. N/A comparisons include their reason in the coverage column; coverage is never estimated.
 
@@ -98,9 +94,9 @@ Prompt tokens include cached reads, so total tokens are `prompt + completion` (c
 
 | Tier | Purpose | Status | Evidence |
 |---|---|---|---|
-| Tier 1 | Static validation | **PASSED WITH OBSERVATIONS** | 11 validator(s); 13 finding(s) |
+| Tier 1 | Static validation | **PASSED WITH OBSERVATIONS** | 11 validator(s); 12 finding(s) |
 | Tier 2 | Semantic deduplication | **PASSED** | 2 validator(s); 0 finding(s) |
-| Tier 3 | Live agent evaluation | **PASS** | 2 agent(s); 4 task(s) |
+| Tier 3 | Live agent evaluation | **PASS** | 2 agent(s); 3 task(s) |
 
 ## Findings and Observations
 
@@ -112,7 +108,7 @@ Prompt tokens include cached reads, so total tokens are `prompt + completion` (c
 - **MEDIUM** SCHEMA/body_recommended_section: Missing recommended section: '## Instructions' (`skills/sdm-tabular-prediction/SKILL.md`)
 - **MEDIUM** SCHEMA/body_recommended_section: Missing recommended section: '## Examples' (`skills/sdm-tabular-prediction/SKILL.md`)
 - **MEDIUM** SCHEMA/author_missing: Author not specified in metadata (`skills/sdm-tabular-prediction/SKILL.md`)
-- 8 additional finding(s) are available in the full evaluation artifacts.
+- 7 additional finding(s) are available in the full evaluation artifacts.
 
 </details>
 
