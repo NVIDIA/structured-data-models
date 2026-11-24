@@ -12,7 +12,7 @@
      - Parameter Count
      - Code License
      - Weights License
-   * - 2026-04-07
+   * - 2026-04-07 to 2026-11-10
      - 313.06M-317.26M
      - `Apache-2.0 <https://github.com/NVIDIA/structured-data-models/blob/main/LICENSE>`__
      - `Apache-2.0 <https://huggingface.co/nvidia/Kumo-Forecast>`__
