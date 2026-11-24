@@ -8,12 +8,18 @@ By default, pull request CI runs lint, CPU tests, and documentation checks. You 
 
 ### 1. Run the full test suite
 
-A maintainer can label a PR with `ci-full-test` to enable additional CPU and GPU test cases, GPU examples, and benchmark smoke tests on the next PR update.
+A maintainer can label a PR with `ci-full-test` to enable additional CPU and GPU test cases, GPU examples, and benchmark smoke tests. Apply the label before triggering CI.
 
 Replace `<PR Number>` with the PR number.
 
 ```sh
 gh pr edit "<PR Number>" --add-label ci-full-test
+```
+
+If CI already read the labels, trigger a new **Test** run by pushing a commit or closing and reopening the PR. For **Test GPU**, select **Re-run all jobs** on the run in GitHub Actions to check the label again. You can also use the run ID from the Actions URL.
+
+```sh
+gh run rerun "<Run ID>"
 ```
 
 ### 2. Run GPU CI
