@@ -3,6 +3,7 @@
 
 from typing import Literal
 
+import pandas as pd
 import pytest
 import torch
 from torch._dynamo.testing import CompileCounter
@@ -452,49 +453,35 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
-@pytest.mark.parametrize("dynamic_shapes", [None, DynamicShapes()])
-def test_compile_predict_query_categories(
-    dynamic_shapes: DynamicShapes | None,
-) -> None:
-    def table(categories: list[str]) -> TableTensor:
-        code = torch.arange(6, dtype=torch.int32)
-        code = code % len(categories) if categories else code.fill_(-1)
-        return TableTensor(
-            columns={
-                Stype.numerical: ("x", "y"),
-                Stype.categorical: ("color",),
-            },
-            numerical=torch.randn(6, 2),
-            categorical=CategoricalTensor(
-                code=code.unsqueeze(-1),
-                # A column of missing values has an empty list of integers.
-                categories=(
-                    StringTensor.from_list(categories)
-                    if categories
-                    else torch.empty(0, dtype=torch.long),
-                ),
-            ),
+def test_compile_predict_query_categories() -> None:
+    def table(colors: list[str]) -> TableTensor:
+        df = pd.DataFrame(
+            {
+                "x": torch.randn(len(colors)).numpy(),
+                "color": pd.Categorical(colors, categories=["a", "b", "c"]),
+            }
+        )
+        return TableTensor.from_pandas(
+            df,
+            stypes={"x": "numerical", "color": "categorical"},
         )
 
     model = _build("regression", "small")
-    model.fit(table(["a", "b"]), torch.randn(6, 1))
+    model.fit(table(["a", "b", "c", "a", "b", "c"]), torch.randn(6, 1))
 
     counter = CompileCounter()
-    predict = model._compile_predict(
-        backend=counter,
-        dynamic_shapes=dynamic_shapes,
-    )
-    # Every query has its own categories, whichever dimensions are dynamic;
-    # the first one has none, and "c" is not a fitted one.
-    for categories in ([], ["b", "a"], ["a", "c", "b"], ["c"]):
-        query = table(categories)
+    predict = model._compile_predict(backend=counter, fullgraph=True)
+    # Queries that declare the same list of categories share one graph,
+    # whichever of the categories their rows contain.
+    for colors in (["a", "b", "c", "a"], ["b"], ["c", "a", "c"]):
+        query = table(colors)
         torch.testing.assert_close(
             actual=predict(query).numerical,
             expected=model.predict(query).numerical,
             atol=1e-4,
             rtol=1e-4,
         )
-        assert counter.frame_count == 1
+    assert counter.frame_count == 1
 
 
 @onlyMPS

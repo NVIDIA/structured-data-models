@@ -76,3 +76,53 @@ def test_forward(
     assert "y1" in out.numerical_columns
     assert "y2" in out.numerical_columns
     assert "y3" in out.numerical_columns
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    ("num_columns", "horizon"),
+    [(1, 24), (3, 49), (13, 49)],
+)
+def test_missingness(
+    monkeypatch: pytest.MonkeyPatch,
+    num_columns: int,
+    horizon: int,
+    device: torch.device,
+) -> None:
+
+    class _KumoForecastMissingness(kumo_forecast._KumoForecastMissingness):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(
+                channels=32,
+                hidden_channels=48,
+                num_layers=2,
+                num_heads=4,
+                cross_channel_heads=4,
+                **kwargs,
+            )
+
+    monkeypatch.setattr(
+        kumo_forecast,
+        "_KumoForecastMissingness",
+        _KumoForecastMissingness,
+    )
+    model = KumoForecast(missingness=True, pretrained=False, device=device)
+    data = torch.randn(180, num_columns, device=device)
+    data[::3] = torch.nan
+    data[70:100, -1] = torch.inf
+    if num_columns > 1:
+        data[:, 1] = torch.nan
+    x, y = data[..., 2:], data[..., :2]
+    if num_columns == 3:
+        x = TableTensor.from_tensor(x, columns=["HUFL"])
+        y = TableTensor.from_tensor(y, columns=["target", "MULL"])
+
+    out = model(x, y, x_query=torch.empty(horizon, 0, device=device))
+    assert out.size() == (horizon, min(num_columns, 2))
+    assert out.device == device
+    assert out.numerical.isfinite().all()
+    if num_columns == 3:
+        assert tuple(out.numerical_columns) == ("target", "MULL")
+    if horizon > 24:
+        short = model(x, y, x_query=torch.empty(24, 0, device=device))
+        torch.testing.assert_close(out.numerical[:24], short.numerical)

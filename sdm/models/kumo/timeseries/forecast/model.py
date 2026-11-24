@@ -16,10 +16,21 @@ from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.timeseries.forecast.ckpt import remap_ckpt
+from sdm.models.kumo.timeseries.forecast.ckpt import (
+    remap_ckpt,
+    remap_missingness_ckpt,
+)
 from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
 from sdm.models.kumo.timeseries.forecast.darr import embed, knn
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
+from sdm.models.kumo.timeseries.forecast.missingness import (
+    AdaptiveRevIN,
+    MissingnessAdapter,
+    ObservationAttentionBias,
+)
+from sdm.models.kumo.timeseries.forecast.missingness import (
+    CrossChannelAttention as MissingnessCrossChannelAttention,
+)
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
 
@@ -86,7 +97,7 @@ class KumoForecast(ICLModel):
         "https://ieeexplore.ieee.org/abstract/document/11402442"
     )
     source: ClassVar[str] = "https://github.com/NVIDIA/Kumo-TS"
-    release_date: ClassVar[str] = "2026-04-07"
+    release_date: ClassVar[str] = "2026-04-07 to 2026-11-10"
     parameter_count: ClassVar[str] = "313.06M-317.26M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
@@ -159,17 +170,25 @@ class KumoForecast(ICLModel):
         device = torch.get_default_device() if device is None else device
 
         if missingness:
-            raise NotImplementedError
+            path = download_checkpoint(
+                repo_id="nvidia/Kumo-Forecast",
+                filename="kumo-forecast-1.2.0/best_model.pt",
+                revision="402caa11b7ff585141e912c6743026141f648892",
+            )
+            ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_missingness_ckpt(ckpt["model_state_dict"])
+        else:
+            path = download_checkpoint(
+                repo_id="nvidia/Kumo-Forecast",
+                filename="run8_best_model_cr.pt"
+                if cross_channel
+                else "moment_head_512_6hr.pt",
+                revision="abff20a58834638b28227ff4ab934f26206e4b09",
+            )
+            ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_ckpt(ckpt)
 
-        path = download_checkpoint(
-            repo_id="nvidia/Kumo-Forecast",
-            filename="run8_best_model_cr.pt"
-            if cross_channel
-            else "moment_head_512_6hr.pt",
-            revision="abff20a58834638b28227ff4ab934f26206e4b09",
-        )
-        ckpt = torch.load(path, map_location=device, weights_only=True)
-        self.model.load_state_dict(remap_ckpt(ckpt), assign=True)
+        self.model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -252,8 +271,10 @@ class KumoForecast(ICLModel):
             self.model.context_size + memory_horizon
         )
 
+        columns = list(y_context.numerical_columns)
         x = y_context.numerical.transpose(-1, -2)  # [..., C, R]
         if x_context_only is not None and x_context_only.size(-1) > 0:
+            columns.extend(x_context_only.numerical_columns)
             if not self.cross_channel and not use_darr:
                 warn_once(
                     key="kumo-forecast-historical-covariate",
@@ -267,22 +288,51 @@ class KumoForecast(ICLModel):
                 dim=-2,
             )
 
+        mask = perm = None
+        if isinstance(self.model, _KumoForecastMissingness):
+            channels = ("OT", "HUFL", "HULL", "LUFL", "LULL", "MUFL", "MULL")
+            if len(set(columns)) == len(columns) and all(
+                name in channels[1:] for name in columns[1:]
+            ):
+                perm = torch.tensor(
+                    [0] + [channels.index(name) for name in columns[1:]],
+                    device=x.device,
+                )
+                tmp = x.new_full(
+                    (*x.shape[:-2], len(channels), x.size(-1)),
+                    fill_value=torch.nan,
+                )
+                tmp[..., perm, :] = x
+                x = tmp
+                mask = torch.zeros(
+                    len(channels),
+                    dtype=torch.bool,
+                    device=x.device,
+                )
+                mask[perm] = True
+
         # Forecast:
         last_x = x[..., -self.model.context_size :]
-        if use_darr:
-            assert isinstance(self.model, _KumoForecast)
+        if isinstance(self.model, _KumoForecast):
             encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
             out = self.model.decode(encoded, mean, scale)
         else:
-            out = self.model(last_x)
+            assert isinstance(self.model, _KumoForecastMissingness)
+            out = self.model(last_x, mask)
 
         # Autoregressive Forecasts:
         if horizon > prediction_size and (alpha != 0 or not use_darr):
             outs = [out]
             for _ in range(prediction_size, horizon, prediction_size):
+                if mask is not None:
+                    out[..., ~mask, :] = torch.nan
                 last_x = last_x[..., prediction_size:]
                 last_x = torch.cat([last_x, out], dim=-1)
-                out = self.model(last_x)
+                if isinstance(self.model, _KumoForecast):
+                    out = self.model(last_x)
+                else:
+                    assert isinstance(self.model, _KumoForecastMissingness)
+                    out = self.model(last_x, mask)
                 outs.append(out)
             out = torch.cat(outs, dim=-1)
         out = out[..., :horizon]
@@ -314,11 +364,20 @@ class KumoForecast(ICLModel):
             else:
                 out = alpha * out + (1 - alpha) * retrieved
 
-        out = out[..., : len(y_context.numerical_columns), :].transpose(-1, -2)
+        if perm is not None:
+            out = out[..., perm[: y_context.size(-1)], :]
+        else:
+            out = out[..., : len(y_context.numerical_columns), :]
+
         return TableTensor(
             columns={Stype.numerical: y_context.numerical_columns},
-            numerical=out,
+            numerical=out.transpose(-1, -2),
         )
+
+    def __repr__(self) -> str:
+        if isinstance(self.model, _KumoForecastMissingness):
+            return f"{self.__class__.__name__}(missingness=True)"
+        return f"{self.__class__.__name__}(cross_channel={self.cross_channel})"
 
 
 class _KumoForecast(torch.nn.Module):
@@ -437,16 +496,87 @@ class _KumoForecastMissingness(torch.nn.Module):
         self,
         context_size: int = 96,
         prediction_size: int = 24,
+        patch_size: int = 8,
+        in_channels: int = 7,
+        channels: int = 1024,
+        hidden_channels: int = 2816,
+        num_layers: int = 24,
+        num_heads: int = 16,
+        cross_channel_heads: int = 8,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.context_size = context_size
         self.prediction_size = prediction_size
+        self.patch_size = patch_size
+
+        self.revin = AdaptiveRevIN(in_channels, **factory_kwargs)
+        self.mask_token = torch.nn.Parameter(
+            torch.zeros(1, 1, 1, **factory_kwargs)
+        )
+        self.mask_embedding = torch.nn.Parameter(
+            torch.zeros(channels, **factory_kwargs)
+        )
+        self.lin = torch.nn.Linear(
+            patch_size, channels, bias=False, **factory_kwargs
+        )
+        self.pe = SinusoidalEmbedding()
+        self.obs_attn_bias = ObservationAttentionBias(
+            num_heads, **factory_kwargs
+        )
+        self.icl = ICLBlock(
+            channels=channels,
+            hidden_channels=hidden_channels,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            num_buckets=32,
+            max_distance=128,
+            **factory_kwargs,
+        )
+        self.cross_channel = MissingnessCrossChannelAttention(
+            channels=channels,
+            num_heads=cross_channel_heads,
+            num_variates=in_channels,
+            **factory_kwargs,
+        )
+        self.missingness_adapter = MissingnessAdapter(
+            channels, **factory_kwargs
+        )
+        self.head = torch.nn.Linear(
+            context_size // patch_size * channels,
+            prediction_size,
+            **factory_kwargs,
+        )
 
     def forward(
         self,
         x: Tensor,  # [..., C, R]
+        mask: Tensor | None = None,  # [..., C]
     ) -> Tensor:  # [..., C, prediction_size]
-        raise NotImplementedError
+        if mask is None:
+            mask = torch.ones(x.size(-2), dtype=torch.bool, device=x.device)
+        observed = x.isfinite() & mask.unsqueeze(-1)
+        x = x.masked_fill(~observed, 0)
+        mean, scale = self.revin(x, observed, mask)
+        x = (
+            ((x - mean) / scale)
+            .nan_to_num(nan=0, posinf=0, neginf=0)
+            .clamp(-10, 10)
+        )
+        x = x + ~observed * self.mask_token.reshape(())
+        patches = x.unflatten(-1, (-1, self.patch_size))
+        patch_observed = observed.unflatten(-1, (-1, self.patch_size)).any(-1)
+        x = self.lin(patches)
+        x = torch.where(patch_observed.unsqueeze(-1), x, self.mask_embedding)
+        x = self.pe(x)
+        bias = self.obs_attn_bias(patch_observed).to(x.dtype)
+        bias = bias.masked_fill(
+            ~patch_observed[..., None, None, :], torch.finfo(x.dtype).min
+        )
+        x = self.icl(x, attn_mask=bias)
+        x = self.cross_channel(x, patch_observed, mask)
+        x = self.missingness_adapter(x, patch_observed, mask)
+        return self.head(x.flatten(-2)) * scale + mean
