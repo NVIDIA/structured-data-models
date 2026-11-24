@@ -2,25 +2,29 @@
 
 For installation and usage, see the [project README](../README.md).
 
-- **Default checks.** Pull requests run lint, CPU tests, and documentation checks.
+## Pull request checks
 
-- **Approve GPU testing.** A maintainer can post this command as a PR comment, replacing `<SHA>` with the commit SHA to test. This also works on draft PRs.
+By default, pull request CI runs lint, CPU tests, and documentation checks. You can trigger additional checks on a PR.
 
-  ```
-  /ok to test <SHA>
-  ```
+### Run GPU CI
 
-- **`ci-full-test`.** Apply this label before the next PR update to enable additional CPU and GPU tests, plus GPU examples and benchmark smoke tests. Pushes to `main` run the full suites automatically.
+A maintainer can post this comment on the PR, including on a draft. Replace `<SHA>` with the commit SHA to test.
 
-- **NVSkills CI.** NVSkills validation runs automatically for PR changes under `skills/` or `team-skills/`. A maintainer can post this command as a PR comment to request another run.
+```
+/ok to test <SHA>
+```
 
-  ```
-  /nvskills-ci
-  ```
+### Run NVSkills CI
 
-- **Results.** See the PR's **Checks** tab or find **Test GPU** runs for `pull-request/<number>` in [Actions](https://github.com/NVIDIA/structured-data-models/actions).
+A maintainer can post this comment on a PR with changes under `skills/` or `team-skills/`.
 
-- **Manual runs.** In **Actions**, use **Run workflow** to start **Lint**, **Test**, **Test GPU**, or **Documentation** on a selected branch. Open an existing run to rerun failed jobs.
+```
+/nvskills-ci
+```
+
+### Run the full test suite
+
+Add the `ci-full-test` label before the next PR update to enable additional CPU and GPU tests, plus GPU examples and benchmark smoke tests.
 
 ## PyPI releases
 
