@@ -7,7 +7,12 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from sdm.nn import SDPA, Float8PerHead, KeyValue
-from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
+from sdm.nn.attention_backend import (
+    AttentionBackend,
+    FP8AttentionBackend,
+    TorchAttentionBackend,
+)
+from sdm.testing import onlyCUDA
 
 
 @pytest.mark.parametrize("num_key_value_heads", [4, 2])
@@ -102,3 +107,52 @@ def test_sdpa_backend() -> None:
         assert supported(query, quantized).dtype == torch.bfloat16
     expected = torch_sdpa(query, quantized.dequantize(query.dtype))
     torch.testing.assert_close(torch_sdpa(query, quantized), expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("channels", "context"),
+    [(32, 513), (64, 513), (128, 513), (128, 32768), (256, 513)],
+)
+def test_fp8_attention_backend(channels: int, context: int) -> None:
+    pytest.importorskip("triton")
+    capability = torch.cuda.get_device_capability()
+    if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
+        pytest.skip("FP8AttentionBackend does not support this GPU")
+    query = torch.randn(
+        2, 129, 8, channels, device="cuda", dtype=torch.float16
+    )
+    key = torch.randn(
+        2, context, 2, channels, device="cuda", dtype=torch.float16
+    )
+    value = torch.randn_like(key)
+    # Give each batch element and head its own magnitude, so that a mixed-up
+    # scale changes the output:
+    query *= torch.linspace(0.25, 1, 16, device="cuda").view(2, 1, 8, 1)
+    key *= key.new_tensor([0.5, 1, 0.25, 0.75]).view(2, 1, 2, 1)
+    value *= value.new_tensor([0.01, 1, 100, 0.1]).view(2, 1, 2, 1)
+    key_value = Float8PerHead().quantize(KeyValue(key=key, value=value))
+    options = {
+        "attn_mask": None,
+        "seqused_key_value": None,
+        "is_causal": False,
+        "dropout_p": 0.0,
+        "scale": None,
+    }
+    backend = FP8AttentionBackend()
+    unquantized = KeyValue(key=key, value=value)
+    assert not backend.supports(query, unquantized, **options)
+    requires_grad = query.detach().requires_grad_()
+    assert not backend.supports(requires_grad, key_value, **options)
+    assert backend.supports(query, key_value, **options)
+
+    with torch.inference_mode():
+        out = backend.forward(query, key_value, **options)
+        dequantized = key_value.dequantize(query.dtype)
+        expected = TorchAttentionBackend().forward(
+            query=query, key_value=dequantized, **options
+        )
+    # Relative errors per batch element and head:
+    error = (out.float() - expected.float()).square().mean(dim=(1, 3)).sqrt()
+    norm = expected.float().square().mean(dim=(1, 3)).sqrt()
+    assert error.div(norm).max() < 0.08
