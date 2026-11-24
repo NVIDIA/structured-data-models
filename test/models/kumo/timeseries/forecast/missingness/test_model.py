@@ -115,27 +115,44 @@ def test_missing_is_not_zero(model: KumoForecast) -> None:
 
 
 @pytest.mark.parametrize(
-    ("rows", "horizon", "query_cols", "message"),
+    ("rows", "horizon", "message"),
     [
-        (95, 24, 0, "96 context"),
-        (96, 0, 0, "horizon"),
-        (96, 513, 0, "horizon"),
-        (96, 24, 1, "zero columns"),
+        (95, 24, "96 context"),
+        (96, 0, "horizon"),
+        (96, 513, "horizon"),
     ],
 )
 def test_invalid_context(
     model: KumoForecast,
     rows: int,
     horizon: int,
-    query_cols: int,
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
         model(
             torch.empty(rows, 0),
             torch.randn(rows, 1),
-            torch.empty(horizon, query_cols),
+            torch.empty(horizon, 0),
         )
+
+
+@withCUDA
+def test_future_covariates_are_ignored(
+    model: KumoForecast, device: torch.device
+) -> None:
+    features = TableTensor.from_tensor(
+        torch.randn(120, 1, device=device), columns=["HUFL"]
+    )
+    target = TableTensor.from_tensor(
+        torch.randn(120, 1, device=device), columns=["target"]
+    )
+    query = TableTensor.from_tensor(
+        torch.randn(49, 1, device=device), columns=["HUFL"]
+    )
+    with pytest.warns(RuntimeWarning, match="Query columns will be ignored"):
+        out = model(features, target, query)
+    expected = model(features, target, query[..., :0])
+    torch.testing.assert_close(out.numerical, expected.numerical)
 
 
 def test_missing_target_and_custom_channel_names(

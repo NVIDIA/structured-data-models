@@ -175,23 +175,19 @@ class KumoForecast(ICLModel):
                 filename="kumo-forecast-1.2.0/best_model.pt",
                 revision="402caa11b7ff585141e912c6743026141f648892",
             )
-            ckpt = torch.load(
-                path, map_location="cpu", weights_only=True, mmap=True
+            ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_missingness_ckpt(ckpt["model_state_dict"])
+        else:
+            path = download_checkpoint(
+                repo_id="nvidia/Kumo-Forecast",
+                filename="run8_best_model_cr.pt"
+                if cross_channel
+                else "moment_head_512_6hr.pt",
+                revision="abff20a58834638b28227ff4ab934f26206e4b09",
             )
-            self.model.load_state_dict(
-                remap_missingness_ckpt(ckpt["model_state_dict"]), assign=True
-            )
-            self.model.to(device)
-            return self
+            ckpt = torch.load(path, map_location=device, weights_only=True)
+            ckpt = remap_ckpt(ckpt)
 
-        path = download_checkpoint(
-            repo_id="nvidia/Kumo-Forecast",
-            filename="run8_best_model_cr.pt"
-            if cross_channel
-            else "moment_head_512_6hr.pt",
-            revision="abff20a58834638b28227ff4ab934f26206e4b09",
-        )
-        ckpt = torch.load(path, map_location=device, weights_only=True)
         self.model.load_state_dict(remap_ckpt(ckpt), assign=True)
 
         return self
@@ -216,16 +212,6 @@ class KumoForecast(ICLModel):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
-        if isinstance(self.model, _KumoForecastMissingness):
-            if x_query.size(-1):
-                raise ValueError(
-                    "Missingness-aware forecasting requires a query with "
-                    "zero columns (no future covariates)"
-                )
-            if not 1 <= x_query.size(-2) <= 512:
-                raise ValueError(
-                    "Expected a forecast horizon between 1 and 512 rows"
-                )
         if x_query.size(-1) > 0:
             warn_once(
                 key="kumo-forecast-future-covariate",
