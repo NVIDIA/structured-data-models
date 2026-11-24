@@ -10,8 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
-from sdm.nn import Attention, SinusoidalEmbedding
+from sdm.nn import Attention
 
 
 class AdaptiveRevIN(torch.nn.Module):
@@ -165,82 +164,3 @@ class MissingnessAdapter(torch.nn.Module):
         residual = self.up(F.gelu(self.down(hidden)))
         gate = fraction.unsqueeze(-1) * self.gate_logit.sigmoid()
         return x + residual * gate * valid[..., :, None, None]
-
-
-class MissingnessBackbone(torch.nn.Module):
-    """Patch encoder and 24-step head for the released 96-step checkpoint."""
-
-    context_size = 96
-    prediction_size = 24
-    patch_size = 8
-
-    def __init__(
-        self,
-        channels: int = 1024,
-        hidden_channels: int = 2816,
-        num_layers: int = 24,
-        num_heads: int = 16,
-        cross_channel_heads: int = 8,
-        num_variates: int = 7,
-        device: torch.device | str | None = None,
-    ) -> None:
-        super().__init__()
-        self.normalizer = AdaptiveRevIN(num_variates, device=device)
-        self.mask_token = torch.nn.Parameter(
-            torch.zeros(1, 1, 1, device=device)
-        )
-        self.mask_embedding = torch.nn.Parameter(
-            torch.zeros(channels, device=device)
-        )
-        self.lin = torch.nn.Linear(
-            self.patch_size, channels, bias=False, device=device
-        )
-        self.pe = SinusoidalEmbedding()
-        self.obs_attn_bias = ObservationAttentionBias(num_heads, device=device)
-        self.icl = ICLBlock(
-            channels=channels,
-            hidden_channels=hidden_channels,
-            num_layers=num_layers,
-            num_heads=num_heads,
-            num_buckets=32,
-            max_distance=128,
-            device=device,
-        )
-        self.cross_channel = CrossChannelAttention(
-            channels=channels,
-            num_heads=cross_channel_heads,
-            num_variates=num_variates,
-            device=device,
-        )
-        self.missingness_adapter = MissingnessAdapter(channels, device=device)
-        self.head = torch.nn.Linear(
-            self.context_size // self.patch_size * channels,
-            self.prediction_size,
-            device=device,
-        )
-
-    def forward(self, x: Tensor, valid: Tensor) -> Tensor:
-        """Forecast scaled histories ``[..., C, 96]`` with nonfinite gaps."""
-        observed = x.isfinite() & valid.unsqueeze(-1)
-        x = x.masked_fill(~observed, 0)
-        mean, scale = self.normalizer(x, observed, valid)
-        x = (
-            ((x - mean) / scale)
-            .nan_to_num(nan=0, posinf=0, neginf=0)
-            .clamp(-10, 10)
-        )
-        x = x + ~observed * self.mask_token.reshape(())
-        patches = x.unflatten(-1, (-1, self.patch_size))
-        patch_observed = observed.unflatten(-1, (-1, self.patch_size)).any(-1)
-        x = self.lin(patches)
-        x = torch.where(patch_observed.unsqueeze(-1), x, self.mask_embedding)
-        x = self.pe(x)
-        bias = self.obs_attn_bias(patch_observed).to(x.dtype)
-        # T5 uses finite minimum logits even for entirely missing channels.
-        bias = bias.masked_fill(
-            ~patch_observed[..., None, None, :], torch.finfo(x.dtype).min
-        )
-        x = self.icl(x, attn_mask=bias)
-        x = self.cross_channel(x, patch_observed, valid)
-        x = self.missingness_adapter(x, patch_observed, valid)
-        return self.head(x.flatten(-2)) * scale + mean

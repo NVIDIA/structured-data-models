@@ -13,7 +13,6 @@ from sdm.models.kumo.tabular import KumoTabular
 from sdm.models.kumo.relational import KumoRelational
 from sdm.models.kumo.timeseries import (
     KumoForecast,
-    KumoForecastMissingness,
     KumoAnomaly,
 )
 
@@ -22,6 +21,5 @@ __all__ = [
     "KumoTabular",
     "KumoRelational",
     "KumoForecast",
-    "KumoForecastMissingness",
     "KumoAnomaly",
 ]

@@ -8,15 +8,11 @@ __lazy_modules__ = {
     "sdm.models.kumo.timeseries.anomaly",
 }
 
-from sdm.models.kumo.timeseries.forecast import (
-    KumoForecast,
-    KumoForecastMissingness,
-)
+from sdm.models.kumo.timeseries.forecast import KumoForecast
 from sdm.models.kumo.timeseries.anomaly import KumoAnomaly
 
 
 __all__ = [
     "KumoForecast",
-    "KumoForecastMissingness",
     "KumoAnomaly",
 ]

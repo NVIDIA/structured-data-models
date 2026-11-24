@@ -4,9 +4,8 @@
 import torch
 
 from sdm import TableTensor
-from sdm.models.kumo.timeseries.forecast.missingness.recipe import (
-    StandardizeObserved,
-)
+from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
+from sdm.processing import InvertibleMixin
 from sdm.testing import withCUDA
 
 
@@ -21,7 +20,8 @@ def test_observed_standardization(device: torch.device) -> None:
         device=device,
     )
     table = TableTensor.from_tensor(x)
-    processor = StandardizeObserved()
+    processor = default_recipe(missingness=True).target
+    assert isinstance(processor, InvertibleMixin)
     transformed = processor.fit_transform(table)
     expected = x.clone()
     expected[:2, 0] = x.new_tensor([-1.0, 1.0])

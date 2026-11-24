@@ -1,14 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from functools import partial
+from typing import Any
 
 import pytest
 import torch
 
 from sdm import TableTensor
-from sdm.models import KumoForecastMissingness
-from sdm.models.kumo.timeseries.forecast.missingness import (
+from sdm.models import KumoForecast
+from sdm.models.kumo.timeseries.forecast import (
     model as forecasting,
 )
 from sdm.testing import withCUDA
@@ -17,27 +17,29 @@ from sdm.testing import withCUDA
 @pytest.fixture
 def model(
     monkeypatch: pytest.MonkeyPatch, device: torch.device
-) -> KumoForecastMissingness:
+) -> KumoForecast:
+    class _KumoForecastMissingness(forecasting._KumoForecastMissingness):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(
+                channels=32,
+                hidden_channels=48,
+                num_layers=2,
+                num_heads=4,
+                cross_channel_heads=4,
+                **kwargs,
+            )
+
     monkeypatch.setattr(
-        forecasting,
-        "MissingnessBackbone",
-        partial(
-            forecasting.MissingnessBackbone,
-            channels=32,
-            hidden_channels=48,
-            num_layers=2,
-            num_heads=4,
-            cross_channel_heads=4,
-        ),
+        forecasting, "_KumoForecastMissingness", _KumoForecastMissingness
     )
-    return KumoForecastMissingness(pretrained=False, device=device)
+    return KumoForecast(missingness=True, pretrained=False, device=device)
 
 
 @withCUDA
 @pytest.mark.parametrize("horizon", [1, 24, 25, 120, 512])
 @pytest.mark.parametrize("channels", [1, 7, 9])
 def test_tensor_forecast(
-    model: KumoForecastMissingness,
+    model: KumoForecast,
     device: torch.device,
     horizon: int,
     channels: int,
@@ -57,7 +59,7 @@ def test_tensor_forecast(
 
 @withCUDA
 def test_named_alignment_and_multiple_targets(
-    model: KumoForecastMissingness, device: torch.device
+    model: KumoForecast, device: torch.device
 ) -> None:
     history = torch.randn(180, 4, device=device)
     history[::2, 0] = torch.nan
@@ -80,9 +82,7 @@ def test_named_alignment_and_multiple_targets(
 
 
 @withCUDA
-def test_estimator_batching(
-    model: KumoForecastMissingness, device: torch.device
-) -> None:
+def test_estimator_batching(model: KumoForecast, device: torch.device) -> None:
     y = torch.randn(3, 160, 2, device=device)
     y[0, 20:, 1] = torch.nan
     y[1, 30:130] = torch.nan
@@ -93,7 +93,7 @@ def test_estimator_batching(
     torch.testing.assert_close(batched.numerical, separate.numerical)
 
 
-def test_history_scope(model: KumoForecastMissingness) -> None:
+def test_history_scope(model: KumoForecast) -> None:
     y = torch.randn(240, 1)
     y[-90:-10] = torch.nan
     y[:120] += 10
@@ -105,7 +105,7 @@ def test_history_scope(model: KumoForecastMissingness) -> None:
     assert not torch.allclose(full.numerical, scoped.numerical)
 
 
-def test_missing_is_not_zero(model: KumoForecastMissingness) -> None:
+def test_missing_is_not_zero(model: KumoForecast) -> None:
     y = torch.linspace(-1, 1, 150).unsqueeze(-1)
     missing = y.clone()
     missing[-80:-16] = torch.nan
@@ -126,7 +126,7 @@ def test_missing_is_not_zero(model: KumoForecastMissingness) -> None:
     ],
 )
 def test_invalid_context(
-    model: KumoForecastMissingness,
+    model: KumoForecast,
     rows: int,
     horizon: int,
     query_cols: int,
@@ -141,7 +141,7 @@ def test_invalid_context(
 
 
 def test_missing_target_and_unknown_channels(
-    model: KumoForecastMissingness,
+    model: KumoForecast,
 ) -> None:
     with pytest.raises(ValueError, match="observed values"):
         model(
@@ -155,14 +155,14 @@ def test_missing_target_and_unknown_channels(
         model(x, y, torch.empty(24, 0))
     out = model(x, y, torch.empty(24, 0), channel_alignment="positional")
     assert out.numerical.isfinite().all()
-    with pytest.raises(TypeError, match="alpha"):
+    with pytest.raises(ValueError, match="DARR"):
         model(x, y, torch.empty(24, 0), alpha=0.5)
 
 
 def test_dtype_and_state_roundtrip(
-    model: KumoForecastMissingness,
+    model: KumoForecast,
 ) -> None:
-    clone = KumoForecastMissingness(pretrained=False).double()
+    clone = KumoForecast(missingness=True, pretrained=False).double()
     clone.load_state_dict(model.state_dict())
     model.double()
     y = torch.randn(120, 2, dtype=torch.float64)

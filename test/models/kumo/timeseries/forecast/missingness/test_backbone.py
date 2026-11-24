@@ -3,7 +3,7 @@
 
 import torch
 
-from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
+from sdm.models.kumo.timeseries.forecast.missingness import (
     AdaptiveRevIN,
     CrossChannelAttention,
     MissingnessAdapter,

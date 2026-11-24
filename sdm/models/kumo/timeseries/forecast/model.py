@@ -16,20 +16,20 @@ from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumo.timeseries.forecast.ckpt import remap_ckpt
+from sdm.models.kumo.timeseries.forecast.ckpt import (
+    remap_ckpt,
+    remap_missingness_ckpt,
+)
 from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
 from sdm.models.kumo.timeseries.forecast.darr import embed, knn
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
-from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
+from sdm.models.kumo.timeseries.forecast.missingness import (
     AdaptiveRevIN,
     MissingnessAdapter,
     ObservationAttentionBias,
 )
-from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
+from sdm.models.kumo.timeseries.forecast.missingness import (
     CrossChannelAttention as MissingnessCrossChannelAttention,
-)
-from sdm.models.kumo.timeseries.forecast.missingness.ckpt import (
-    remap_ckpt as remap_missingness_ckpt,
 )
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
