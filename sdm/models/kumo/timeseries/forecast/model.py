@@ -188,7 +188,7 @@ class KumoForecast(ICLModel):
             ckpt = torch.load(path, map_location=device, weights_only=True)
             ckpt = remap_ckpt(ckpt)
 
-        self.model.load_state_dict(remap_ckpt(ckpt), assign=True)
+        self.model.load_state_dict(ckpt, assign=True)
 
         return self
 
@@ -299,7 +299,7 @@ class KumoForecast(ICLModel):
                     device=x.device,
                 )
                 tmp = x.new_full(
-                    (*x.shape[:-2], len(channels), context_size),
+                    (*x.shape[:-2], len(channels), x.size(-1)),
                     fill_value=torch.nan,
                 )
                 tmp[..., perm, :] = x
@@ -373,6 +373,11 @@ class KumoForecast(ICLModel):
             columns={Stype.numerical: y_context.numerical_columns},
             numerical=out.transpose(-1, -2),
         )
+
+    def __repr__(self) -> str:
+        if isinstance(self.model, _KumoForecastMissingness):
+            return f"{self.__class__.__name__}(missingness=True)"
+        return f"{self.__class__.__name__}(cross_channel={self.cross_channel})"
 
 
 class _KumoForecast(torch.nn.Module):
@@ -502,23 +507,26 @@ class _KumoForecastMissingness(torch.nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.context_size = context_size
         self.prediction_size = prediction_size
         self.patch_size = patch_size
 
-        self.normalizer = AdaptiveRevIN(in_channels, device=device)
+        self.revin = AdaptiveRevIN(in_channels, **factory_kwargs)
         self.mask_token = torch.nn.Parameter(
-            torch.zeros(1, 1, 1, device=device)
+            torch.zeros(1, 1, 1, **factory_kwargs)
         )
         self.mask_embedding = torch.nn.Parameter(
-            torch.zeros(channels, device=device)
+            torch.zeros(channels, **factory_kwargs)
         )
         self.lin = torch.nn.Linear(
-            patch_size, channels, bias=False, device=device
+            patch_size, channels, bias=False, **factory_kwargs
         )
         self.pe = SinusoidalEmbedding()
-        self.obs_attn_bias = ObservationAttentionBias(num_heads, device=device)
+        self.obs_attn_bias = ObservationAttentionBias(
+            num_heads, **factory_kwargs
+        )
         self.icl = ICLBlock(
             channels=channels,
             hidden_channels=hidden_channels,
@@ -526,33 +534,33 @@ class _KumoForecastMissingness(torch.nn.Module):
             num_heads=num_heads,
             num_buckets=32,
             max_distance=128,
-            device=device,
+            **factory_kwargs,
         )
         self.cross_channel = MissingnessCrossChannelAttention(
             channels=channels,
             num_heads=cross_channel_heads,
             num_variates=in_channels,
-            device=device,
+            **factory_kwargs,
         )
-        self.missingness_adapter = MissingnessAdapter(channels, device=device)
+        self.missingness_adapter = MissingnessAdapter(
+            channels, **factory_kwargs
+        )
         self.head = torch.nn.Linear(
             context_size // patch_size * channels,
             prediction_size,
-            device=device,
+            **factory_kwargs,
         )
-        if dtype is not None:
-            self.to(dtype=dtype)
 
     def forward(
         self,
         x: Tensor,  # [..., C, R]
-        valid: Tensor | None = None,  # [..., C]
+        mask: Tensor | None = None,  # [..., C]
     ) -> Tensor:  # [..., C, prediction_size]
-        if valid is None:
-            valid = torch.ones(x.size(-2), dtype=torch.bool, device=x.device)
-        observed = x.isfinite() & valid.unsqueeze(-1)
+        if mask is None:
+            mask = torch.ones(x.size(-2), dtype=torch.bool, device=x.device)
+        observed = x.isfinite() & mask.unsqueeze(-1)
         x = x.masked_fill(~observed, 0)
-        mean, scale = self.normalizer(x, observed, valid)
+        mean, scale = self.revin(x, observed, mask)
         x = (
             ((x - mean) / scale)
             .nan_to_num(nan=0, posinf=0, neginf=0)
@@ -565,11 +573,10 @@ class _KumoForecastMissingness(torch.nn.Module):
         x = torch.where(patch_observed.unsqueeze(-1), x, self.mask_embedding)
         x = self.pe(x)
         bias = self.obs_attn_bias(patch_observed).to(x.dtype)
-        # T5 uses finite minimum logits even for entirely missing channels.
         bias = bias.masked_fill(
             ~patch_observed[..., None, None, :], torch.finfo(x.dtype).min
         )
         x = self.icl(x, attn_mask=bias)
-        x = self.cross_channel(x, patch_observed, valid)
-        x = self.missingness_adapter(x, patch_observed, valid)
+        x = self.cross_channel(x, patch_observed, mask)
+        x = self.missingness_adapter(x, patch_observed, mask)
         return self.head(x.flatten(-2)) * scale + mean

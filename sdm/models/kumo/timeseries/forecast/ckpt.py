@@ -70,10 +70,8 @@ def remap_missingness_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
         mask_token=ckpt["mask_token"],
         mask_embedding=ckpt["patch_embedding.mask_embedding"],
     )
-    out["normalizer.prior"] = ckpt["normalizer._global_stdev"].squeeze(0)
-    out["normalizer.initialized"] = ckpt[
-        "normalizer._global_stdev_initialized"
-    ]
+    out["revin.prior"] = ckpt["normalizer._global_stdev"].squeeze(0)
+    out["revin.initialized"] = ckpt["normalizer._global_stdev_initialized"]
     for key, value in ckpt.items():
         if key.startswith(("obs_attn_bias.", "missingness_adapter.")):
             out[key] = value

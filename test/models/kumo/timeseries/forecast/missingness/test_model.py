@@ -36,7 +36,7 @@ def model(
 
 
 @withCUDA
-@pytest.mark.parametrize("horizon", [1, 24, 25, 120, 512])
+@pytest.mark.parametrize("horizon", [0, 1, 24, 25, 120, 512, 513])
 @pytest.mark.parametrize("channels", [1, 7, 9, 13])
 def test_tensor_forecast(
     model: KumoForecast,
@@ -53,8 +53,9 @@ def test_tensor_forecast(
     assert out.device == device
     assert out.numerical.isfinite().all()
     torch.testing.assert_close(history, original, equal_nan=True)
-    short = model(history[:, 1:], history[:, :1], history.new_empty(1, 0))
-    torch.testing.assert_close(out.numerical[:1], short.numerical)
+    if horizon:
+        short = model(history[:, 1:], history[:, :1], history.new_empty(1, 0))
+        torch.testing.assert_close(out.numerical[:1], short.numerical)
 
 
 @withCUDA
@@ -114,26 +115,9 @@ def test_missing_is_not_zero(model: KumoForecast) -> None:
     assert not torch.allclose(a.numerical, b.numerical)
 
 
-@pytest.mark.parametrize(
-    ("rows", "horizon", "message"),
-    [
-        (95, 24, "96 context"),
-        (96, 0, "horizon"),
-        (96, 513, "horizon"),
-    ],
-)
-def test_invalid_context(
-    model: KumoForecast,
-    rows: int,
-    horizon: int,
-    message: str,
-) -> None:
-    with pytest.raises(ValueError, match=message):
-        model(
-            torch.empty(rows, 0),
-            torch.randn(rows, 1),
-            torch.empty(horizon, 0),
-        )
+def test_short_context(model: KumoForecast) -> None:
+    with pytest.raises(ValueError, match="96 context"):
+        model(torch.empty(95, 0), torch.randn(95, 1), torch.empty(24, 0))
 
 
 @withCUDA
@@ -158,12 +142,12 @@ def test_future_covariates_are_ignored(
 def test_missing_target_and_custom_channel_names(
     model: KumoForecast,
 ) -> None:
-    with pytest.raises(ValueError, match="observed values"):
-        model(
-            torch.empty(96, 0),
-            torch.full((96, 1), torch.nan),
-            torch.empty(24, 0),
-        )
+    missing_target = model(
+        torch.randn(96, 1),
+        torch.full((96, 1), torch.nan),
+        torch.empty(24, 0),
+    )
+    assert missing_target.numerical.isfinite().all()
     x = TableTensor.from_tensor(torch.randn(96, 2), columns=["MULL", "sensor"])
     y = TableTensor.from_tensor(torch.randn(96, 1), columns=["target"])
     out = model(x, y, torch.empty(24, 0))

@@ -144,6 +144,8 @@ class KumoTabular(ICLModel):
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__(task=task)
+        self.size = size
+
         if Task.classification in self.tasks:
             self.ecoc = ECOC(max_classes=10)
 
@@ -275,6 +277,9 @@ class KumoTabular(ICLModel):
             columns={"numerical": columns},
             numerical=out,
         )
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(size={self.size!r})"
 
 
 class _KumoTabular(torch.nn.Module):

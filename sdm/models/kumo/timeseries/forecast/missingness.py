@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Released Kumo-TS missingness-aware inference components.
+# ruff: noqa: D101, D102
 
-Adapted from Kumo-TS v1.0.1 (30bbf68), Kumo-Forecast/impute/model.py.
-"""
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -14,8 +13,6 @@ from sdm.nn import Attention
 
 
 class AdaptiveRevIN(torch.nn.Module):
-    """Observed-value statistics shrunk toward the checkpoint's scale prior."""
-
     prior: Tensor
     initialized: Tensor
 
@@ -23,10 +20,11 @@ class AdaptiveRevIN(torch.nn.Module):
         self,
         num_variates: int,
         device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         self.register_buffer(
-            "prior", torch.ones(num_variates, 1, device=device)
+            "prior", torch.ones(num_variates, 1, device=device, dtype=dtype)
         )
         self.register_buffer("initialized", torch.tensor(False, device=device))
 
@@ -36,7 +34,6 @@ class AdaptiveRevIN(torch.nn.Module):
         observed: Tensor,
         valid: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        """Return per-series mean and scale using a frozen prior."""
         observed = observed & valid.unsqueeze(-1)
         count = observed.sum(-1, keepdim=True)
         mean = x.masked_fill(~observed, 0).sum(
@@ -57,33 +54,33 @@ class AdaptiveRevIN(torch.nn.Module):
             )
         prior = prior[: x.size(-2)]
         rate = 1 - observed.sum((-2, -1)) / (valid.sum(-1) * x.size(-1))
-        shrinkage = ((rate - 0.5) / 0.5).clamp(0, 0.9)[..., None, None]
+        shrinkage = ((rate - 0.5) / 0.5).clamp(0, 0.9).to(x.dtype)
+        shrinkage = shrinkage[..., None, None]
         return mean * (1 - shrinkage), scale * (
             1 - shrinkage
         ) + prior * shrinkage
 
 
 class ObservationAttentionBias(torch.nn.Module):
-    """Temporal distance and observation confidence bias for patches."""
-
     def __init__(
         self,
         num_heads: int,
         device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.log_decay = torch.nn.Parameter(
-            torch.full((num_heads,), -2.0, device=device)
+            torch.full((num_heads,), -2.0, **factory_kwargs)
         )
         self.obs_bonus = torch.nn.Parameter(
-            torch.full((num_heads,), 0.3, device=device)
+            torch.full((num_heads,), 0.3, **factory_kwargs)
         )
         self.miss_penalty = torch.nn.Parameter(
-            torch.full((num_heads,), 0.3, device=device)
+            torch.full((num_heads,), 0.3, **factory_kwargs)
         )
 
     def forward(self, observed: Tensor) -> Tensor:
-        """Return additive attention bias with shape ``[..., H, P, P]``."""
         patches = observed.size(-1)
         groups = observed.long().cumsum(-1)
         counts = groups.new_zeros((*groups.shape[:-1], patches + 1))
@@ -100,27 +97,26 @@ class ObservationAttentionBias(torch.nn.Module):
 
 
 class CrossChannelAttention(torch.nn.Module):
-    """Gated attention with channel identities and masks for missing keys."""
-
     def __init__(
         self,
         channels: int,
         num_heads: int,
         num_variates: int,
         device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        self.attn = Attention(channels, num_heads, device=device)
-        self.norm = torch.nn.LayerNorm(channels, device=device)
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.attn = Attention(channels, num_heads, **factory_kwargs)
+        self.norm = torch.nn.LayerNorm(channels, **factory_kwargs)
         self.channel_embed = torch.nn.Embedding(
-            num_variates, channels, device=device
+            num_variates, channels, **factory_kwargs
         )
         self.residual_gate = torch.nn.Parameter(
-            torch.tensor(-3.0, device=device)
+            torch.tensor(-3.0, **factory_kwargs)
         )
 
     def forward(self, x: Tensor, observed: Tensor, valid: Tensor) -> Tensor:
-        """Mix observed channels at each patch and preserve padding."""
         ids = torch.arange(x.size(-3), device=x.device)
         ids = ids.clamp_max(self.channel_embed.num_embeddings - 1)
         hidden = x.transpose(-3, -2) + self.channel_embed(
@@ -136,25 +132,26 @@ class CrossChannelAttention(torch.nn.Module):
 
 
 class MissingnessAdapter(torch.nn.Module):
-    """Mask-conditioned residual with the released checkpoint's 'any' gate."""
-
     def __init__(
         self,
         channels: int,
         device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         hidden_channels = max(16, channels // 4)
-        self.mask_proj = torch.nn.Linear(2, channels, device=device)
-        self.norm = torch.nn.LayerNorm(channels, device=device)
-        self.down = torch.nn.Linear(channels, hidden_channels, device=device)
-        self.up = torch.nn.Linear(hidden_channels, channels, device=device)
-        self.gate_logit = torch.nn.Parameter(torch.zeros((), device=device))
+        self.mask_proj = torch.nn.Linear(2, channels, **factory_kwargs)
+        self.norm = torch.nn.LayerNorm(channels, **factory_kwargs)
+        self.down = torch.nn.Linear(
+            channels, hidden_channels, **factory_kwargs
+        )
+        self.up = torch.nn.Linear(hidden_channels, channels, **factory_kwargs)
+        self.gate_logit = torch.nn.Parameter(torch.zeros((), **factory_kwargs))
         torch.nn.init.zeros_(self.up.weight)
         torch.nn.init.zeros_(self.up.bias)
 
     def forward(self, x: Tensor, observed: Tensor, valid: Tensor) -> Tensor:
-        """Apply the residual only where real channels have missing patches."""
         missing = (~observed & valid.unsqueeze(-1)).to(x.dtype)
         fraction = missing.sum(-2, keepdim=True) / valid.sum(-1)[
             ..., None, None
