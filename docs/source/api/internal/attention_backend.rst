@@ -11,3 +11,9 @@ TorchAttentionBackend
 
 .. autoclass:: sdm.nn.attention_backend.TorchAttentionBackend
     :members:
+
+FlashAttention3Backend
+======================
+
+.. autoclass:: sdm.nn.attention_backend.FlashAttention3Backend
+    :members:

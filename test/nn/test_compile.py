@@ -13,6 +13,7 @@ from sdm.nn import (
     SDPA,
     Attention,
     InducedTransformerBlock,
+    KeyValue,
     QASSMax,
     RotaryEmbedding,
     TransformerBlock,
@@ -123,17 +124,16 @@ def test_sdpa_compile(
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
 
+    key_value = KeyValue(key=key, value=value)
     expected = module(
         query=query,
-        key=key,
-        value=value,
+        key_value=key_value,
         seqused_key_value=seqused,
         attn_mask=attn_mask,
     )
     out = fullgraph(module)(
         query=query,
-        key=key,
-        value=value,
+        key_value=key_value,
         seqused_key_value=seqused,
         attn_mask=attn_mask,
     )
@@ -167,8 +167,9 @@ def test_sdpa_compile_dynamic_shapes(
             torch._dynamo.mark_dynamic(query, index)
             torch._dynamo.mark_dynamic(key, index)
             torch._dynamo.mark_dynamic(value, index)
-            expected = module(query=query, key=key, value=value)
-            out = compiled(query=query, key=key, value=value)
+            key_value = KeyValue(key=key, value=value)
+            expected = module(query=query, key_value=key_value)
+            out = compiled(query=query, key_value=key_value)
             torch.testing.assert_close(out, expected)
 
 
@@ -179,9 +180,10 @@ def test_sdpa_compile_dynamic_batch() -> None:
     value = torch.randn_like(key)
     for tensor in (query, key, value):
         torch._dynamo.mark_dynamic(tensor, 0, min=2, max=65_535)
+    key_value = KeyValue(key=key, value=value)
     with torch.inference_mode():
-        expected = module(query=query, key=key, value=value)
-        out = fullgraph(module)(query=query, key=key, value=value)
+        expected = module(query=query, key_value=key_value)
+        out = fullgraph(module)(query=query, key_value=key_value)
     torch.testing.assert_close(out, expected)
 
 
@@ -196,8 +198,9 @@ def test_sdpa_compile_batch_above_kernel_limit() -> None:
             value = torch.randn_like(key)
             for tensor in (query, key, value):
                 torch._dynamo.mark_dynamic(tensor, 0)
-            expected = module(query=query, key=key, value=value)
-            out = compiled(query=query, key=key, value=value)
+            key_value = KeyValue(key=key, value=value)
+            expected = module(query=query, key_value=key_value)
+            out = compiled(query=query, key_value=key_value)
             torch.testing.assert_close(out, expected)
     assert counter.frame_count == 1
 
@@ -217,10 +220,11 @@ def test_sdpa_compile_dynamic_batch_autocast(
     attn_mask = torch.randn(3, 2, 4, 5, dtype=mask_dtype)
     for tensor in (query, key, value, attn_mask):
         torch._dynamo.mark_dynamic(tensor, 0)
+    key_value = KeyValue(key=key, value=value)
     with torch.inference_mode(), torch.autocast("cpu", torch.bfloat16):
-        expected = module(query, key, value, attn_mask=attn_mask)
+        expected = module(query, key_value, attn_mask=attn_mask)
         out = torch.compile(module, fullgraph=True)(
-            query, key, value, attn_mask=attn_mask
+            query, key_value, attn_mask=attn_mask
         )
     assert out.dtype == expected.dtype
     torch.testing.assert_close(out, expected)
