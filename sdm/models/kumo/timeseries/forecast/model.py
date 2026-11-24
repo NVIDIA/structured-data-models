@@ -66,13 +66,6 @@ class KumoForecast(ICLModel):
     contains one or more past target series, and ``x_query`` has no columns.
     The number of query rows determines the forecast horizon.
 
-    With ``missingness=True``, named auxiliary columns are aligned to the
-    checkpoint's ``HUFL, HULL, LUFL, LULL, MUFL, MULL`` slots when all their
-    names are recognized and the input column names are unique. Absent slots
-    are masked, and the first target always occupies slot zero. Otherwise,
-    channels use positional order: targets followed by historical covariates.
-    Tensor context inputs always use positional order.
-
     Args:
         cross_channel: Whether to mix variates after encoding.
         missingness: Whether to select the missingness-aware model variant
@@ -122,15 +115,6 @@ class KumoForecast(ICLModel):
         ),
         "Pretraining Scope": "Up to 512 rows",
     }
-    channel_schema: ClassVar[tuple[str, ...]] = (
-        "OT",
-        "HUFL",
-        "HULL",
-        "LUFL",
-        "LULL",
-        "MUFL",
-        "MULL",
-    )
 
     def __init__(
         self,
@@ -155,7 +139,6 @@ class KumoForecast(ICLModel):
         self.model: _KumoForecast | _KumoForecastMissingness
         if missingness:
             self.model = _KumoForecastMissingness(
-                in_channels=len(self.channel_schema),
                 device="meta" if pretrained else device,
             )
         else:
@@ -338,22 +321,30 @@ class KumoForecast(ICLModel):
         last_x = x[..., -self.model.context_size :]
         valid = indices = None
         if isinstance(self.model, _KumoForecastMissingness):
+            channel_schema = (
+                "OT",
+                "HUFL",
+                "HULL",
+                "LUFL",
+                "LULL",
+                "MUFL",
+                "MULL",
+            )
+
             last_x = last_x.to(self.model.lin.weight.dtype)
             if (
                 align_by_name
                 and len(set(columns)) == len(columns)
-                and all(
-                    name in self.channel_schema[1:] for name in columns[1:]
-                )
+                and all(name in channel_schema[1:] for name in columns[1:])
             ):
                 slots = [0] + [
-                    self.channel_schema.index(name) for name in columns[1:]
+                    channel_schema.index(name) for name in columns[1:]
                 ]
                 indices = torch.tensor(slots, device=x.device)
                 history = last_x.new_full(
                     (
                         *last_x.shape[:-2],
-                        len(self.channel_schema),
+                        len(channel_schema),
                         context_size,
                     ),
                     torch.nan,
@@ -361,7 +352,7 @@ class KumoForecast(ICLModel):
                 history.index_copy_(-2, indices, last_x)
                 last_x = history
                 valid = torch.zeros(
-                    len(self.channel_schema), dtype=torch.bool, device=x.device
+                    len(channel_schema), dtype=torch.bool, device=x.device
                 )
                 valid[indices] = True
 
