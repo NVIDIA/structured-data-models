@@ -262,16 +262,6 @@ class KumoForecast(ICLModel):
                 f"Expected at least {self.model.context_size} context rows "
                 f"(got {y_context.size(-2)})"
             )
-        if isinstance(self.model, _KumoForecastMissingness) and (
-            not y_context.numerical[..., -self.model.context_size :, 0]
-            .isfinite()
-            .any(-1)
-            .all()
-        ):
-            raise ValueError(
-                "The first target must have observed values "
-                "in the last 96 rows"
-            )
 
         horizon = x_query.size(-2)
         context_size = self.model.context_size
@@ -298,66 +288,51 @@ class KumoForecast(ICLModel):
                 dim=-2,
             )
 
+        mask = perm = None
+        if isinstance(self.model, _KumoForecastMissingness):
+            channels = ("OT", "HUFL", "HULL", "LUFL", "LULL", "MUFL", "MULL")
+            if len(set(columns)) == len(columns) and all(
+                name in channels[1:] for name in columns[1:]
+            ):
+                perm = torch.tensor(
+                    [0] + [channels.index(name) for name in columns[1:]],
+                    device=x.device,
+                )
+                tmp = x.new_full(
+                    (*x.shape[:-2], len(channels), context_size),
+                    fill_value=torch.nan,
+                )
+                tmp[..., perm, :] = x
+                x = tmp
+                mask = torch.zeros(
+                    len(channels),
+                    dtype=torch.bool,
+                    device=x.device,
+                )
+                mask[perm] = True
+
         # Forecast:
         last_x = x[..., -self.model.context_size :]
-        valid = indices = None
-        if isinstance(self.model, _KumoForecastMissingness):
-            channel_schema = (
-                "OT",
-                "HUFL",
-                "HULL",
-                "LUFL",
-                "LULL",
-                "MUFL",
-                "MULL",
-            )
-
-            last_x = last_x.to(self.model.lin.weight.dtype)
-            if (
-                align_by_name
-                and len(set(columns)) == len(columns)
-                and all(name in channel_schema[1:] for name in columns[1:])
-            ):
-                slots = [0] + [
-                    channel_schema.index(name) for name in columns[1:]
-                ]
-                indices = torch.tensor(slots, device=x.device)
-                history = last_x.new_full(
-                    (
-                        *last_x.shape[:-2],
-                        len(channel_schema),
-                        context_size,
-                    ),
-                    torch.nan,
-                )
-                history.index_copy_(-2, indices, last_x)
-                last_x = history
-                valid = torch.zeros(
-                    len(channel_schema), dtype=torch.bool, device=x.device
-                )
-                valid[indices] = True
-
-        if use_darr:
-            assert isinstance(self.model, _KumoForecast)
+        if isinstance(self.model, _KumoForecast):
             encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
             out = self.model.decode(encoded, mean, scale)
-        elif isinstance(self.model, _KumoForecastMissingness):
-            out = self.model(last_x, valid)
         else:
-            out = self.model(last_x)
+            assert isinstance(self.model, _KumoForecastMissingness)
+            out = self.model(last_x, mask)
 
         # Autoregressive Forecasts:
         if horizon > prediction_size and (alpha != 0 or not use_darr):
             outs = [out]
             for _ in range(prediction_size, horizon, prediction_size):
-                if valid is not None:
-                    out = out.masked_fill(~valid.unsqueeze(-1), torch.nan)
+                if mask is not None:
+                    out[..., ~mask, :] = torch.nan
                 last_x = last_x[..., prediction_size:]
                 last_x = torch.cat([last_x, out], dim=-1)
-                if isinstance(self.model, _KumoForecastMissingness):
-                    out = self.model(last_x, valid)
-                else:
+                if isinstance(self.model, _KumoForecast):
                     out = self.model(last_x)
+                else:
+                    assert isinstance(self.model, _KumoForecastMissingness)
+                    out = self.model(last_x, mask)
                 outs.append(out)
             out = torch.cat(outs, dim=-1)
         out = out[..., :horizon]
@@ -389,12 +364,14 @@ class KumoForecast(ICLModel):
             else:
                 out = alpha * out + (1 - alpha) * retrieved
 
-        if indices is not None:
-            out = out.index_select(-2, indices[: y_context.size(-1)])
-        out = out[..., : len(y_context.numerical_columns), :].transpose(-1, -2)
+        if perm is not None:
+            out = out[..., perm[: y_context.size(-1)], :]
+        else:
+            out = out[..., : len(y_context.numerical_columns), :]
+
         return TableTensor(
             columns={Stype.numerical: y_context.numerical_columns},
-            numerical=out,
+            numerical=out.transpose(-1, -2),
         )
 
 
