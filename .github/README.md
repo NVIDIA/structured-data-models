@@ -6,6 +6,16 @@ For installation and usage, see the [project README](../README.md).
 
 By default, pull request CI runs lint, CPU tests, and documentation checks. You can trigger additional checks on a PR.
 
+### Run the full test suite
+
+A maintainer can label a PR with `ci-full-test` to enable additional CPU and GPU test cases, GPU examples, and benchmark smoke tests on the next PR update.
+
+Replace `<PR Number>` with the PR number.
+
+```sh
+gh pr edit "<PR Number>" --add-label ci-full-test
+```
+
 ### Run GPU CI
 
 A maintainer can post this comment on the PR, including on a draft. Replace `<SHA>` with the commit SHA to test.
@@ -20,16 +30,6 @@ A maintainer can post this comment on a PR with changes under `skills/`.
 
 ```
 /nvskills-ci
-```
-
-### Run the full test suite
-
-A maintainer can label a PR with `ci-full-test` to enable additional CPU and GPU test cases, GPU examples, and benchmark smoke tests on the next PR update.
-
-Replace `<PR Number>` with the PR number.
-
-```sh
-gh pr edit "<PR Number>" --add-label ci-full-test
 ```
 
 ## PyPI releases
