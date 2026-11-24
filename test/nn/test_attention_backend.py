@@ -79,7 +79,7 @@ class _ZeroBackend(AttentionBackend):
         dropout_p: float,
         scale: float | None,
     ) -> Tensor:
-        return torch.zeros_like(query)
+        return torch.zeros_like(query, dtype=key_value.value.dtype)
 
 
 def test_sdpa_backend() -> None:
@@ -98,5 +98,7 @@ def test_sdpa_backend() -> None:
     # dequantized:
     quantized = Float8PerHead().quantize(key_value)
     assert supported(query, quantized).eq(0).all()
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        assert supported(query, quantized).dtype == torch.bfloat16
     expected = torch_sdpa(query, quantized.dequantize(query.dtype))
     torch.testing.assert_close(torch_sdpa(query, quantized), expected)
