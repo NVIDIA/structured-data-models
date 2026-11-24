@@ -1,7 +1,5 @@
 # Continuous Integration
 
-For installation and usage, see the [project README](../README.md).
-
 ## Pull request checks
 
 By default, pull request CI runs lint, CPU tests, and documentation checks. You can trigger additional checks on a PR.
