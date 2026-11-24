@@ -16,7 +16,7 @@ A maintainer can post this comment on the PR, including on a draft. Replace `<SH
 
 ### Run NVSkills CI
 
-A maintainer can post this comment on a PR with changes under `skills/` or `team-skills/`.
+A maintainer can post this comment on a PR with changes under `skills/`.
 
 ```
 /nvskills-ci
