@@ -6,4 +6,6 @@
 from sdm.models.kumo.timeseries.forecast.model import KumoForecast
 
 
-__all__ = ["KumoForecast"]
+__all__ = [
+    "KumoForecast",
+]

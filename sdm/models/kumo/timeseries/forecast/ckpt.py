@@ -1,11 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# ruff: noqa: D103
+
 import torch
 from torch import Tensor
 
 
-def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
+def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
     out = {
         "lin.weight": ckpt["patch_embedding.value_embedding.weight"],
         "icl.relative_attention_bias.weight": ckpt[
@@ -60,11 +62,6 @@ def remap_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:  # noqa: D103
 
 
 def remap_missingness_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
-    """Map the released T5, masking, normalization, and channel parameters.
-
-    Args:
-        ckpt: The upstream missingness checkpoint's model state dictionary.
-    """
     out = {
         key.replace("cross_channel.block.attn.", "cross_channel.attn."): value
         for key, value in remap_ckpt(ckpt).items()
@@ -82,6 +79,4 @@ def remap_missingness_ckpt(ckpt: dict[str, Tensor]) -> dict[str, Tensor]:
             out[key] = value
     for suffix in ("residual_gate", "channel_embed.weight"):
         out["cross_channel." + suffix] = ckpt["cross_channel_attn." + suffix]
-    # The checkpoint's sinusoidal position table is deterministic; SDM builds
-    # the same positions on the input device instead of storing 5,000 rows.
     return out
