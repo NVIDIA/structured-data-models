@@ -204,10 +204,6 @@ class KumoForecast(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
-        if isinstance(self.model, _KumoForecastMissingness):
-            kwargs["align_by_name"] = isinstance(
-                x_context, TableTensor
-            ) or isinstance(y_context, TableTensor)
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
@@ -245,7 +241,6 @@ class KumoForecast(ICLModel):
         k: int = 64,
         temperature: float | None = 0.05,
         batch_size: int = 8,
-        align_by_name: bool = False,
         **kwargs: Any,
     ) -> TableTensor:
         assert y_context is not None
