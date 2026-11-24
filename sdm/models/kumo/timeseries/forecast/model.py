@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import torch
 from torch import Tensor
@@ -27,6 +27,9 @@ from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
 )
 from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
     CrossChannelAttention as MissingnessCrossChannelAttention,
+)
+from sdm.models.kumo.timeseries.forecast.missingness.ckpt import (
+    remap_ckpt as remap_missingness_ckpt,
 )
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
@@ -78,6 +81,16 @@ class KumoForecast(ICLModel):
             (default: ``64``)
         temperature (float | None): Softmax temperature for weighting retrieved
             neighbors. (default: ``0.05``)
+        channel_alignment (str | None): Channel alignment for
+            ``missingness=True``. ``'name'`` maps auxiliary columns to the
+            checkpoint's ``HUFL, HULL, LUFL, LULL, MUFL, MULL`` slots and masks
+            absent channels. The first target always occupies slot zero.
+            ``'positional'`` assigns slots in target-then-covariate order.
+            Defaults to name alignment for TableTensor context inputs and
+            positional alignment for Tensor context inputs.
+        history_rows (int | None): For ``missingness=True``, use only the last
+            this many context rows, including for fitting normalization.
+            Must be at least 96. Defaults to all supplied context rows.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -112,6 +125,15 @@ class KumoForecast(ICLModel):
         ),
         "Pretraining Scope": "Up to 512 rows",
     }
+    channel_schema: ClassVar[tuple[str, ...]] = (
+        "OT",
+        "HUFL",
+        "HULL",
+        "LUFL",
+        "LULL",
+        "MUFL",
+        "MULL",
+    )
 
     def __init__(
         self,
@@ -136,6 +158,7 @@ class KumoForecast(ICLModel):
         self.model: _KumoForecast | _KumoForecastMissingness
         if missingness:
             self.model = _KumoForecastMissingness(
+                in_channels=len(self.channel_schema),
                 device="meta" if pretrained else device,
             )
         else:
@@ -167,7 +190,19 @@ class KumoForecast(ICLModel):
         device = torch.get_default_device() if device is None else device
 
         if missingness:
-            raise NotImplementedError
+            path = download_checkpoint(
+                repo_id="nvidia/Kumo-Forecast",
+                filename="kumo-forecast-1.2.0/best_model.pt",
+                revision="402caa11b7ff585141e912c6743026141f648892",
+            )
+            ckpt = torch.load(
+                path, map_location="cpu", weights_only=True, mmap=True
+            )
+            self.model.load_state_dict(
+                remap_missingness_ckpt(ckpt["model_state_dict"]), assign=True
+            )
+            self.model.to(device)
+            return self
 
         path = download_checkpoint(
             repo_id="nvidia/Kumo-Forecast",
@@ -190,13 +225,39 @@ class KumoForecast(ICLModel):
         alpha: float = 1.0,
         k: int = 64,
         temperature: float | None = 0.05,
+        channel_alignment: Literal["name", "positional"] | None = None,
+        history_rows: int | None = None,
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
+        if isinstance(self.model, _KumoForecastMissingness):
+            if channel_alignment is None:
+                channel_alignment = (
+                    "name"
+                    if isinstance(x_context, TableTensor)
+                    or isinstance(y_context, TableTensor)
+                    else "positional"
+                )
+            kwargs["channel_alignment"] = channel_alignment
+            if history_rows is not None:
+                if history_rows < self.model.context_size:
+                    raise ValueError("Expected history_rows >= 96")
+                x_context = x_context[..., -history_rows:, :]
+                y_context = y_context[..., -history_rows:, :]
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
+        if isinstance(self.model, _KumoForecastMissingness):
+            if x_query.size(-1):
+                raise ValueError(
+                    "Missingness-aware forecasting requires a query with "
+                    "zero columns (no future covariates)"
+                )
+            if not 1 <= x_query.size(-2) <= 512:
+                raise ValueError(
+                    "Expected a forecast horizon between 1 and 512 rows"
+                )
         if x_query.size(-1) > 0:
             warn_once(
                 key="kumo-forecast-future-covariate",
@@ -230,6 +291,7 @@ class KumoForecast(ICLModel):
         k: int = 64,
         temperature: float | None = 0.05,
         batch_size: int = 8,
+        channel_alignment: Literal["name", "positional"] = "positional",
         **kwargs: Any,
     ) -> TableTensor:
         assert y_context is not None
@@ -251,6 +313,16 @@ class KumoForecast(ICLModel):
                 f"Expected at least {self.model.context_size} context rows "
                 f"(got {y_context.size(-2)})"
             )
+        if isinstance(self.model, _KumoForecastMissingness) and (
+            not y_context.numerical[..., -self.model.context_size :, 0]
+            .isfinite()
+            .any(-1)
+            .all()
+        ):
+            raise ValueError(
+                "The first target must have observed values "
+                "in the last 96 rows"
+            )
 
         horizon = x_query.size(-2)
         context_size = self.model.context_size
@@ -260,8 +332,10 @@ class KumoForecast(ICLModel):
             self.model.context_size + memory_horizon
         )
 
+        columns = list(y_context.numerical_columns)
         x = y_context.numerical.transpose(-1, -2)  # [..., C, R]
         if x_context_only is not None and x_context_only.size(-1) > 0:
+            columns.extend(x_context_only.numerical_columns)
             if not self.cross_channel and not use_darr:
                 warn_once(
                     key="kumo-forecast-historical-covariate",
@@ -277,10 +351,47 @@ class KumoForecast(ICLModel):
 
         # Forecast:
         last_x = x[..., -self.model.context_size :]
+        valid = indices = None
+        if isinstance(self.model, _KumoForecastMissingness):
+            last_x = last_x.to(self.model.lin.weight.dtype)
+            if channel_alignment == "name":
+                if len(set(columns)) != len(columns) or any(
+                    name not in self.channel_schema[1:] for name in columns[1:]
+                ):
+                    raise ValueError(
+                        "Named auxiliary channels must be unique and belong "
+                        f"to {self.channel_schema[1:]}; use "
+                        "channel_alignment='positional' for other names"
+                    )
+                slots = [0] + [
+                    self.channel_schema.index(name) for name in columns[1:]
+                ]
+                indices = torch.tensor(slots, device=x.device)
+                history = last_x.new_full(
+                    (
+                        *last_x.shape[:-2],
+                        len(self.channel_schema),
+                        context_size,
+                    ),
+                    torch.nan,
+                )
+                history.index_copy_(-2, indices, last_x)
+                last_x = history
+                valid = torch.zeros(
+                    len(self.channel_schema), dtype=torch.bool, device=x.device
+                )
+                valid[indices] = True
+            elif channel_alignment != "positional":
+                raise ValueError(
+                    f"Unknown channel alignment: {channel_alignment!r}"
+                )
+
         if use_darr:
             assert isinstance(self.model, _KumoForecast)
             encoded, mean, scale = self.model.encode(last_x)  # [..., C, P, D]
             out = self.model.decode(encoded, mean, scale)
+        elif isinstance(self.model, _KumoForecastMissingness):
+            out = self.model(last_x, valid)
         else:
             out = self.model(last_x)
 
@@ -288,9 +399,14 @@ class KumoForecast(ICLModel):
         if horizon > prediction_size and (alpha != 0 or not use_darr):
             outs = [out]
             for _ in range(prediction_size, horizon, prediction_size):
+                if valid is not None:
+                    out = out.masked_fill(~valid.unsqueeze(-1), torch.nan)
                 last_x = last_x[..., prediction_size:]
                 last_x = torch.cat([last_x, out], dim=-1)
-                out = self.model(last_x)
+                if isinstance(self.model, _KumoForecastMissingness):
+                    out = self.model(last_x, valid)
+                else:
+                    out = self.model(last_x)
                 outs.append(out)
             out = torch.cat(outs, dim=-1)
         out = out[..., :horizon]
@@ -322,6 +438,8 @@ class KumoForecast(ICLModel):
             else:
                 out = alpha * out + (1 - alpha) * retrieved
 
+        if indices is not None:
+            out = out.index_select(-2, indices[: y_context.size(-1)])
         out = out[..., : len(y_context.numerical_columns), :].transpose(-1, -2)
         return TableTensor(
             columns={Stype.numerical: y_context.numerical_columns},
@@ -446,12 +564,12 @@ class _KumoForecastMissingness(torch.nn.Module):
         context_size: int = 96,
         prediction_size: int = 24,
         patch_size: int = 8,
+        in_channels: int = 7,
         channels: int = 1024,
         hidden_channels: int = 2816,
         num_layers: int = 24,
         num_heads: int = 16,
         cross_channel_heads: int = 8,
-        num_variates: int = 7,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -461,7 +579,7 @@ class _KumoForecastMissingness(torch.nn.Module):
         self.prediction_size = prediction_size
         self.patch_size = patch_size
 
-        self.normalizer = AdaptiveRevIN(num_variates, device=device)
+        self.normalizer = AdaptiveRevIN(in_channels, device=device)
         self.mask_token = torch.nn.Parameter(
             torch.zeros(1, 1, 1, device=device)
         )
@@ -485,7 +603,7 @@ class _KumoForecastMissingness(torch.nn.Module):
         self.cross_channel = MissingnessCrossChannelAttention(
             channels=channels,
             num_heads=cross_channel_heads,
-            num_variates=num_variates,
+            num_variates=in_channels,
             device=device,
         )
         self.missingness_adapter = MissingnessAdapter(channels, device=device)
