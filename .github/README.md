@@ -35,9 +35,3 @@ A maintainer can post this comment on a PR with changes under `skills/`.
 ```
 /nvskills-ci
 ```
-
-## PyPI releases
-
-Publish a stable GitHub release for the intended `vX.Y.Z` tag. The [Publish](workflows/publish.yml) workflow builds and validates a wheel and source distribution from that tag, then uploads both through PyPI Trusted Publishing. Mark release candidates as prereleases to skip PyPI publishing.
-
-Check the **Publish** run in **Actions** and confirm that the released version appears on [PyPI](https://pypi.org/project/structured-data-models/).
