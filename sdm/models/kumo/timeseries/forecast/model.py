@@ -20,6 +20,14 @@ from sdm.models.kumo.timeseries.forecast.ckpt import remap_ckpt
 from sdm.models.kumo.timeseries.forecast.cross import CrossChannelAttention
 from sdm.models.kumo.timeseries.forecast.darr import embed, knn
 from sdm.models.kumo.timeseries.forecast.icl import ICLBlock
+from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
+    AdaptiveRevIN,
+    MissingnessAdapter,
+    ObservationAttentionBias,
+)
+from sdm.models.kumo.timeseries.forecast.missingness.backbone import (
+    CrossChannelAttention as MissingnessCrossChannelAttention,
+)
 from sdm.models.kumo.timeseries.forecast.recipe import default_recipe
 from sdm.nn import RevIN, SinusoidalEmbedding
 
@@ -86,7 +94,7 @@ class KumoForecast(ICLModel):
         "https://ieeexplore.ieee.org/abstract/document/11402442"
     )
     source: ClassVar[str] = "https://github.com/NVIDIA/Kumo-TS"
-    release_date: ClassVar[str] = "2026-04-07"
+    release_date: ClassVar[str] = "2026-04-07 to 2026-11-10"
     parameter_count: ClassVar[str] = "313.06M-317.26M"
     code_license: ClassVar[tuple[str, str]] = (
         "Apache-2.0",
@@ -437,6 +445,13 @@ class _KumoForecastMissingness(torch.nn.Module):
         self,
         context_size: int = 96,
         prediction_size: int = 24,
+        patch_size: int = 8,
+        channels: int = 1024,
+        hidden_channels: int = 2816,
+        num_layers: int = 24,
+        num_heads: int = 16,
+        cross_channel_heads: int = 8,
+        num_variates: int = 7,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -444,9 +459,71 @@ class _KumoForecastMissingness(torch.nn.Module):
 
         self.context_size = context_size
         self.prediction_size = prediction_size
+        self.patch_size = patch_size
+
+        self.normalizer = AdaptiveRevIN(num_variates, device=device)
+        self.mask_token = torch.nn.Parameter(
+            torch.zeros(1, 1, 1, device=device)
+        )
+        self.mask_embedding = torch.nn.Parameter(
+            torch.zeros(channels, device=device)
+        )
+        self.lin = torch.nn.Linear(
+            patch_size, channels, bias=False, device=device
+        )
+        self.pe = SinusoidalEmbedding()
+        self.obs_attn_bias = ObservationAttentionBias(num_heads, device=device)
+        self.icl = ICLBlock(
+            channels=channels,
+            hidden_channels=hidden_channels,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            num_buckets=32,
+            max_distance=128,
+            device=device,
+        )
+        self.cross_channel = MissingnessCrossChannelAttention(
+            channels=channels,
+            num_heads=cross_channel_heads,
+            num_variates=num_variates,
+            device=device,
+        )
+        self.missingness_adapter = MissingnessAdapter(channels, device=device)
+        self.head = torch.nn.Linear(
+            context_size // patch_size * channels,
+            prediction_size,
+            device=device,
+        )
+        if dtype is not None:
+            self.to(dtype=dtype)
 
     def forward(
         self,
         x: Tensor,  # [..., C, R]
+        valid: Tensor | None = None,  # [..., C]
     ) -> Tensor:  # [..., C, prediction_size]
-        raise NotImplementedError
+        if valid is None:
+            valid = torch.ones(x.size(-2), dtype=torch.bool, device=x.device)
+        observed = x.isfinite() & valid.unsqueeze(-1)
+        x = x.masked_fill(~observed, 0)
+        mean, scale = self.normalizer(x, observed, valid)
+        x = (
+            ((x - mean) / scale)
+            .nan_to_num(nan=0, posinf=0, neginf=0)
+            .clamp(-10, 10)
+        )
+        x = x + ~observed * self.mask_token.reshape(())
+        patches = x.unflatten(-1, (-1, self.patch_size))
+        patch_observed = observed.unflatten(-1, (-1, self.patch_size)).any(-1)
+        x = self.lin(patches)
+        x = torch.where(patch_observed.unsqueeze(-1), x, self.mask_embedding)
+        x = self.pe(x)
+        bias = self.obs_attn_bias(patch_observed).to(x.dtype)
+        # T5 uses finite minimum logits even for entirely missing channels.
+        bias = bias.masked_fill(
+            ~patch_observed[..., None, None, :], torch.finfo(x.dtype).min
+        )
+        x = self.icl(x, attn_mask=bias)
+        x = self.cross_channel(x, patch_observed, valid)
+        x = self.missingness_adapter(x, patch_observed, valid)
+        return self.head(x.flatten(-2)) * scale + mean
