@@ -1,10 +1,6 @@
 ---
 name: sdm-tabular-prediction
-description: >-
-  Run or evaluate single-table classification and regression with NVIDIA Structured
-  Data Models (SDM). Use for KumoTabular, TabICLv2, or TabFM in the Python sdm
-  package, including TableTensor inputs, in-context prediction, cached fit and
-  predict, class probabilities, and regression quantiles.
+description: Run or evaluate single-table classification and regression with NVIDIA Structured Data Models (SDM) using KumoTabular as the default pretrained tabular foundation model. Covers TableTensor inputs, in-context prediction, cached fit and predict, class probabilities, and regression quantiles.
 license: Apache-2.0
 ---
 
@@ -48,7 +44,17 @@ For regression with KumoTabular, use `task="regression"` and set the target sema
 
 ## Reuse context across query batches
 
-Use the one-shot call for a single query. When scoring multiple batches against the same context, call `model.fit(x=x_context, y=y_context)` once, `model.predict(x_query_batch)` for each batch, and `model.clear()` when finished. `fit` caches context for inference without updating model weights. Refit if the context or fitted recipe changes.
+For repeated queries, pass an iterable of query `TableTensor` batches as `x_query_batches`. Build each batch with the same feature columns and semantic types as `x_context`.
+
+```python
+model.fit(x=x_context, y=y_context)
+try:
+    batch_predictions = [model.predict(batch) for batch in x_query_batches]
+finally:
+    model.clear()
+```
+
+`fit` caches context for inference without updating model weights. Refit if the context or fitted recipe changes.
 
 ## Interpret and check predictions
 
