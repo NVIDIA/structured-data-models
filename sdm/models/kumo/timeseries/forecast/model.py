@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar
 
 import torch
 from torch import Tensor
@@ -66,6 +66,13 @@ class KumoForecast(ICLModel):
     contains one or more past target series, and ``x_query`` has no columns.
     The number of query rows determines the forecast horizon.
 
+    With ``missingness=True``, named auxiliary columns are aligned to the
+    checkpoint's ``HUFL, HULL, LUFL, LULL, MUFL, MULL`` slots when all their
+    names are recognized and the input column names are unique. Absent slots
+    are masked, and the first target always occupies slot zero. Otherwise,
+    channels use positional order: targets followed by historical covariates.
+    Tensor context inputs always use positional order.
+
     Args:
         cross_channel: Whether to mix variates after encoding.
         missingness: Whether to select the missingness-aware model variant
@@ -81,16 +88,6 @@ class KumoForecast(ICLModel):
             (default: ``64``)
         temperature (float | None): Softmax temperature for weighting retrieved
             neighbors. (default: ``0.05``)
-        channel_alignment (str | None): Channel alignment for
-            ``missingness=True``. ``'name'`` maps auxiliary columns to the
-            checkpoint's ``HUFL, HULL, LUFL, LULL, MUFL, MULL`` slots and masks
-            absent channels. The first target always occupies slot zero.
-            ``'positional'`` assigns slots in target-then-covariate order.
-            Defaults to name alignment for TableTensor context inputs and
-            positional alignment for Tensor context inputs.
-        history_rows (int | None): For ``missingness=True``, use only the last
-            this many context rows, including for fitting normalization.
-            Must be at least 96. Defaults to all supplied context rows.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -225,25 +222,13 @@ class KumoForecast(ICLModel):
         alpha: float = 1.0,
         k: int = 64,
         temperature: float | None = 0.05,
-        channel_alignment: Literal["name", "positional"] | None = None,
-        history_rows: int | None = None,
         **kwargs: Any,
     ) -> TableTensor:
         r""":meta private:"""  # noqa: D415
         if isinstance(self.model, _KumoForecastMissingness):
-            if channel_alignment is None:
-                channel_alignment = (
-                    "name"
-                    if isinstance(x_context, TableTensor)
-                    or isinstance(y_context, TableTensor)
-                    else "positional"
-                )
-            kwargs["channel_alignment"] = channel_alignment
-            if history_rows is not None:
-                if history_rows < self.model.context_size:
-                    raise ValueError("Expected history_rows >= 96")
-                x_context = x_context[..., -history_rows:, :]
-                y_context = y_context[..., -history_rows:, :]
+            kwargs["align_by_name"] = isinstance(
+                x_context, TableTensor
+            ) or isinstance(y_context, TableTensor)
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(x_query, TableTensor):
@@ -291,7 +276,7 @@ class KumoForecast(ICLModel):
         k: int = 64,
         temperature: float | None = 0.05,
         batch_size: int = 8,
-        channel_alignment: Literal["name", "positional"] = "positional",
+        align_by_name: bool = False,
         **kwargs: Any,
     ) -> TableTensor:
         assert y_context is not None
@@ -354,15 +339,13 @@ class KumoForecast(ICLModel):
         valid = indices = None
         if isinstance(self.model, _KumoForecastMissingness):
             last_x = last_x.to(self.model.lin.weight.dtype)
-            if channel_alignment == "name":
-                if len(set(columns)) != len(columns) or any(
-                    name not in self.channel_schema[1:] for name in columns[1:]
-                ):
-                    raise ValueError(
-                        "Named auxiliary channels must be unique and belong "
-                        f"to {self.channel_schema[1:]}; use "
-                        "channel_alignment='positional' for other names"
-                    )
+            if (
+                align_by_name
+                and len(set(columns)) == len(columns)
+                and all(
+                    name in self.channel_schema[1:] for name in columns[1:]
+                )
+            ):
                 slots = [0] + [
                     self.channel_schema.index(name) for name in columns[1:]
                 ]
@@ -381,10 +364,6 @@ class KumoForecast(ICLModel):
                     len(self.channel_schema), dtype=torch.bool, device=x.device
                 )
                 valid[indices] = True
-            elif channel_alignment != "positional":
-                raise ValueError(
-                    f"Unknown channel alignment: {channel_alignment!r}"
-                )
 
         if use_darr:
             assert isinstance(self.model, _KumoForecast)

@@ -37,7 +37,7 @@ def model(
 
 @withCUDA
 @pytest.mark.parametrize("horizon", [1, 24, 25, 120, 512])
-@pytest.mark.parametrize("channels", [1, 7, 9])
+@pytest.mark.parametrize("channels", [1, 7, 9, 13])
 def test_tensor_forecast(
     model: KumoForecast,
     device: torch.device,
@@ -93,16 +93,14 @@ def test_estimator_batching(model: KumoForecast, device: torch.device) -> None:
     torch.testing.assert_close(batched.numerical, separate.numerical)
 
 
-def test_history_scope(model: KumoForecast) -> None:
+def test_normalization_uses_supplied_history(model: KumoForecast) -> None:
     y = torch.randn(240, 1)
     y[-90:-10] = torch.nan
     y[:120] += 10
     query = torch.empty(48, 0)
-    scoped = model(torch.empty(240, 0), y, query, history_rows=120)
     sliced = model(torch.empty(120, 0), y[-120:], query)
     full = model(torch.empty(240, 0), y, query)
-    torch.testing.assert_close(scoped.numerical, sliced.numerical)
-    assert not torch.allclose(full.numerical, scoped.numerical)
+    assert not torch.allclose(full.numerical, sliced.numerical)
 
 
 def test_missing_is_not_zero(model: KumoForecast) -> None:
@@ -140,7 +138,7 @@ def test_invalid_context(
         )
 
 
-def test_missing_target_and_unknown_channels(
+def test_missing_target_and_custom_channel_names(
     model: KumoForecast,
 ) -> None:
     with pytest.raises(ValueError, match="observed values"):
@@ -149,12 +147,12 @@ def test_missing_target_and_unknown_channels(
             torch.full((96, 1), torch.nan),
             torch.empty(24, 0),
         )
-    x = TableTensor.from_tensor(torch.randn(96, 1), columns=["sensor"])
+    x = TableTensor.from_tensor(torch.randn(96, 2), columns=["MULL", "sensor"])
     y = TableTensor.from_tensor(torch.randn(96, 1), columns=["target"])
-    with pytest.raises(ValueError, match="positional"):
-        model(x, y, torch.empty(24, 0))
-    out = model(x, y, torch.empty(24, 0), channel_alignment="positional")
+    out = model(x, y, torch.empty(24, 0))
     assert out.numerical.isfinite().all()
+    positional = model(x.numerical, y.numerical, torch.empty(24, 0))
+    torch.testing.assert_close(out.numerical, positional.numerical)
     with pytest.raises(ValueError, match="DARR"):
         model(x, y, torch.empty(24, 0), alpha=0.5)
 
