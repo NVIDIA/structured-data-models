@@ -14,7 +14,7 @@ Replace `<PR Number>` with the PR number.
 gh pr edit "<PR Number>" --add-label ci-full-test
 ```
 
-If CI already read the labels, trigger a new [Test](workflows/test.yml) run by pushing a commit or closing and reopening the PR. For [Test GPU](workflows/test-gpu.yml), select **Re-run all jobs** on the run in GitHub Actions to check the label again. You can also use the run ID from the Actions URL.
+If CI already read the labels, trigger a new [Test](test.yml) run by pushing a commit or closing and reopening the PR. For [Test GPU](test-gpu.yml), select **Re-run all jobs** on the run in GitHub Actions to check the label again. You can also use the run ID from the Actions URL.
 
 ```sh
 gh run rerun "<Run ID>"
