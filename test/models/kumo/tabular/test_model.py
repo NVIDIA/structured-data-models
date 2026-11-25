@@ -470,6 +470,57 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("kv_cache_dtype", [None, "fp8_per_head"])
+@pytest.mark.parametrize("categorical", [False, True])
+@pytest.mark.parametrize("compile_preprocessing", [True, False])
+def test_compile_predict_columns(
+    kv_cache_dtype: str | None,
+    categorical: bool,
+    compile_preprocessing: bool,
+) -> None:
+    model = _build("regression", "small")
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        compile_preprocessing=compile_preprocessing,
+    )
+    # Fits on tables with other numbers of numerical columns and rows and
+    # other names share one graph, with or without the same categorical
+    # columns and compiled preprocessing. The second table holds a constant
+    # column, the third is a plain tensor, and the last has more columns than
+    # an estimator keeps.
+    for num_columns, rows in ((17, 40), (5, 30), (2, 40), (510, 12)):
+        x = torch.randn(rows + 9, num_columns)
+        if num_columns == 5:
+            x[:, 1] = 1.0
+        if num_columns > 2 or categorical:
+            x = TableTensor.from_tensor(
+                x, columns=[f"{num_columns}_{i}" for i in range(num_columns)]
+            )
+        if categorical:
+            codes = torch.arange(rows + 9).unsqueeze(-1) % torch.tensor([3, 4])
+            x = torch.cat(
+                [x, TableTensor.from_tensor(codes, columns=["a", "b"])],
+                dim=-1,
+            )
+        model.fit(
+            x[:rows],
+            torch.randn(rows, 1),
+            num_estimators=4,
+            kv_cache_dtype=kv_cache_dtype,
+        )
+        for query in (x[rows:], x[rows : rows + 3]):
+            torch.testing.assert_close(
+                actual=predict(query).numerical,
+                expected=model.predict(query).numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
+    assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
 def test_compile_predict_query_categories() -> None:
     def table(
         colors: list[str],

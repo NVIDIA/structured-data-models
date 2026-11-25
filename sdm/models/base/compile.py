@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from torch import Tensor
@@ -31,6 +31,18 @@ def compile_predict(
     dimensions, and fits with any categories, except that a fitted size of
     zero or one compiles a graph of its own. With dynamic dimensions, a
     query without rows is predicted without the graph.
+
+    The numerical columns (``-1``) are dynamic only after a fit with the
+    default recipe whose processors run without column names, as those of
+    :class:`~sdm.models.KumoTabular` do. The query then runs its numerical
+    columns without their names, which a graph would hold as constants, and a
+    query named otherwise or with callbacks is predicted without the graph.
+    Other columns, such as categorical ones, keep their names: a fit on other
+    ones compiles another graph. If ``compile_preprocessing`` is ``False``,
+    the transformed query runs without names if it holds only numerical
+    columns, as after the default recipe on numerical and categorical ones,
+    and with static columns otherwise. After other fits, all columns are
+    static.
 
     The lists of categories of a query are static: pass the same lists on
     every call, *e.g.*, a pandas ``Categorical`` with fixed categories. Lists
@@ -69,8 +81,22 @@ def compile_predict(
     # steps below.
     if compile_preprocessing and not dynamic_dims:
         return compiled
+
+    def predict_unnamed(
+        x: Tensor,
+        rest: Tensor | None,
+        related_tables: RelatedTables | None,
+    ) -> TableTensor:
+        # Inside the graph, the empty blocks of the table keep zero columns.
+        x = TableTensor(columns={"numerical": None}, numerical=x)
+        if rest is not None:
+            x = cast(TableTensor, torch.cat([x, rest], dim=-1))
+        return model.predict(x, related_tables)
+
+    compiled_unnamed = torch.compile(predict_unnamed, **kwargs)
     for patch in model._dynamic_compile_patches():
         compiled = patch(compiled)
+        compiled_unnamed = patch(compiled_unnamed)
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -85,6 +111,23 @@ def compile_predict(
         # Counted from the last dimension, *e.g.*, `{-2}` for the rows, as the
         # tensors that `fit` saved declare theirs.
         dims = {dim % x.dim() - x.dim() for dim in dynamic_dims}
+        columns = cast(
+            "tuple[str, ...] | None", cache.get("numerical_columns")
+        )
+        split = None
+        if columns is None:
+            # The fit keeps its column names, which a graph holds as constants.
+            dims.discard(-1)
+        elif -1 in dims and callbacks:
+            # Callbacks may read the column names.
+            return model.predict(x, related_tables, callbacks=callbacks)
+        elif -1 in dims and compile_preprocessing:
+            # A query named as in `fit` runs its numerical columns without
+            # names.
+            split = _numerical(x, columns)
+            if split is None:
+                return model.predict(x, related_tables)
+            x = split[0]
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows.
         # Without a copy, queries that are different slices of one table, such
@@ -97,7 +140,17 @@ def compile_predict(
             cache._mark_dynamic(dims)
         if repeat:
             x = torch.cat([x, x], dim=-2)
-        if compile_preprocessing:
+        if split is not None:
+            _mark_dynamic(x, dims)
+            rest = split[1]
+            if rest is not None:
+                # The other columns keep their names, and so their number.
+                rest = rest.clone(memory_format=torch.contiguous_format)
+                if repeat:
+                    rest = torch.cat([rest, rest], dim=-2)
+                _mark_dynamic(rest, dims - {-1})
+            out = compiled_unnamed(x, rest, related_tables)
+        elif compile_preprocessing:
             _mark_dynamic(x, dims)
             out = compiled(x, related_tables, callbacks=callbacks)
         else:
@@ -107,6 +160,24 @@ def compile_predict(
                 related_tables,
                 callbacks=callbacks,
             )
+            if -1 in dims and all(
+                query.x.size(-1) == query.x.numerical.size(-1)
+                for query in queries
+            ):
+                # Transformed queries of only numerical columns run without
+                # names.
+                queries = tuple(
+                    query._replace(
+                        x=TableTensor(
+                            columns={"numerical": None},
+                            numerical=query.x.numerical,
+                        )
+                    )
+                    for query in queries
+                )
+            else:
+                # Other columns, such as text ones, keep their names.
+                dims.discard(-1)
             for query in queries:
                 _mark_dynamic(query.x, dims)
             out = compiled(
@@ -118,6 +189,22 @@ def compile_predict(
         return out[..., :1, :] if repeat else out
 
     return predict
+
+
+def _numerical(
+    x: Tensor, columns: tuple[str, ...]
+) -> tuple[Tensor, TableTensor | None] | None:
+    # The numerical features of `x` if they are these columns, and its other
+    # columns, if any. A tensor has the names of `TableTensor.from_tensor`.
+    if isinstance(x, TableTensor):
+        if x.numerical_columns != columns:
+            return None
+        rest = (
+            x.drop_stypes("numerical") if x.size(-1) > len(columns) else None
+        )
+        return x.numerical, rest
+    names = tuple(map(str, range(x.size(-1))))
+    return (x, None) if x.is_floating_point() and names == columns else None
 
 
 def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:

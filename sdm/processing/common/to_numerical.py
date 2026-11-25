@@ -38,9 +38,11 @@ class ToNumerical(Processor):
         # Casting to the (floating-point) numerical dtype also unwraps a
         # CategoricalTensor to its raw ordinal ids as a plain tensor.
         categorical = table.categorical.to(table.numerical.dtype)
+        # Unnamed numerical columns leave the block unnamed.
         columns = (
-            *table.numerical_columns,
-            *table.categorical_columns,
+            None
+            if table.numerical_columns is None
+            else (*table.numerical_columns, *table.categorical_columns)
         )
         numerical = (
             categorical

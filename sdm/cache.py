@@ -319,7 +319,13 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
             for table_dim, dim in follows.items():
                 # `None` stands for a dimension that follows the fitted data
                 # itself, such as a list of categories.
-                if table_dim is None or table_dim in dims:
+                if table_dim == -1 and table_dim in dims:
+                    # Only the numerical columns of a query are dynamic, so
+                    # the state of its other columns may stay static.
+                    torch._dynamo.maybe_mark_dynamic(
+                        tensor, dim % tensor.dim()
+                    )
+                elif table_dim is None or table_dim in dims:
                     _mark_dynamic(tensor, dim)
         self._dynamic = True
 

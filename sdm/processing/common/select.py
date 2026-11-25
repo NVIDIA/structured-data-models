@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
-from typing import Literal
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Literal, cast
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, StypeLike, TableTensor
 from sdm._warnings import warn_once
@@ -28,6 +29,8 @@ class SelectColumns(EnsembleProcessor):
     handles_stypes = tuple(Stype)
     requires_fit = False
 
+    _kept_index: Tensor | None
+
     def __init__(
         self,
         max_columns: int,
@@ -38,11 +41,50 @@ class SelectColumns(EnsembleProcessor):
             raise ValueError("max_columns must be positive")
         self.max_columns = max_columns
         self.method = method
+        # Unnamed tables keep the columns of this index, so that their number
+        # can vary under torch.compile.
+        self.register_buffer("_kept_index", None, persistent=False)
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The columns of the table (-1) set the kept ones, the only dimension
+        # (-1) of `[C_kept]`. Processors pickled before had no index.
+        index = getattr(self, "_kept_index", None)
+        if index is not None:
+            yield index, {-1: -1}
+
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        # Unnamed tables of the default recipe keep the first columns.
+        groups = tuple(ensemble_table._iter_groups())
+        width = max(group.numerical.size(-1) for group in groups)
+        self._kept_index = torch.arange(
+            min(width, self.max_columns), device=groups[0].device
+        )
+        return super()._fit_transform_ensemble(
+            ensemble_table,
+            generator=generator,
+        )
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if next(ensemble_table._iter_groups()).numerical_columns is None:
+            index = cast(Tensor, self._kept_index)
+            return ensemble_table.replace_groups(
+                [
+                    group.replace_blocks(
+                        numerical=group.numerical.index_select(-1, index)
+                    )
+                    for group in ensemble_table._iter_groups()
+                ]
+            )
 
         capacity = len(ensemble_table) * self.max_columns
         widths: dict[str, int] = defaultdict(int)
