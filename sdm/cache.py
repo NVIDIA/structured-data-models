@@ -73,19 +73,10 @@ class QuantizedTensor(DeviceMixin):
     Args:
         qdata: The quantized values.
         scale: The scales of ``qdata``, broadcastable to it.
-        scheme: The storage dtype of ``qdata`` and ``scale``.
     """
 
     qdata: Tensor
     scale: Tensor
-    scheme: "KVCacheDType"
-
-    def __post_init__(self) -> None:
-        if not self.scheme.is_quantized(self):
-            raise ValueError(
-                f"K/V do not match the key/value cache dtype "
-                f"'{type(self.scheme).__name__}'"
-            )
 
     @overload
     def size(self) -> torch.Size: ...
@@ -101,36 +92,69 @@ class QuantizedTensor(DeviceMixin):
         """
         return self.qdata.size(dim)
 
+    @abc.abstractmethod
     def dequantize(self, dtype: torch.dtype) -> Tensor:
         r"""Returns the tensor in ``dtype``.
 
         Args:
             dtype: The target dtype.
         """
-        return self.scheme.dequantize(self, dtype)
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.qdata
         yield self.scale
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        return self.__class__(
-            qdata=fn(self.qdata),
-            scale=fn(self.scale),
-            scheme=self.scheme,
-        )
+        return self.__class__(qdata=fn(self.qdata), scale=fn(self.scale))
+
+
+@dataclass(frozen=True, eq=False)
+class Float8Tensor(QuantizedTensor):
+    r"""A tensor stored as FP8 (E4M3) values and FP32 scales.
+
+    Args:
+        qdata: The FP8 (E4M3) values.
+        scale: The FP32 scales of ``qdata``, broadcastable to it.
+    """
+
+    def __post_init__(self) -> None:
+        qdata, scale = self.qdata, self.scale
+        if (
+            qdata.dtype != torch.float8_e4m3fn
+            or scale.dtype != torch.float32
+            or scale.dim() > qdata.dim()
+            or any(
+                size not in (1, qsize)
+                for size, qsize in zip(scale.shape[::-1], qdata.shape[::-1])
+            )
+        ):
+            raise ValueError(
+                f"Expected FP8 (E4M3) values and FP32 scales broadcastable "
+                f"to them (got {qdata.dtype} values of size "
+                f"{list(qdata.shape)} and {scale.dtype} scales of size "
+                f"{list(scale.shape)})"
+            )
+
+    @classmethod
+    def quantize(cls, tensor: Tensor, dim: int | tuple[int, ...]) -> Self:
+        r"""Quantizes ``tensor`` scaled by its absolute maximum over ``dim``.
+
+        Args:
+            tensor: The tensor to quantize.
+            dim: The dimensions that share a scale.
+        """
+        amax = tensor.abs().amax(dim=dim, keepdim=True)
+        # Divide in the input dtype to avoid a full-size float32 copy:
+        scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
+        qdata = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
+        return cls(qdata=qdata, scale=scale.float())
+
+    def dequantize(self, dtype: torch.dtype) -> Tensor:  # noqa: D102
+        return self.qdata.to(dtype).mul_(self.scale)
 
 
 class KVCacheDType(abc.ABC):
-    r"""Base class for the storage dtype of cached key/value projections."""
-
-    @abc.abstractmethod
-    def is_quantized(self, tensor: QuantizedTensor) -> bool:
-        r"""Returns whether ``tensor`` is in this storage dtype.
-
-        Args:
-            tensor: A quantized tensor.
-        """
+    r"""Base class that specifies how key/value caches are stored."""
 
     @abc.abstractmethod
     def quantize(
@@ -143,25 +167,9 @@ class KVCacheDType(abc.ABC):
             tensor: Key or value projections as computed by attention.
         """
 
-    def dequantize(
-        self,
-        tensor: QuantizedTensor,
-        dtype: torch.dtype,
-    ) -> Tensor:
-        r"""Returns ``tensor`` in ``dtype``.
-
-        Args:
-            tensor: A tensor in this storage dtype.
-            dtype: The target dtype.
-        """
-        return tensor.qdata.to(dtype).mul_(tensor.scale)
-
 
 class Unquantized(KVCacheDType):
     r"""Leaves key/value projections as computed."""
-
-    def is_quantized(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
-        return False
 
     def quantize(  # noqa: D102
         self,
@@ -171,15 +179,7 @@ class Unquantized(KVCacheDType):
 
 
 class Float8PerHead(KVCacheDType):
-    r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
-
-    def is_quantized(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
-        data, scale = tensor.qdata, tensor.scale
-        return (
-            data.dtype == torch.float8_e4m3fn
-            and scale.dtype == torch.float32
-            and scale.shape == (*data.shape[:-3], 1, data.size(-2), 1)
-        )
+    r"""Stores keys and values as Float8Tensor with one scale per head."""
 
     def quantize(  # noqa: D102
         self,
@@ -187,16 +187,7 @@ class Float8PerHead(KVCacheDType):
     ) -> QuantizedTensor:
         if isinstance(tensor, QuantizedTensor):
             return tensor
-        data, scale = self._quantize(tensor)
-        return QuantizedTensor(qdata=data, scale=scale, scheme=self)
-
-    @staticmethod
-    def _quantize(tensor: Tensor) -> tuple[Tensor, Tensor]:
-        amax = tensor.abs().amax(dim=(-3, -1), keepdim=True)  # [..., 1, H, 1]
-        # Divide in the input dtype to avoid a full-size float32 copy:
-        scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
-        data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
-        return data, scale.float()
+        return Float8Tensor.quantize(tensor, dim=(-3, -1))  # [..., 1, H, 1]
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):
