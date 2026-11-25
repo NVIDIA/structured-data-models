@@ -106,7 +106,7 @@ def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
         )
         return float((prob.argmax(dim=-1) == y).float().mean())
 
-    pred = out.numerical.float().mean(dim=-1)
+    pred = out.numerical.mean(dim=-1)
     y = query[target].numerical.squeeze(-1)
     return float((pred - y).pow(2).mean().sqrt())  # RMSE
 
@@ -148,7 +148,6 @@ for epoch in range(1, args.max_epochs + 1):
                 x_query=query.drop_columns(target),
                 recipe=train_recipe,
                 num_estimators=args.num_train_estimators,
-                estimator_batch_size=None,
             )
         y_query = query[target]
         if args.task == "classification":
