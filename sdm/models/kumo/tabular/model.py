@@ -176,8 +176,9 @@ class KumoTabular(ICLModel):
         return default_recipe()
 
     def _default_dynamic_dims(self) -> tuple[int, ...]:
-        # The rows of the query, and with them those of the fitted context.
-        return (-2,)
+        # The rows and the columns of the query, and with them those of the
+        # fitted context.
+        return (-2, -1)
 
     def _compilable_models(self) -> Mapping[Task, torch.nn.Module]:
         return {Task(task): model for task, model in self.models.items()}
