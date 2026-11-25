@@ -657,6 +657,31 @@ def _pin_memory_composite(
     return _pin_memory(inp)
 
 
+@NullableTensor.implements(aten.masked_fill.Scalar)
+@NullableTensor.implements(aten.masked_fill.Tensor)
+def _masked_fill(
+    inp: NullableTensor,
+    mask: Tensor,
+    value: float | complex | Tensor,
+) -> NullableTensor:
+    if isinstance(value, Tensor):
+        if value.dtype == inp._data.dtype:
+            if value.dim() != 0:
+                raise RuntimeError("Expected 'value' to be zero-dimensional")
+            data = torch.where(mask, value, inp._data)
+            valid = inp._valid | mask
+        else:
+            data = inp._data.masked_fill(mask, value.nan_to_num(nan=0))
+            valid = torch.where(mask, ~value.isnan(), inp._valid)
+    elif value != value:
+        valid = inp._valid & ~mask
+        data = inp._data.expand(valid.shape).clone()
+    else:
+        data = inp._data.masked_fill(mask, value)
+        valid = inp._valid | mask
+    return inp.__class__(data, valid)
+
+
 @NullableTensor.implements(aten.isnan.default)
 def _isnan(inp: NullableTensor) -> Tensor:
     return ~inp._valid
