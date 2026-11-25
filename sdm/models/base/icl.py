@@ -23,7 +23,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
-from sdm.models.base.compile import DynamicShapes, compile_predict
+from sdm.models.base.compile import compile_predict
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -558,9 +558,9 @@ class ICLModel(Model):
         """
         return compile_predict(self, **kwargs)
 
-    def _default_dynamic_shapes(self) -> DynamicShapes:
-        r"""Return the default dynamic shapes of a compiled :meth:`predict`."""
-        return DynamicShapes()
+    def _default_dynamic_dims(self) -> tuple[int, ...]:
+        r"""Return the default dynamic dimensions of a compiled model."""
+        return ()
 
     def _compilable_models(self) -> Mapping[Task, torch.nn.Module]:
         r"""Return the models by task that a compiled :meth:`predict` compiles.
@@ -568,11 +568,11 @@ class ICLModel(Model):
         A compiled prediction passes ``models`` to :meth:`_forward`: by task,
         a function that takes the arguments of the model of that task and
         returns its output. :meth:`_forward` has to call it instead of the
-        model, with plain tensors: the features ``[..., R, C]`` as the first
-        argument, and, if the model takes it, the mask of categorical columns
-        ``[..., C]``, whose last dimension follows the columns, as the keyword
-        ``categorical_mask``. Without any models (default), :meth:`predict`
-        is compiled as a whole.
+        model, with the features ``[..., R, C]`` as the first argument, the
+        cache as ``cache``, and, if the model takes it, the mask of
+        categorical columns ``[..., C]``, whose last dimension follows the
+        columns, as the keyword ``categorical_mask``. Without any models
+        (default), :meth:`predict` is compiled as a whole.
         """
         return {}
 

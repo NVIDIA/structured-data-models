@@ -4,6 +4,7 @@
 import abc
 from collections.abc import (
     Callable,
+    Collection,
     Hashable,
     Iterable,
     Iterator,
@@ -212,6 +213,8 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 f"Unsupported key/value cache dtype '{kv_cache_dtype}'"
             )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
+        # The dimensions of entries that follow the fitted data; see `_record`.
+        self._dims: dict[Hashable, Mapping[int, int]] = {}
 
     @property
     def is_recording(self) -> bool:
@@ -253,12 +256,52 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         _freeze(self)
         return self
 
+    def _record(
+        self,
+        key: Hashable,
+        value: KVCacheEntry,
+        dims: Mapping[int, int],
+    ) -> None:
+        r"""Store ``value`` and declare its dimensions that follow the table.
+
+        Compiled predictions keep them dynamic along with those of the query.
+
+        Args:
+            key: The cache key.
+            value: The keys and values.
+            dims: The dimensions of ``value`` by the dimension of the table,
+                ``[..., R, D]``, that they follow, *e.g.*, ``{-2: -3}`` for
+                keys and values of shape ``[..., R, H, C]``.
+        """
+        self[key] = value
+        self._dims[key] = dims
+
+    def _mark_dynamic(self, dims: Collection[int]) -> None:
+        r"""Mark the declared dimensions that follow ``dims`` as dynamic.
+
+        Args:
+            dims: The dimensions of a table, counted from its last one,
+                *e.g.*, ``{-2}`` for the rows.
+        """
+        # Weakly: the marks stay on fitted tensors that are already on the
+        # device, and another compiled prediction may keep a dimension static.
+        mark = torch._dynamo.maybe_mark_dynamic
+        for key, entry_dims in self._dims.items():
+            entry = cast(KVCacheEntry, self[key])
+            for table_dim, dim in entry_dims.items():
+                if table_dim in dims:
+                    # Not the scales of quantized keys and values, which are
+                    # per head.
+                    mark(entry.key, dim % entry.key.dim())
+                    mark(entry.value, dim % entry.value.dim())
+
     def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(
                 "'__setitem__' requires the cache to be in 'record' mode"
             )
         self._items[key] = value
+        self._dims.pop(key, None)
 
     def __delitem__(self, key: Hashable) -> None:
         if not self.is_recording:
@@ -266,6 +309,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 "'__delitem__' requires the cache to be in 'record' mode"
             )
         del self._items[key]
+        self._dims.pop(key, None)
 
     def __getitem__(self, key: Hashable) -> object:
         return self._items[key]
@@ -293,7 +337,8 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         pinned = set(
             cast(tuple[int, ...], state.pop("_pinned_tensor_indices", ()))
         )
-        self.__dict__.update(state)
+        # Caches saved before they recorded dimensions have none.
+        self.__dict__.update({"_dims": {}} | state)
         if not pinned or not torch.cuda.is_available():
             return
 
@@ -349,4 +394,5 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._kv_cache_dtype = self._kv_cache_dtype
         out._mode = self._mode
+        out._dims = dict(self._dims)
         return out
