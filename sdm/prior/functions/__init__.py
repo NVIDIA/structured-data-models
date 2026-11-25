@@ -23,17 +23,17 @@ from sdm.prior.functions.reduce import ReduceParentMerger
 
 __all__ = [
     "RandomFunction",
-    "ParentMerger",
     "RandomLinear",
     "RandomQuadratic",
     "RandomNN",
     "RandomDiscretization",
-    "ConcatParentMerger",
-    "MixtureFunction",
-    "MixtureParentMerger",
     "RandomTree",
     "RandomEMAssignment",
     "RandomGP",
     "RandomProduct",
+    "MixtureFunction",
+    "ParentMerger",
+    "ConcatParentMerger",
     "ReduceParentMerger",
+    "MixtureParentMerger",
 ]
