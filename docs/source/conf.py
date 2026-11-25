@@ -67,10 +67,6 @@ napoleon_custom_sections = [
 copybutton_prompt_text = r">>> |\.\.\. "
 copybutton_prompt_is_regexp = True
 suppress_warnings = ["config.cache"]
-nitpick_ignore = [
-    # An optional dependency, which is only imported for type checking:
-    ("py:class", "InteractionValues"),
-]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
@@ -78,6 +74,7 @@ intersphinx_mapping = {
     "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
     "sentence_transformers": ("https://sbert.net", None),
+    "shapiq": ("https://shapiq.readthedocs.io/en/latest", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
     "graphviz": ("https://graphviz.readthedocs.io/en/stable/", None),
     "typing_extensions": (
@@ -185,6 +182,7 @@ def _run_on_doctree_read(
 
 _reference_aliases = {
     "Tensor": "torch.Tensor",
+    "InteractionValues": "shapiq.InteractionValues",
     "pd.DataFrame": "pandas.DataFrame",
     "pa.Table": "pyarrow.Table",
     "StypeLike": "sdm.StypeLike",
