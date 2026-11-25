@@ -13,9 +13,9 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, ModuleList, Parameter
 
-from sdm.cache import Cache, KeyValue
+from sdm.cache import Cache
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding
+from sdm.nn import InducedTransformerBlock, KeyValue, RotaryEmbedding
 from sdm.nn.linear import Linear
 
 

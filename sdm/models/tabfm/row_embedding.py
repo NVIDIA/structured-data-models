@@ -30,10 +30,10 @@ from torch.nn import (
     Sequential,
 )
 
-from sdm.cache import Cache, KeyValue
+from sdm.cache import Cache
 from sdm.models.tabfm.block import TabFMTransformerBlock
 from sdm.models.tabfm.cell_embedding import CellEmbedding
-from sdm.nn import InducedTransformerBlock, RMSNorm, RotaryEmbedding
+from sdm.nn import InducedTransformerBlock, KeyValue, RMSNorm, RotaryEmbedding
 
 
 class RowEmbedding(torch.nn.Module):

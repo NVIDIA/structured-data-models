@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from sdm.cache import Float8PerHead, KeyValue
+from sdm.nn import Float8PerHead, KeyValue
 
 pytest.importorskip("triton")
 from sdm._kernels.triton.attn_fwd__qk_e4m3__pv_e4m3__scale_head import (

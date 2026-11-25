@@ -14,8 +14,7 @@ from torch.nn import Linear
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
-from sdm.cache import KeyValue, KVCacheDType
-from sdm.nn import QueryScaling
+from sdm.nn import KeyValue, KVCacheDType, QueryScaling
 
 
 class SDPA(torch.nn.Module):
@@ -376,7 +375,7 @@ class Attention(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KeyValue`.
+                :class:`~sdm.nn.KeyValue`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -400,7 +399,7 @@ class Attention(torch.nn.Module):
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
             ``False``.
             Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KeyValue`.
+            :class:`~sdm.nn.KeyValue`.
         """
         gate = self.gate(query) if self.gate is not None else None
 
@@ -640,7 +639,7 @@ class TransformerBlock(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KeyValue`.
+                :class:`~sdm.nn.KeyValue`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -668,7 +667,7 @@ class TransformerBlock(torch.nn.Module):
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
             ``False``.
             Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KeyValue`.
+            :class:`~sdm.nn.KeyValue`.
         """
         if isinstance(key_value, KeyValue):
             key_pos = None

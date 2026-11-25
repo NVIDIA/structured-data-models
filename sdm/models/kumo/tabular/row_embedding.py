@@ -9,12 +9,13 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, Linear, ModuleList, Parameter
 
-from sdm.cache import Cache, KeyValue
+from sdm.cache import Cache
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.cell_embedding import CellEmbedding
 from sdm.nn import (
     GatedLogScale,
     InducedTransformerBlock,
+    KeyValue,
     LogScale,
     RMSNorm,
     RotaryEmbedding,

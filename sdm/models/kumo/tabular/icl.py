@@ -9,9 +9,9 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, Linear, ModuleList, Sequential
 
-from sdm.cache import Cache, KeyValue
+from sdm.cache import Cache
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
-from sdm.nn import LogScale, RMSNorm
+from sdm.nn import KeyValue, LogScale, RMSNorm
 
 
 class ICLBlock(torch.nn.Module):

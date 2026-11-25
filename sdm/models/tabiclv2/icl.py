@@ -13,8 +13,9 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
-from sdm.cache import Cache, KeyValue
+from sdm.cache import Cache
 from sdm.models.tabiclv2.block import TabICLv2TransformerBlock
+from sdm.nn import KeyValue
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
 

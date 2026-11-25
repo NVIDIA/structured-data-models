@@ -10,10 +10,10 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import Float8PerHead
 from sdm.nn import (
     SDPA,
     Attention,
+    Float8PerHead,
     QASSMax,
     SoftplusScale,
     TransformerBlock,

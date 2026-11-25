@@ -23,8 +23,9 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, Linear, ModuleList, RMSNorm, Sequential
 
-from sdm.cache import Cache, KeyValue
+from sdm.cache import Cache
 from sdm.models.tabfm.block import TabFMTransformerBlock
+from sdm.nn import KeyValue
 
 
 class ICLBlock(torch.nn.Module):

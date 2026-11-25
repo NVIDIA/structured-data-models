@@ -11,8 +11,7 @@ import torch
 from torch import Tensor
 from torch.nn import Parameter
 
-from sdm.cache import KeyValue, KVCacheDType
-from sdm.nn import TransformerBlock
+from sdm.nn import KeyValue, KVCacheDType, TransformerBlock
 
 
 class InducedTransformerBlock(torch.nn.Module):
@@ -127,7 +126,7 @@ class InducedTransformerBlock(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KeyValue`.
+                :class:`~sdm.nn.KeyValue`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -146,7 +145,7 @@ class InducedTransformerBlock(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
             ``False``. Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KeyValue`.
+            :class:`~sdm.nn.KeyValue`.
         """
         if not isinstance(key_value, KeyValue):
             if key_value is None:
