@@ -1429,7 +1429,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     data = torch.cat(data_list, dim=0)
 
     if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
-        offset[-1] = storage_offset
+        offset[-1].fill_(storage_offset)  # Assigning would synchronize.
         return tensor_cls(data=data, offset=offset, valid=valid, size=size)
 
     end = torch.cat(end_views, dim=dim)
