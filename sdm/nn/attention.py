@@ -14,7 +14,7 @@ from torch.nn import Linear
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
-from sdm.cache import KVCacheDType, KVCacheEntry
+from sdm.cache import KVCacheEntry, QuantizationScheme
 from sdm.nn import QueryScaling
 
 
@@ -322,7 +322,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -337,7 +337,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[True],
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -352,7 +352,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -366,7 +366,7 @@ class Attention(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -574,7 +574,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[False] = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -591,7 +591,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: Literal[True],
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -608,7 +608,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -624,7 +624,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
@@ -833,7 +833,7 @@ class TransformerBlock(torch.nn.Module):
         *,
         is_causal: bool = False,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
 

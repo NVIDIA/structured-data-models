@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from torch.nn import Parameter
 
-from sdm.cache import KVCacheDType, KVCacheEntry
+from sdm.cache import KVCacheEntry, QuantizationScheme
 from sdm.nn import TransformerBlock
 
 
@@ -74,7 +74,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor: ...
@@ -88,7 +88,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -102,7 +102,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -115,7 +115,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         *,
         return_key_value: bool = False,
-        kv_cache_dtype: KVCacheDType | None = None,
+        kv_cache_dtype: QuantizationScheme | None = None,
         batch_size_limit: int | Literal["auto"] | None = None,
         out: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]

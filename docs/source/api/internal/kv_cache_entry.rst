@@ -1,9 +1,9 @@
 :orphan:
 
-KVCacheDType
-============
+QuantizationScheme
+==================
 
-.. autoclass:: sdm.cache.KVCacheDType
+.. autoclass:: sdm.cache.QuantizationScheme
     :members:
 
 KVCacheEntry

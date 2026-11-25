@@ -73,18 +73,18 @@ class QuantizedTensor(DeviceMixin):
     Args:
         qdata: The quantized values.
         scale: The scales of ``qdata``, broadcastable to it.
-        scheme: The storage dtype of ``qdata`` and ``scale``.
+        scheme: The quantization scheme of ``qdata`` and ``scale``.
     """
 
     qdata: Tensor
     scale: Tensor
-    scheme: "KVCacheDType"
+    scheme: "QuantizationScheme"
 
     def __post_init__(self) -> None:
         if not self.scheme.is_quantized(self):
             raise ValueError(
-                f"K/V do not match the key/value cache dtype "
-                f"'{type(self.scheme).__name__}'"
+                f"Quantized values and scales do not match the quantization "
+                f"scheme '{type(self.scheme).__name__}'"
             )
 
     @overload
@@ -121,12 +121,12 @@ class QuantizedTensor(DeviceMixin):
         )
 
 
-class KVCacheDType(abc.ABC):
-    r"""Base class for the storage dtype of cached key/value projections."""
+class QuantizationScheme(abc.ABC):
+    r"""Base class for quantization schemes of cached key/value projections."""
 
     @abc.abstractmethod
     def is_quantized(self, tensor: QuantizedTensor) -> bool:
-        r"""Returns whether ``tensor`` is in this storage dtype.
+        r"""Returns whether ``tensor`` is in this scheme.
 
         Args:
             tensor: A quantized tensor.
@@ -137,7 +137,7 @@ class KVCacheDType(abc.ABC):
         self,
         tensor: Tensor | QuantizedTensor,
     ) -> Tensor | QuantizedTensor:
-        r"""Returns ``tensor`` in this storage dtype, or as is if quantized.
+        r"""Returns ``tensor`` in this scheme, or as is if quantized.
 
         Args:
             tensor: Key or value projections as computed by attention.
@@ -151,13 +151,13 @@ class KVCacheDType(abc.ABC):
         r"""Returns ``tensor`` in ``dtype``.
 
         Args:
-            tensor: A tensor in this storage dtype.
+            tensor: A tensor in this scheme.
             dtype: The target dtype.
         """
         return tensor.qdata.to(dtype).mul_(tensor.scale)
 
 
-class Unquantized(KVCacheDType):
+class Unquantized(QuantizationScheme):
     r"""Leaves key/value projections as computed."""
 
     def is_quantized(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
@@ -170,7 +170,7 @@ class Unquantized(KVCacheDType):
         return tensor
 
 
-class Float8PerHead(KVCacheDType):
+class Float8PerHead(QuantizationScheme):
     r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
 
     def is_quantized(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
@@ -227,7 +227,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         # TODO: Introduce registry to map str to quantization
         kv_cache_dtype = kwargs.pop("kv_cache_dtype", None)
         if kv_cache_dtype is None:
-            self._kv_cache_dtype: KVCacheDType = Unquantized()
+            self._kv_cache_dtype: QuantizationScheme = Unquantized()
         elif kv_cache_dtype == "fp8_per_head":
             self._kv_cache_dtype = Float8PerHead()
         else:
@@ -247,7 +247,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         return self._mode == Cache.Mode.replay
 
     @property
-    def kv_cache_dtype(self) -> KVCacheDType:
+    def kv_cache_dtype(self) -> QuantizationScheme:
         r"""The storage dtype of cached key/value projections."""
         return self._kv_cache_dtype
 
