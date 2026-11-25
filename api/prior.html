@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.prior - Structured Data Models</title><link rel="shortcut icon" href="../_static/nvidia.svg"/><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="HP" href="generated/sdm.prior.HP.html" /><link rel="prev" title="InducedTransformerBlock" href="generated/sdm.nn.InducedTransformerBlock.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.prior - Structured Data Models</title><link rel="shortcut icon" href="../_static/nvidia.svg"/><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="SCMPrior" href="generated/sdm.prior.tabular.SCMPrior.html" /><link rel="prev" title="InducedTransformerBlock" href="generated/sdm.nn.InducedTransformerBlock.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=e1a1ceaf" />
@@ -173,6 +173,7 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.prior</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.SCMPrior.html">SCMPrior</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.HP.html">HP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.Constant.html">Constant</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.Uniform.html">Uniform</a></li>
@@ -182,12 +183,12 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.CorrelatedContext.html">CorrelatedContext</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.Correlated.html">Correlated</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.Mixture.html">Mixture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.Schema.html">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.SchemaSampler.html">SchemaSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.DAG.html">DAG</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.DAGSampler.html">DAGSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomCauchyDAGSampler.html">RandomCauchyDAGSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MixtureDAGSampler.html">MixtureDAGSampler</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.should_drop.html">should_drop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RootSampler.html">RootSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.NormalRootSampler.html">NormalRootSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.UniformRootSampler.html">UniformRootSampler</a></li>
@@ -241,9 +242,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.DistributionalMixtureConverter.html">DistributionalMixtureConverter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.SoftmaxCategoricalConverter.html">SoftmaxCategoricalConverter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MixtureConverter.html">MixtureConverter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.Schema.html">Schema</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.SchemaSampler.html">SchemaSampler</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.SCMPrior.html">SCMPrior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.should_drop.html">should_drop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.transform.PriorTransform.html">PriorTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.transform.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.tabular.transform.Choice.html">Choice</a></li>
@@ -305,13 +304,20 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#sampling-utilities">Sampling Utilities</a><ul>
+</ul>
+</li>
+<li><a class="reference internal" href="#schema">Schema</a></li>
+<li><a class="reference internal" href="#directed-acyclic-graphs">Directed Acyclic Graphs</a></li>
 <li><a class="reference internal" href="#root-samplers">Root Samplers</a></li>
-<li><a class="reference internal" href="#activations">Activations</a></li>
-<li><a class="reference internal" href="#functions">Functions</a></li>
+<li><a class="reference internal" href="#activations">Activations</a><ul>
+</ul>
+</li>
+<li><a class="reference internal" href="#random-functions">Random Functions</a></li>
 <li><a class="reference internal" href="#matrix-samplers">Matrix Samplers</a></li>
 <li><a class="reference internal" href="#converters">Converters</a></li>
-<li><a class="reference internal" href="#tabular-priors">Tabular Priors</a></li>
-<li><a class="reference internal" href="#tabular-transforms">Tabular Transforms</a></li>
+<li><a class="reference internal" href="#filters">Filters</a></li>
+<li><a class="reference internal" href="#transforms">Transforms</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -347,6 +353,18 @@ data-aria-dark="Switch to auto color mode">
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.SCMPrior.html#sdm.prior.tabular.SCMPrior" title="sdm.prior.tabular.SCMPrior"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCMPrior</span></code></a></p></td>
+<td><p>Sample datasets from random structural causal models (SCMs).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="sampling-utilities">
+<h2>Sampling Utilities<a class="headerlink" href="#sampling-utilities" title="Link to this heading">#</a></h2>
+<p><strong>Hyperparameters</strong></p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.HP.html#sdm.prior.HP" title="sdm.prior.HP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HP</span></code></a></p></td>
 <td><p>Base class for sampling hyperparameters.</p></td>
 </tr>
@@ -368,15 +386,43 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.Choice.html#sdm.prior.Choice" title="sdm.prior.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
 <td><p>Choose uniformly among fixed options.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.CorrelatedContext.html#sdm.prior.CorrelatedContext" title="sdm.prior.CorrelatedContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CorrelatedContext</span></code></a></p></td>
+</tbody>
+</table>
+</div>
+<p><strong>Correlated Sampling</strong></p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.CorrelatedContext.html#sdm.prior.CorrelatedContext" title="sdm.prior.CorrelatedContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CorrelatedContext</span></code></a></p></td>
 <td><p>Share sampling parameters within a scope.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.Correlated.html#sdm.prior.Correlated" title="sdm.prior.Correlated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Correlated</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.Correlated.html#sdm.prior.Correlated" title="sdm.prior.Correlated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Correlated</span></code></a></p></td>
 <td><p>Sample numerical values from a shared, randomly sampled distribution.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.Mixture.html#sdm.prior.Mixture" title="sdm.prior.Mixture"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Mixture</span></code></a></p></td>
-<td><p>Select items using fixed or shared random weights.</p></td>
+</tbody>
+</table>
+</div>
+</section>
+<section id="schema">
+<h2>Schema<a class="headerlink" href="#schema" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.Schema.html#sdm.prior.tabular.Schema" title="sdm.prior.tabular.Schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Schema</span></code></a></p></td>
+<td><p>Specification of a dataset.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.SchemaSampler.html#sdm.prior.tabular.SchemaSampler" title="sdm.prior.tabular.SchemaSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SchemaSampler</span></code></a></p></td>
+<td><p>Sample <a class="reference internal" href="generated/sdm.prior.tabular.Schema.html#sdm.prior.tabular.Schema" title="sdm.prior.tabular.Schema"><code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code></a> instances.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="directed-acyclic-graphs">
+<h2>Directed Acyclic Graphs<a class="headerlink" href="#directed-acyclic-graphs" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.DAG.html#sdm.prior.DAG" title="sdm.prior.DAG"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DAG</span></code></a></p></td>
 <td><p>Directed acyclic graph in CSR layout.</p></td>
 </tr>
@@ -389,12 +435,10 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.MixtureDAGSampler.html#sdm.prior.MixtureDAGSampler" title="sdm.prior.MixtureDAGSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixtureDAGSampler</span></code></a></p></td>
 <td><p>Pick one DAG sampler per call from a weighted pool.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.should_drop.html#sdm.prior.should_drop" title="sdm.prior.should_drop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">should_drop</span></code></a></p></td>
-<td><p>Decide whether to drop a dataset based on an ExtraTrees probe.</p></td>
-</tr>
 </tbody>
 </table>
 </div>
+</section>
 <section id="root-samplers">
 <h2>Root Samplers<a class="headerlink" href="#root-samplers" title="Link to this heading">#</a></h2>
 <div class="table-wrapper autosummary longtable docutils container">
@@ -451,6 +495,13 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.MixtureActivation.html#sdm.prior.MixtureActivation" title="sdm.prior.MixtureActivation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixtureActivation</span></code></a></p></td>
 <td><p>Pick one activation per call from a weighted pool.</p></td>
 </tr>
+</tbody>
+</table>
+</div>
+<p><strong>Activation Functions for</strong> <a class="reference internal" href="generated/sdm.prior.CallableActivation.html#sdm.prior.CallableActivation" title="sdm.prior.CallableActivation"><code class="xref py py-class docutils literal notranslate"><span class="pre">CallableActivation</span></code></a></p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.identity.html#sdm.prior.identity" title="sdm.prior.identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">identity</span></code></a></p></td>
 <td><p>Return the input values unchanged.</p></td>
 </tr>
@@ -485,8 +536,8 @@ data-aria-dark="Switch to auto color mode">
 </table>
 </div>
 </section>
-<section id="functions">
-<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h2>
+<section id="random-functions">
+<h2>Random Functions<a class="headerlink" href="#random-functions" title="Link to this heading">#</a></h2>
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
@@ -599,26 +650,20 @@ data-aria-dark="Switch to auto color mode">
 </table>
 </div>
 </section>
-<section id="tabular-priors">
-<h2>Tabular Priors<a class="headerlink" href="#tabular-priors" title="Link to this heading">#</a></h2>
+<section id="filters">
+<h2>Filters<a class="headerlink" href="#filters" title="Link to this heading">#</a></h2>
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.Schema.html#sdm.prior.tabular.Schema" title="sdm.prior.tabular.Schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Schema</span></code></a></p></td>
-<td><p>Specification of a dataset.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.SchemaSampler.html#sdm.prior.tabular.SchemaSampler" title="sdm.prior.tabular.SchemaSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SchemaSampler</span></code></a></p></td>
-<td><p>Sample <a class="reference internal" href="generated/sdm.prior.tabular.Schema.html#sdm.prior.tabular.Schema" title="sdm.prior.tabular.Schema"><code class="xref py py-class docutils literal notranslate"><span class="pre">Schema</span></code></a> instances.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.SCMPrior.html#sdm.prior.tabular.SCMPrior" title="sdm.prior.tabular.SCMPrior"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCMPrior</span></code></a></p></td>
-<td><p>Sample datasets from random structural causal models (SCMs).</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.should_drop.html#sdm.prior.should_drop" title="sdm.prior.should_drop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">should_drop</span></code></a></p></td>
+<td><p>Decide whether to drop a dataset based on an ExtraTrees probe.</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 </section>
-<section id="tabular-transforms">
-<h2>Tabular Transforms<a class="headerlink" href="#tabular-transforms" title="Link to this heading">#</a></h2>
+<section id="transforms">
+<h2>Transforms<a class="headerlink" href="#transforms" title="Link to this heading">#</a></h2>
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
@@ -647,7 +692,7 @@ data-aria-dark="Switch to auto color mode">
 <td><p>Mask feature rows selected by a target class or numerical tail.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.transform.MaskCategorical.html#sdm.prior.tabular.transform.MaskCategorical" title="sdm.prior.tabular.transform.MaskCategorical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaskCategorical</span></code></a></p></td>
-<td><p>Mask independent random rows in selected categorical feature columns.</p></td>
+<td><p>Mask random rows in selected categorical feature columns.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.transform.MaskCensoring.html#sdm.prior.tabular.transform.MaskCensoring" title="sdm.prior.tabular.transform.MaskCensoring"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaskCensoring</span></code></a></p></td>
 <td><p>Mask feature tails under MAR or self-masking MNAR censoring.</p></td>
@@ -668,7 +713,7 @@ data-aria-dark="Switch to auto color mode">
 <td><p>Combine structured feature masking with conditional censoring.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.transform.RecodeHighCardinality.html#sdm.prior.tabular.transform.RecodeHighCardinality" title="sdm.prior.tabular.transform.RecodeHighCardinality"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RecodeHighCardinality</span></code></a></p></td>
-<td><p>Recode selected finite feature columns as high-cardinality categories.</p></td>
+<td><p>Recode selected finite features as high-cardinality categories.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.tabular.transform.Relabel.html#sdm.prior.tabular.transform.Relabel" title="sdm.prior.tabular.transform.Relabel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Relabel</span></code></a></p></td>
 <td><p>Recompute the target from selected feature columns.</p></td>
@@ -706,10 +751,10 @@ data-aria-dark="Switch to auto color mode">
         <span>Previous</span><div class="title">InducedTransformerBlock</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="generated/sdm.prior.HP.html">
+    <a href="generated/sdm.prior.tabular.SCMPrior.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">HP</div>
+        <div class="title">SCMPrior</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -718,7 +763,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=cf81fc66"></script>
+      <script src="../_static/documentation_options.js?v=413de9ab"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

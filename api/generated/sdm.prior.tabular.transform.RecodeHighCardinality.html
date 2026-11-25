@@ -173,6 +173,7 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="reference internal" href="../prior.html">sdm.prior</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SCMPrior.html">SCMPrior</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.HP.html">HP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Constant.html">Constant</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Uniform.html">Uniform</a></li>
@@ -182,12 +183,12 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.CorrelatedContext.html">CorrelatedContext</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Correlated.html">Correlated</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.Mixture.html">Mixture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.Schema.html">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SchemaSampler.html">SchemaSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.DAG.html">DAG</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.DAGSampler.html">DAGSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.RandomCauchyDAGSampler.html">RandomCauchyDAGSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.MixtureDAGSampler.html">MixtureDAGSampler</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.should_drop.html">should_drop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.RootSampler.html">RootSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.NormalRootSampler.html">NormalRootSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.UniformRootSampler.html">UniformRootSampler</a></li>
@@ -241,9 +242,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.DistributionalMixtureConverter.html">DistributionalMixtureConverter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.SoftmaxCategoricalConverter.html">SoftmaxCategoricalConverter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.MixtureConverter.html">MixtureConverter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.Schema.html">Schema</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SchemaSampler.html">SchemaSampler</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SCMPrior.html">SCMPrior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.should_drop.html">should_drop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.transform.PriorTransform.html">PriorTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.transform.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.transform.Choice.html">Choice</a></li>
@@ -346,7 +345,7 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.prior.tabular.transform.RecodeHighCardinality">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.prior.tabular.transform.</span></span><span class="sig-name descname"><span class="pre">RecodeHighCardinality</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">201</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(1,</span> <span class="pre">3)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">categorical</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">standardize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.prior.tabular.transform.RecodeHighCardinality" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.prior.tabular.transform.PriorTransform.html#sdm.prior.tabular.transform.PriorTransform" title="sdm.prior.tabular.transform.base.PriorTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">PriorTransform</span></code></a></p>
-<p>Recode selected finite feature columns as high-cardinality categories.</p>
+<p>Recode selected finite features as high-cardinality categories.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -385,7 +384,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cf81fc66"></script>
+      <script src="../../_static/documentation_options.js?v=413de9ab"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

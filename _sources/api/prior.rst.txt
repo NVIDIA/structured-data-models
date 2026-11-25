@@ -5,14 +5,50 @@ sdm.prior
    :toctree: generated
    :nosignatures:
 
-{% set components = (
-    api_names("sdm.prior.root_samplers")
-    + api_names("sdm.prior.activations")
-    + api_names("sdm.prior.functions")
-    + api_names("sdm.prior.matrix_samplers")
-    + api_names("sdm.prior.converters")
-) %}
-{% for name in api_names("sdm.prior") if name not in components %}
+   ~sdm.prior.tabular.SCMPrior
+
+Sampling Utilities
+------------------
+
+**Hyperparameters**
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.prior.hp") %}
+   ~sdm.prior.{{ name }}
+{% endfor %}
+
+**Correlated Sampling**
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.prior.correlated") %}
+   ~sdm.prior.{{ name }}
+{% endfor %}
+
+Schema
+------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.prior.tabular.schema") %}
+   ~sdm.prior.tabular.{{ name }}
+{% endfor %}
+
+Directed Acyclic Graphs
+-----------------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.prior.dag") %}
    ~sdm.prior.{{ name }}
 {% endfor %}
 
@@ -34,12 +70,22 @@ Activations
    :toctree: generated
    :nosignatures:
 
-{% for name in api_names("sdm.prior.activations") %}
+{% for name in api_names("sdm.prior.activations") if name.endswith("Activation") %}
    ~sdm.prior.{{ name }}
 {% endfor %}
 
-Functions
----------
+**Activation Functions for** :class:`~sdm.prior.CallableActivation`
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.prior.activations") if not name.endswith("Activation") %}
+   ~sdm.prior.{{ name }}
+{% endfor %}
+
+Random Functions
+----------------
 
 .. autosummary::
    :toctree: generated
@@ -71,19 +117,17 @@ Converters
    ~sdm.prior.{{ name }}
 {% endfor %}
 
-Tabular Priors
---------------
+Filters
+-------
 
 .. autosummary::
    :toctree: generated
    :nosignatures:
 
-{% for name in api_names("sdm.prior.tabular") %}
-   ~sdm.prior.tabular.{{ name }}
-{% endfor %}
+   ~sdm.prior.should_drop
 
-Tabular Transforms
-------------------
+Transforms
+----------
 
 .. autosummary::
    :toctree: generated

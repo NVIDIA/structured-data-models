@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>MixtureConverter - Structured Data Models</title><link rel="shortcut icon" href="../../_static/nvidia.svg"/><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Schema" href="sdm.prior.tabular.Schema.html" /><link rel="prev" title="SoftmaxCategoricalConverter" href="sdm.prior.SoftmaxCategoricalConverter.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>MixtureConverter - Structured Data Models</title><link rel="shortcut icon" href="../../_static/nvidia.svg"/><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="should_drop" href="sdm.prior.should_drop.html" /><link rel="prev" title="SoftmaxCategoricalConverter" href="sdm.prior.SoftmaxCategoricalConverter.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -173,6 +173,7 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="reference internal" href="../prior.html">sdm.prior</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SCMPrior.html">SCMPrior</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.HP.html">HP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Constant.html">Constant</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Uniform.html">Uniform</a></li>
@@ -182,12 +183,12 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.CorrelatedContext.html">CorrelatedContext</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.Correlated.html">Correlated</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.Mixture.html">Mixture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.Schema.html">Schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SchemaSampler.html">SchemaSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.DAG.html">DAG</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.DAGSampler.html">DAGSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.RandomCauchyDAGSampler.html">RandomCauchyDAGSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.MixtureDAGSampler.html">MixtureDAGSampler</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.should_drop.html">should_drop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.RootSampler.html">RootSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.NormalRootSampler.html">NormalRootSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.UniformRootSampler.html">UniformRootSampler</a></li>
@@ -241,9 +242,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.DistributionalMixtureConverter.html">DistributionalMixtureConverter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.SoftmaxCategoricalConverter.html">SoftmaxCategoricalConverter</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">MixtureConverter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.Schema.html">Schema</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SchemaSampler.html">SchemaSampler</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.SCMPrior.html">SCMPrior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.prior.should_drop.html">should_drop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.transform.PriorTransform.html">PriorTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.transform.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.prior.tabular.transform.Choice.html">Choice</a></li>
@@ -348,7 +347,7 @@ data-aria-dark="Switch to auto color mode">
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.prior.MixtureConverter">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.prior.</span></span><span class="sig-name descname"><span class="pre">MixtureConverter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">converters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#sdm.prior.MixtureConverter" title="sdm.prior.converters.mixture.MixtureConverter"><span class="pre">MixtureConverter</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#sdm.prior.MixtureConverter" title="sdm.prior.converters.mixture.MixtureConverter"><span class="pre">MixtureConverter</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">correlated</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Hashable" title="(in Python v3.15)"><span class="pre">Hashable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.prior.MixtureConverter" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.prior.Mixture.html#sdm.prior.Mixture" title="sdm.prior.mixture.Mixture"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mixture</span></code></a>[<a class="reference internal" href="#sdm.prior.MixtureConverter" title="sdm.prior.MixtureConverter"><code class="xref py py-class docutils literal notranslate"><span class="pre">T</span> <span class="pre">|</span> <span class="pre">MixtureConverter[T]</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Generic" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code>]</p>
+<dd><p>Bases: <a class="reference internal" href="../internal/mixture.html#sdm.prior.Mixture" title="sdm.prior.mixture.Mixture"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mixture</span></code></a>[<a class="reference internal" href="#sdm.prior.MixtureConverter" title="sdm.prior.MixtureConverter"><code class="xref py py-class docutils literal notranslate"><span class="pre">T</span> <span class="pre">|</span> <span class="pre">MixtureConverter[T]</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Generic" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code>]</p>
 <p>Pick one converter per column from a weighted pool.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -395,10 +394,10 @@ identity.</p></li>
         <span>Previous</span><div class="title">SoftmaxCategoricalConverter</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.prior.tabular.Schema.html">
+    <a href="sdm.prior.should_drop.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Schema</div>
+        <div class="title">should_drop</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -407,7 +406,7 @@ identity.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cf81fc66"></script>
+      <script src="../../_static/documentation_options.js?v=413de9ab"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
