@@ -5,6 +5,7 @@
 
 import argparse
 from pathlib import Path
+from typing import cast
 
 import torch
 import torch.nn.functional as F
@@ -28,9 +29,9 @@ parser.add_argument(
 # Optimal values for the hyperparameters below depend on the model and
 # dataset. Select them based on validation performance.
 parser.add_argument("--max-epochs", type=int, default=10)
-parser.add_argument("--steps-per-epoch", type=int, default=30)
-parser.add_argument("--context-size", type=int, default=256)
-parser.add_argument("--query-size", type=int, default=128)
+parser.add_argument("--max-chunk-size", type=int, default=10_000)
+parser.add_argument("--query-fraction", type=float, default=0.2)
+parser.add_argument("--num-train-estimators", type=int, default=4)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--num-estimators", type=int, default=8)
 parser.add_argument("--seed", type=int, default=0)
@@ -86,14 +87,19 @@ train_recipe.target = sp.StypeDispatch(  # No target flipping.
 train_recipe.output = sp.Identity()  # No post-processing.
 
 
+@torch.inference_mode()
 def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
     model.eval()
-    out = model(
-        x_context=context.drop_columns(target),
-        y_context=context[target],
-        x_query=query.drop_columns(target),
-        num_estimators=args.num_estimators,
-    )
+    with torch.autocast(
+        device.type, dtype=torch.float16, enabled=device.type == "cuda"
+    ):
+        out = model(
+            x_context=context.drop_columns(target),
+            y_context=context[target],
+            x_query=query.drop_columns(target),
+            num_estimators=args.num_estimators,
+            generator=torch.Generator(device).manual_seed(args.seed),
+        )
     if args.task == "classification":
         prob, y = sdm.evaluation.to_class_indices(
             out, query[target], missing_score=0.0
@@ -101,7 +107,7 @@ def evaluate(context: sdm.TableTensor, query: sdm.TableTensor) -> float:
         return float((prob.argmax(dim=-1) == y).float().mean())
 
     pred = out.numerical.mean(dim=-1)
-    y = query[:, target].numerical.squeeze(-1)
+    y = query[target].numerical.squeeze(-1)
     return float((pred - y).pow(2).mean().sqrt())  # RMSE
 
 
@@ -109,6 +115,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 higher_is_better = args.task == "classification"
 metric_name = "acc" if args.task == "classification" else "rmse"
 ckpt_path = Path(f"ckpt-{args.model}-{args.task}.pt")
+train_labels = df[target].iloc[train_index].to_numpy()
 
 val_metric = evaluate(context=train_table, query=val_table)
 print(f"epoch=0/{args.max_epochs} val_{metric_name}={val_metric:.4f}")
@@ -117,37 +124,58 @@ torch.save(model.state_dict(), ckpt_path)
 for epoch in range(1, args.max_epochs + 1):
     model.train()
     total_loss = 0.0
-    for _ in range(args.steps_per_epoch):
-        index = torch.randperm(train_table.size(0), device=device)
-        index = index[: args.context_size + args.query_size]
-        context = train_table[index[: args.context_size]]
-        query = train_table[index[args.context_size :]]
-
-        optimizer.zero_grad()
-        out = model(
-            x_context=context.drop_columns(target),
-            y_context=context[target],
-            x_query=query.drop_columns(target),
-            recipe=train_recipe,
-        )[0]
-        if args.task == "classification":
-            logits, y = sdm.evaluation.to_class_indices(
-                out, query[target], missing_score=-torch.inf
+    steps = 0
+    for chunk in torch.randperm(len(train_table)).split(args.max_chunk_size):
+        if len(chunk) < 50:
+            continue
+        labels = train_labels[chunk] if args.task == "classification" else None
+        try:
+            context_rows, query_rows = train_test_split(
+                chunk, test_size=args.query_fraction, stratify=labels
             )
-            loss = F.cross_entropy(logits, y)
-        else:  # Pinball loss over the model's 999 fixed quantile levels:
-            diff = query[target].numerical - out.numerical
+        except ValueError:
+            if labels is None:
+                raise
+            continue
+        context = train_table[context_rows]
+        query = train_table[query_rows]
+
+        optimizer.zero_grad(set_to_none=True)
+        with torch.autocast(
+            device.type, dtype=torch.bfloat16, enabled=device.type == "cuda"
+        ):
+            out = model(
+                x_context=context.drop_columns(target),
+                y_context=context[target],
+                x_query=query.drop_columns(target),
+                recipe=train_recipe,
+                num_estimators=args.num_train_estimators,
+            )
+        y_query = query[target]
+        if args.task == "classification":
+            y_views = cast(
+                sdm.TableTensor, y_query.expand(out.size(0), *y_query.shape)
+            )
+            logits, y = sdm.evaluation.to_class_indices(
+                out, y_views, missing_score=-torch.inf
+            )
+            loss = F.cross_entropy(logits.float().flatten(0, 1), y.flatten())
+        else:  # Pinball loss over the models' 999 fixed quantile levels.
+            diff = y_query.numerical - out.numerical.float()
             level = torch.linspace(0.001, 0.999, 999, device=device)
             loss = torch.maximum(level * diff, (level - 1) * diff).mean()
         loss.backward()
         optimizer.step()
         total_loss += float(loss.detach())
+        steps += 1
 
+    if steps == 0:
+        raise ValueError("No chunks could be split into context and query.")
     metric = evaluate(context=train_table, query=val_table)
     print(
         f"epoch={epoch}/{args.max_epochs} "
         f"val_{metric_name}={metric:.4f} "
-        f"train_loss={total_loss / args.steps_per_epoch:.4f}"
+        f"train_loss={total_loss / steps:.4f}"
     )
     if metric > val_metric if higher_is_better else metric < val_metric:
         val_metric = metric
