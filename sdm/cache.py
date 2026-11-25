@@ -36,20 +36,6 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Value projections with shape ``[..., KV, H, C]``.
     """
 
-    def dequantize(self, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
-        r"""Returns key and value with quantized ones dequantized to ``dtype``.
-
-        Args:
-            dtype: The target dtype.
-        """
-        key, value = (
-            tensor.dequantize(dtype)
-            if isinstance(tensor, QuantizedTensor)
-            else tensor
-            for tensor in self
-        )
-        return key, value
-
     def _tensors(self) -> Iterator[Tensor]:
         for tensor in (self.key, self.value):
             if isinstance(tensor, QuantizedTensor):

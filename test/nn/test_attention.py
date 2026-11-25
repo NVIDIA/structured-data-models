@@ -272,6 +272,13 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     for tensor in (query, key, value):
         torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
 
+    key.grad = value.grad = None
+    fp8 = Float8PerHead()
+    out = module(query=query, key=fp8.quantize(key), value=fp8.quantize(value))
+    out.sum().backward()
+    for tensor in (key, value):
+        torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+
 
 def test_sdpa_errors() -> None:
     channels = 3
@@ -413,6 +420,12 @@ def test_attention_kv_cache(qassmax: bool) -> None:
         key_value=kv,
         attn_mask=attn_mask,
     )
+    replay_out, replay_kv = module(
+        query=query,
+        key_value=kv,
+        attn_mask=attn_mask,
+        return_key_value=True,
+    )
 
     self_out, self_kv = module(query=query, return_key_value=True)
     self_cached_out = module(query=query, key_value=self_kv)
@@ -421,6 +434,8 @@ def test_attention_kv_cache(qassmax: bool) -> None:
     assert kv.value.size() == (2, 5, num_heads, channels // num_heads)
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+    torch.testing.assert_close(replay_out, direct_out)
+    assert replay_kv is kv
     torch.testing.assert_close(self_cached_out, self_out)
 
 
