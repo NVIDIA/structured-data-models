@@ -5,8 +5,7 @@ from typing import Literal, cast
 
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
-from sdm.nn._buffer import BufferList
+from sdm import EnsembleTable, EnsembleTensor, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
 
 
@@ -23,6 +22,8 @@ class RandomProjection(EnsembleProcessor):
     handles_stypes = (Stype.numerical,)
     requires_fit = True
 
+    _weights: EnsembleTensor[torch.Tensor]
+
     def __init__(
         self,
         channels: int,
@@ -32,7 +33,7 @@ class RandomProjection(EnsembleProcessor):
         super().__init__()
         self.channels = channels
         self.init = init
-        self._weights: BufferList[torch.Tensor] = BufferList()
+        self.register_buffer("_weights", None)
 
     def _fit_ensemble(
         self,
@@ -54,20 +55,27 @@ class RandomProjection(EnsembleProcessor):
             assert self.init == "normal"
             weight.normal_(std=self.channels**-0.5, generator=generator)
             weights.append(weight)
-        self._weights = BufferList(weights)
+        positions = [0] * ensemble_table.num_groups
+        locations = []
+        for group_id, _ in ensemble_table._locations:
+            locations.append((group_id, positions[group_id]))
+            positions[group_id] += 1
+        self._set_buffer(
+            "_weights", EnsembleTensor(groups=weights, locations=locations)
+        )
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         groups = []
-        for i in range(ensemble_table.num_groups):
+        for i, weight in enumerate(self._weights._iter_groups()):
             group = ensemble_table.expanded_group(i)
             projected = TableTensor(
                 columns={
                     Stype.numerical: [f"rp_{i}" for i in range(self.channels)]
                 },
-                numerical=group.numerical @ self._weights[i].transpose(-1, -2),
+                numerical=group.numerical @ weight.transpose(-1, -2),
             )
             group = cast(
                 TableTensor,
