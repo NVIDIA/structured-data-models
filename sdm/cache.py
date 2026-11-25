@@ -68,7 +68,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 
 @dataclass(frozen=True, eq=False)
 class QuantizedTensor(DeviceMixin):
-    r"""A tensor stored as quantized values and their scales.
+    r"""A tensor stored as quantized values and scales.
 
     Args:
         qdata: The quantized values.
