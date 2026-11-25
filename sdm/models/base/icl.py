@@ -352,8 +352,15 @@ class ICLModel(Model):
                         else None
                     ),
                     class_values=class_values[batch],
-                    categorical_mask=categorical_mask,
                     kv_cache_dtype=kv_cache_dtype,
+                )
+                # The columns of the table (-1) are the dimension -1 of
+                # `[..., C]`. A copy, since a graph holds the size of the base
+                # of a view, such as `[1, C]` for one member, as static.
+                batch_cache._record(
+                    "categorical_mask",
+                    categorical_mask.clone(),
+                    dims={-1: -1},
                 )
                 self._forward(
                     x_context=context.x,
@@ -871,7 +878,13 @@ class ICLModel(Model):
         related_query_tables: RelatedTables[TableTensor] | None,
     ) -> None:
 
-        if x_context.columns != x_query.columns:
+        # Compiled predictions run transformed queries without names, which a
+        # graph would hold as constants.
+        if any(
+            names != x_context.columns[stype]
+            for stype, names in x_query.columns.items()
+            if names is not None or not torch.compiler.is_dynamo_compiling()
+        ):
             raise ValueError(
                 "Expected context and query features to share the same schema"
             )

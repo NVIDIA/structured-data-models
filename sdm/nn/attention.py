@@ -7,15 +7,14 @@ import math
 from typing import Any, Literal, overload
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Linear
 
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheDType, KVCacheEntry
 from sdm.nn import QueryScaling
+from sdm.nn.linear import Linear, _linear
 
 
 class SDPA(torch.nn.Module):
@@ -408,7 +407,7 @@ class Attention(torch.nn.Module):
             key_pos = query_pos
 
         if isinstance(key_value, KVCacheEntry):
-            query = F.linear(
+            query = _linear(
                 query,
                 weight=self.qkv_lin.weight[: self.q_dim],
                 bias=self.qkv_lin.bias[: self.q_dim]
@@ -438,8 +437,8 @@ class Attention(torch.nn.Module):
             q_bias = kv_bias = None
             if self.qkv_lin.bias is not None:
                 q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
-            query = F.linear(query, q_weight, q_bias)
-            key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
+            query = _linear(query, q_weight, q_bias)
+            key, value = _linear(key_value, kv_weight, kv_bias).chunk(2, -1)
 
         # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
         query = query.unflatten(-1, [self.num_query_heads, self.head_dim])

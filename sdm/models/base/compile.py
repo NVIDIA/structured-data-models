@@ -6,13 +6,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
+from sdm.cache import Cache
 from sdm.models.base import Callback
+from sdm.tensor.table import TableSchema
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -33,6 +35,12 @@ def compile_predict(
     One graph serves queries and fits of any size along the dynamic
     dimensions, except that a fitted size of zero or one compiles a graph of
     its own. A query without rows is predicted without the graph.
+
+    The columns (``-1``) are dynamic for a transformed query of only numerical
+    columns, as the default recipe of :class:`~sdm.models.KumoTabular` returns
+    for numerical and categorical ones. It runs without column names, which
+    the graph would otherwise hold as constants. Other transformed queries,
+    and queries with callbacks, keep their names and static columns.
 
     Args:
         model: The model.
@@ -90,6 +98,44 @@ def compile_predict(
             related_tables,
             callbacks=callbacks,
         )
+        if (
+            -1 in dims
+            and not callbacks
+            and all(
+                query.x.size(-1) == query.x.numerical.size(-1)
+                for query in queries
+            )
+        ):
+            # Numerical columns run without names, which a graph would hold
+            # as constants, so they are checked before the graph.
+            schemas = [
+                schema
+                for i in range(cast(int, cache["num_batches"]))
+                for schema in cast(
+                    tuple[TableSchema, ...],
+                    cast(Cache, cache[i])["x_schemas"],
+                )
+            ]
+            for query, schema in zip(queries, schemas, strict=True):
+                model._validate_query(
+                    x_context=schema,
+                    x_query=query.x,
+                    related_context_tables=None,
+                    related_query_tables=None,
+                )
+            queries = tuple(
+                query._replace(
+                    x=TableTensor(
+                        columns={"numerical": None},
+                        numerical=query.x.numerical,
+                    )
+                )
+                for query in queries
+            )
+        else:
+            # Other columns, such as text ones, keep their names, and so do
+            # queries with callbacks, which may read them.
+            dims.discard(-1)
         cache._mark_dynamic(dims)
         for query in queries:
             for dim in dims:

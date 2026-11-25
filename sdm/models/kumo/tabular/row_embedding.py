@@ -199,7 +199,10 @@ class RowEmbedding(torch.nn.Module):
             )
 
             if cache is not None and cache.is_recording:
-                x, cache[key] = result
+                x, entry = result
+                # The columns of the table (-1) are the dimension -4 of keys
+                # and values of shape `[..., C, M, H, D]`.
+                cache._record(key, entry, dims={-1: -4})
             else:
                 x = result
             del result

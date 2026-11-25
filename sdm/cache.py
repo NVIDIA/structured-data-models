@@ -261,7 +261,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def _record(
         self,
         key: Hashable,
-        value: KVCacheEntry,
+        value: Tensor | KVCacheEntry,
         dims: Mapping[int, int],
     ) -> None:
         r"""Store ``value`` and declare its dimensions that follow the table.
@@ -270,10 +270,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
         Args:
             key: The cache key.
-            value: The keys and values.
+            value: A tensor, or keys and values.
             dims: The dimensions of ``value`` by the dimension of the table,
                 ``[..., R, D]``, that they follow, *e.g.*, ``{-2: -3}`` for
-                keys and values of shape ``[..., R, H, C]``.
+                keys and values of shape ``[..., R, H, C]``, or ``{-1: -1}``
+                for a tensor of shape ``[..., D]``.
         """
         self[key] = value
         self._dims[key] = dims
@@ -295,12 +296,24 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 value._mark_dynamic(dims)
                 continue
             for table_dim, dim in self._dims.get(key, {}).items():
-                if table_dim in dims:
-                    # Not the scales of quantized keys and values, which are
-                    # per head.
-                    entry = cast(KVCacheEntry, value)
-                    for tensor in (entry.key, entry.value):
-                        torch._dynamo.mark_dynamic(tensor, dim % tensor.dim())
+                if table_dim not in dims:
+                    continue
+                if isinstance(value, Tensor):
+                    tensors = [value]
+                else:
+                    # Keys and values. Their scales, `[..., 1, H, 1]`, follow
+                    # only the dimensions before -3: columns, not rows.
+                    tensors = list(cast(KVCacheEntry, value)._tensors())
+                    tensors = tensors if dim < -3 else tensors[:2]
+                # Weakly for the columns, as graphs that hold the column names
+                # keep them static.
+                mark = (
+                    torch._dynamo.maybe_mark_dynamic
+                    if table_dim == -1
+                    else torch._dynamo.mark_dynamic
+                )
+                for tensor in tensors:
+                    mark(tensor, dim % tensor.dim())
         self._dynamic.update(dims)
 
     def __setitem__(self, key: Hashable, value: object) -> None:

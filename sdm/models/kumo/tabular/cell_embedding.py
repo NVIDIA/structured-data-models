@@ -64,7 +64,8 @@ class CellEmbedding(TabFMCellEmbedding):
             impute_mean = impute_mean.masked_fill(impute_mean.isnan(), 0.0)
 
         if cache is not None and cache.is_recording:
-            cache["cell_impute_mean"] = impute_mean
+            # The columns of the table (-1) are the dimension -1 of `[..., C]`.
+            cache._record("cell_impute_mean", impute_mean, dims={-1: -1})
 
         x = torch.where(missing, impute_mean, x)
 

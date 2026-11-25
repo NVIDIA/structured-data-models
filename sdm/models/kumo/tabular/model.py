@@ -174,9 +174,9 @@ class KumoTabular(ICLModel):
         return default_recipe()
 
     def _default_dynamic_dims(self) -> tuple[int, ...]:
-        # Mark the rows (`-2`) of the query as dynamic, and with them the rows
-        # of the context that `fit` saved.
-        return (-2,)
+        # Mark the rows (`-2`) and columns (`-1`) of the query as dynamic, and
+        # with them those of the context that `fit` saved.
+        return (-2, -1)
 
     def _dynamic_compile_patches(self) -> list[ContextDecorator]:
         return [
