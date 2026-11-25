@@ -12,13 +12,14 @@ from sdm.prior.functions import ParentMerger, RandomFunction
 class ConcatParentMerger(ParentMerger):
     """Concatenate parent values and apply ``random_fn``."""
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         parent_values: Sequence[Tensor],
         random_fn: RandomFunction,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return random_fn.forward(
             x=torch.cat(tuple(parent_values), dim=-1),
             out_channels=out_channels,

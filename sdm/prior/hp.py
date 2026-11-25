@@ -62,16 +62,16 @@ class Constant(HP[T]):
 
     value: T
 
-    def sample(  # noqa: D102
-        self, generator: torch.Generator | None = None
-    ) -> T:
+    def sample(self, generator: torch.Generator | None = None) -> T:
+        r""":meta private:"""  # noqa: D415
         return self.value
 
-    def sample_batch(  # noqa: D102
+    def sample_batch(
         self,
         size: int | torch.Size | tuple[int, ...],
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return torch.full(  # type: ignore
             size=(size,) if isinstance(size, int) else size,
             fill_value=self.value,
@@ -94,20 +94,17 @@ class Uniform(HP[float]):
     def __post_init__(self) -> None:
         _check_bounds(self.low, self.high)
 
-    def sample_batch(  # noqa: D102
+    def sample_batch(
         self,
         size: int | torch.Size | tuple[int, ...],
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = torch.rand(size, device="cpu", generator=generator)
         return self.transform(x)
 
     def transform(self, x: Tensor) -> Tensor:
-        """Map quantile levels to values.
-
-        Args:
-            x: Quantile levels in ``[0, 1]``, with shape ``[...]``.
-        """
+        r""":meta private:"""  # noqa: D415
         return self.low + (self.high - self.low) * x
 
 
@@ -126,20 +123,17 @@ class UniformInt(HP[int]):
     def __post_init__(self) -> None:
         _check_bounds(self.low, self.high)
 
-    def sample_batch(  # noqa: D102
+    def sample_batch(
         self,
         size: int | torch.Size | tuple[int, ...],
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = torch.rand(size, device="cpu", generator=generator)
         return self.transform(x)
 
     def transform(self, x: Tensor) -> Tensor:
-        """Map quantile levels to values.
-
-        Args:
-            x: Quantile levels in ``[0, 1]``, with shape ``[...]``.
-        """
+        r""":meta private:"""  # noqa: D415
         x = (self.low + (self.high + 1 - self.low) * x).floor().long()
         return x.clamp(min=self.low, max=self.high)
 
@@ -159,20 +153,17 @@ class LogUniform(HP[float]):
     def __post_init__(self) -> None:
         _check_bounds(self.low, self.high)
 
-    def sample_batch(  # noqa: D102
+    def sample_batch(
         self,
         size: int | torch.Size | tuple[int, ...],
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = torch.rand(size, device="cpu", generator=generator)
         return self.transform(x)
 
     def transform(self, x: Tensor) -> Tensor:
-        """Map quantile levels to values.
-
-        Args:
-            x: Quantile levels in ``[0, 1]``, with shape ``[...]``.
-        """
+        r""":meta private:"""  # noqa: D415
         log_low = math.log(self.low)
         log_high = math.log(self.high)
         return (log_low + (log_high - log_low) * x).exp()
@@ -193,20 +184,17 @@ class LogUniformInt(HP[int]):
     def __post_init__(self) -> None:
         _check_bounds(self.low, self.high)
 
-    def sample_batch(  # noqa: D102
+    def sample_batch(
         self,
         size: int | torch.Size | tuple[int, ...],
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = torch.rand(size, device="cpu", generator=generator)
         return self.transform(x)
 
     def transform(self, x: Tensor) -> Tensor:
-        """Map quantile levels to values.
-
-        Args:
-            x: Quantile levels in ``[0, 1]``, with shape ``[...]``.
-        """
+        r""":meta private:"""  # noqa: D415
         log_low = math.log(self.low)
         log_high = math.log(self.high + 1)
         x = (log_low + (log_high - log_low) * x).exp().long()
@@ -218,7 +206,7 @@ class Choice(HP[T]):
     """Choose uniformly among fixed options.
 
     Args:
-        *options: Values to choose from. Tensor sampling requires numerical
+        options: Values to choose from. Tensor sampling requires numerical
             options.
     """
 
@@ -228,9 +216,8 @@ class Choice(HP[T]):
         assert len(options) > 0
         object.__setattr__(self, "options", options)
 
-    def sample(  # noqa: D102
-        self, generator: torch.Generator | None = None
-    ) -> T:
+    def sample(self, generator: torch.Generator | None = None) -> T:
+        r""":meta private:"""  # noqa: D415
         index = torch.randint(
             low=0,
             high=len(self.options),
@@ -240,11 +227,12 @@ class Choice(HP[T]):
         )
         return self.options[int(index)]
 
-    def sample_batch(  # noqa: D102
+    def sample_batch(
         self,
         size: int | torch.Size | tuple[int, ...],
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         index = torch.randint(
             low=0,
             high=len(self.options),

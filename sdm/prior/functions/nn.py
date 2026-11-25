@@ -41,12 +41,13 @@ class RandomNN(RandomFunction):
             correlated=True,
         )
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         num_layers = self.num_layers.sample(generator=generator)
         hidden_channels = self.hidden_channels.sample(generator=generator)
 

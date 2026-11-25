@@ -11,12 +11,13 @@ from sdm.prior.root_samplers import RootSampler
 class BallRootSampler(RootSampler):
     r"""Sample root values uniformly within the unit ball."""
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         num_rows: int,
         channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         direction = torch.randn(
             size=(num_rows, channels),
             device="cpu",

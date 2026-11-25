@@ -22,12 +22,13 @@ class RandomLinear(RandomFunction):
     def __init__(self, matrix_sampler: MatrixSampler | None = None) -> None:
         self.matrix_sampler = matrix_sampler or GaussianMatrixSampler()
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         _, in_channels = x.size()
         matrix = self.matrix_sampler.sample(
             size=(1, out_channels, in_channels),

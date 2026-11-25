@@ -18,12 +18,13 @@ class RandomProduct(RandomFunction):
     def __init__(self, functions: MixtureFunction) -> None:
         self.functions = functions
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         f = self.functions.pick(generator=generator)
         g = self.functions.pick(generator=generator)
 

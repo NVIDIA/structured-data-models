@@ -24,13 +24,14 @@ class ReduceParentMerger(ParentMerger):
     ) -> None:
         self.aggr = HP.from_value(aggr)
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         parent_values: Sequence[Tensor],
         random_fn: RandomFunction,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = torch.stack(
             [
                 random_fn.forward(

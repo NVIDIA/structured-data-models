@@ -36,12 +36,13 @@ class KernelMatrixSampler(MatrixSampler):
         self.channels = channels
         self.normalize = normalize
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         size: torch.Size | tuple[int, ...],
         dtype: torch.dtype,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         *batch, m, k = size
         dataset_batch = batch[0] if batch else 1
         matrix_batch = math.prod(batch[1:])

@@ -134,11 +134,12 @@ class DistributionalMixtureConverter(NumericalConverter):
             .unsqueeze(-1)
         )
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         slices: Tensor,
         generator: torch.Generator | None = None,
     ) -> tuple[Tensor, Tensor]:
+        r""":meta private:"""  # noqa: D415
         xs = [value.T for value in slices.unbind()]
         if not xs:
             raise ValueError("at least one numerical slice is required")

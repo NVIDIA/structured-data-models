@@ -27,12 +27,13 @@ class MixtureFunction(RandomFunction, Mixture[RandomFunction]):
     ) -> None:
         Mixture.__init__(self, items=functions, correlated=correlated)
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return self.pick(generator=generator).forward(
             x=x,
             out_channels=out_channels,
@@ -57,13 +58,14 @@ class MixtureParentMerger(ParentMerger, Mixture[ParentMerger]):
     ) -> None:
         Mixture.__init__(self, items=mergers, correlated=correlated)
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         parent_values: Sequence[Tensor],
         random_fn: RandomFunction,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return self.pick(generator=generator).forward(
             parent_values=parent_values,
             random_fn=random_fn,
