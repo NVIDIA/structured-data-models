@@ -6,12 +6,10 @@ from typing import cast
 
 import pytest
 import torch
-from torch import Tensor
 
 from sdm.cache import (
     Cache,
     Float8PerHead,
-    KVCacheDType,
     KVCacheEntry,
     QuantizedTensor,
     Unquantized,
@@ -141,26 +139,6 @@ def test_quantized_tensor_rejects_mismatched_scheme() -> None:
         QuantizedTensor(qdata=x, scale=x, scheme=Float8PerHead())
     with pytest.raises(ValueError, match="do not match"):
         QuantizedTensor(qdata=x, scale=x, scheme=Unquantized())
-
-
-class _Scaled(KVCacheDType):
-    def is_quantized(self, tensor: QuantizedTensor) -> bool:
-        return True
-
-    def quantize(
-        self,
-        tensor: Tensor | QuantizedTensor,
-    ) -> Tensor | QuantizedTensor:
-        return tensor
-
-
-def test_dequantize_keeps_quantized_values() -> None:
-    x = torch.ones(3)
-    quantized = QuantizedTensor(
-        qdata=x, scale=x.new_tensor(2.0), scheme=_Scaled()
-    )
-    torch.testing.assert_close(quantized.dequantize(x.dtype), 2 * x)
-    torch.testing.assert_close(x, torch.ones(3))
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])

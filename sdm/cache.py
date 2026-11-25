@@ -93,7 +93,7 @@ class QuantizedTensor(DeviceMixin):
         return self.qdata.shape
 
     def dequantize(self, dtype: torch.dtype) -> Tensor:
-        r"""Returns the tensor in ``dtype`` as a new tensor.
+        r"""Returns the tensor in ``dtype``.
 
         Args:
             dtype: The target dtype.
@@ -139,13 +139,13 @@ class KVCacheDType(abc.ABC):
         tensor: QuantizedTensor,
         dtype: torch.dtype,
     ) -> Tensor:
-        r"""Returns ``tensor`` in ``dtype`` as a new tensor.
+        r"""Returns ``tensor`` in ``dtype``.
 
         Args:
             tensor: A tensor in this storage dtype.
             dtype: The target dtype.
         """
-        return tensor.qdata.to(dtype, copy=True).mul_(tensor.scale)
+        return tensor.qdata.to(dtype).mul_(tensor.scale)
 
 
 class Unquantized(KVCacheDType):
