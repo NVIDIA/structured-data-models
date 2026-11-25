@@ -4,8 +4,11 @@
 import pytest
 import torch
 import torch.nn.functional as F
+from torch import Tensor
 
-from sdm.nn.attention_backend import TorchAttentionBackend
+from sdm.cache import QuantizedTensor
+from sdm.nn import SDPA
+from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
 
 
 @pytest.mark.parametrize("num_key_value_heads", [4, 2])
@@ -43,3 +46,49 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
     assert backend.supports(query, key, value, **options)
     out = backend.forward(query, key, value, **options)
     torch.testing.assert_close(out, expected)
+
+
+class _ZeroBackend(AttentionBackend):
+    def __init__(self, supported: bool) -> None:
+        self.supported = supported
+
+    def supports(
+        self,
+        query: Tensor,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
+        *,
+        attn_mask: Tensor | None,
+        seqused_key_value: Tensor | None,
+        is_causal: bool,
+        dropout_p: float,
+        scale: float | None,
+    ) -> bool:
+        return self.supported
+
+    def forward(
+        self,
+        query: Tensor,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
+        *,
+        attn_mask: Tensor | None,
+        seqused_key_value: Tensor | None,
+        is_causal: bool,
+        dropout_p: float,
+        scale: float | None,
+    ) -> Tensor:
+        return torch.zeros_like(query)
+
+
+def test_sdpa_backend() -> None:
+    query = torch.randn(2, 3, 5, 4, 8)  # [..., Q, Hq, C]
+    key = torch.randn(2, 3, 7, 4, 8)  # [..., KV, Hkv, C]
+    value = torch.randn_like(key)
+    torch_sdpa = SDPA(num_query_heads=4)
+    supported = SDPA(num_query_heads=4, backend=_ZeroBackend(True))
+    unsupported = SDPA(num_query_heads=4, backend=_ZeroBackend(False))
+
+    assert supported(query, key, value).eq(0).all()
+    expected = torch_sdpa(query, key, value)
+    torch.testing.assert_close(unsupported(query, key, value), expected)
