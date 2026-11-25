@@ -21,7 +21,9 @@ class ScoreModel(ICLModel):
     columns as their codes. Numerical targets predict the function value as
     column ``"pred"``, between the columns ``"low"`` and ``"high"`` one below
     and above it. Categorical targets predict it as the probability of the
-    second of two classes, whose column comes first.
+    second of two classes, whose column comes first. With ``noise``, the
+    generator of a model call shifts all of its predictions by one random
+    draw.
     """
 
     supported_feature_stypes = frozenset({Stype.numerical})
@@ -33,9 +35,12 @@ class ScoreModel(ICLModel):
     def __init__(
         self,
         fn: Callable[[dict[str, Tensor]], Tensor | float],
+        *,
+        noise: bool = False,
     ) -> None:
         super().__init__(task=None)
         self.fn = fn
+        self.noise = noise
         self.eval()
 
     def _forward(
@@ -65,6 +70,12 @@ class ScoreModel(ICLModel):
         )
         score = table.numerical.new_zeros(table.size()[:-1])  # [R]
         score = score + self.fn(columns)
+        if self.noise:
+            score = score + torch.rand(
+                size=(),
+                generator=generator,
+                device=score.device,
+            )
         if classes is None:
             return TableTensor.from_tensor(
                 tensor=torch.stack([score - 1.0, score, score + 1.0], dim=-1),
