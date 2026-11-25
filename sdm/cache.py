@@ -83,8 +83,8 @@ class QuantizedTensor(DeviceMixin):
     def __post_init__(self) -> None:
         if not self.scheme.is_quantized(self):
             raise ValueError(
-                f"Quantized values and scales do not match the quantization "
-                f"scheme '{type(self.scheme).__name__}'"
+                f"K/V do not match the quantization scheme "
+                f"'{type(self.scheme).__name__}'"
             )
 
     @overload
