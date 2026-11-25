@@ -138,8 +138,9 @@ class Correlated(HP[T]):
     """Sample numerical values from a shared, randomly sampled distribution.
 
     A :class:`~sdm.prior.CorrelatedContext` reuses Beta parameters for each
-    key and supplies the generator for sampling.
-    Without a context, each call samples new parameters.
+    key across calls. For a batch of shape ``[..., N]``, the final ``N`` draws
+    share Beta parameters, with an independent parameter set for leading
+    dimensions.
 
     Args:
         hp: Numerical parameter sampler.
