@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator, Mapping
+
 import torch
 from torch import Tensor
 
@@ -45,6 +47,12 @@ class RankGaussian(Processor):
         self.max_knots = max_knots
         self.register_buffer("_values", torch.empty(0))
         self.register_buffer("_probabilities", torch.empty(0))
+
+    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[int, int]]]:
+        # Up to `max_knots` knots per column follow the fitted rows: the rows
+        # of the table (-2) are the last dimension (-1) of `[..., C, K]`.
+        yield self._values, {-2: -1}
+        yield self._probabilities, {-2: -1}
 
     def _fit(
         self,
