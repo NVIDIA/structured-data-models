@@ -10,8 +10,9 @@ from collections.abc import (
     Mapping,
     MutableMapping,
 )
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, NamedTuple, Self, cast
+from typing import NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
@@ -20,160 +21,151 @@ from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
 
 
+@dataclass(frozen=True, eq=False)
+class QuantizedTensor(DeviceMixin):
+    r"""A tensor stored as quantized values and scales.
+
+    Args:
+        qdata: The quantized values.
+        scale: The scales of ``qdata``.
+        scheme: The storage dtype of ``qdata`` and ``scale``.
+    """
+
+    qdata: Tensor
+    scale: Tensor
+    scheme: "KVCacheDType"
+
+    def __post_init__(self) -> None:
+        if not self.scheme.is_valid(self):
+            raise ValueError(
+                f"Quantized values and scales do not match the storage dtype "
+                f"'{type(self.scheme).__name__}'"
+            )
+
+    @property
+    def shape(self) -> torch.Size:
+        r"""The shape of the quantized values."""
+        return self.qdata.shape
+
+    def dequantize(self, dtype: torch.dtype) -> Tensor:
+        r"""Returns the tensor in ``dtype`` as a new tensor.
+
+        Args:
+            dtype: The target dtype.
+        """
+        return self.scheme.dequantize(self, dtype)
+
+    def _tensors(self) -> Iterator[Tensor]:
+        yield self.qdata
+        yield self.scale
+
+    def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        return self.__class__(
+            qdata=fn(self.qdata),
+            scale=fn(self.scale),
+            scheme=self.scheme,
+        )
+
+
 class _KVCacheEntry(NamedTuple):
-    key: Tensor
-    value: Tensor
-    key_scale: Tensor | None = None
-    value_scale: Tensor | None = None
-    kv_cache_dtype: "KVCacheDType | None" = None
+    key: Tensor | QuantizedTensor
+    value: Tensor | QuantizedTensor
 
 
 class KVCacheEntry(_KVCacheEntry, DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
     Args:
-        key: Key projections with shape ``[..., KV, H, C]``.
-        value: Value projections with shape ``[..., KV, H, C]``.
-        key_scale: Optional scales broadcastable to ``key``.
-        value_scale: Optional scales broadcastable to ``value``.
-        kv_cache_dtype: The storage dtype of K/V, if any.
+        key: Key projections with shape ``[..., KV, H, C]``, possibly as a
+            :class:`~sdm.cache.QuantizedTensor`.
+        value: Value projections with shape ``[..., KV, H, C]``, possibly as
+            a :class:`~sdm.cache.QuantizedTensor`.
     """
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> Self:  # noqa: D102
-        self = super().__new__(cls, *args, **kwargs)
-        kv_cache_dtype = self.kv_cache_dtype or Unquantized()
-        if not kv_cache_dtype.is_quantized(self):
-            raise ValueError(
-                f"K/V do not match the key/value cache dtype "
-                f"'{type(kv_cache_dtype).__name__}'"
-            )
-        return self
-
-    def dequantize(self, dtype: torch.dtype) -> "KVCacheEntry":
-        r"""Returns the entry with quantized K/V dequantized to ``dtype``.
-
-        Args:
-            dtype: The target dtype.
-        """
-        if self.kv_cache_dtype is None:
-            return self
-        return self.kv_cache_dtype.dequantize(self, dtype)
-
     def _tensors(self) -> Iterator[Tensor]:
-        yield self.key
-        yield self.value
-        if self.key_scale is not None:
-            yield self.key_scale
-        if self.value_scale is not None:
-            yield self.value_scale
+        for tensor in (self.key, self.value):
+            if isinstance(tensor, QuantizedTensor):
+                yield from tensor._tensors()
+            else:
+                yield tensor
 
     def _apply_tensor(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        return self.__class__(
-            key=fn(self.key),
-            value=fn(self.value),
-            key_scale=None if self.key_scale is None else fn(self.key_scale),
-            value_scale=None
-            if self.value_scale is None
-            else fn(self.value_scale),
-            kv_cache_dtype=self.kv_cache_dtype,
-        )
+        def apply(
+            tensor: Tensor | QuantizedTensor,
+        ) -> Tensor | QuantizedTensor:
+            if isinstance(tensor, QuantizedTensor):
+                return tensor._apply_tensor(fn)
+            return fn(tensor)
+
+        return self.__class__(key=apply(self.key), value=apply(self.value))
 
 
 class KVCacheDType(abc.ABC):
     r"""Base class for the storage dtype of cached key/value projections."""
 
     @abc.abstractmethod
-    def is_quantized(self, entry: KVCacheEntry) -> bool:
-        r"""Returns whether K/V of ``entry`` are in this storage dtype.
+    def quantize(self, tensor: Tensor) -> Tensor | QuantizedTensor:
+        r"""Returns ``tensor`` in this storage dtype.
 
         Args:
-            entry: Key/value projections.
+            tensor: Key or value projections as computed by attention.
         """
 
-    @abc.abstractmethod
-    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:
-        r"""Returns ``entry`` in this storage dtype.
-
-        Args:
-            entry: Key/value projections as computed by attention.
-        """
-
-    @abc.abstractmethod
     def dequantize(
         self,
-        entry: KVCacheEntry,
+        tensor: QuantizedTensor,
         dtype: torch.dtype,
-    ) -> KVCacheEntry:
-        r"""Returns ``entry`` with key/value projections in ``dtype``.
+    ) -> Tensor:
+        r"""Returns ``tensor`` in ``dtype`` as a new tensor.
+
+        By default, it multiplies the quantized values by their scales.
 
         Args:
-            entry: Key/value projections in this storage dtype.
+            tensor: A tensor in this storage dtype.
             dtype: The target dtype.
+        """
+        return tensor.qdata.to(dtype, copy=True).mul_(tensor.scale)
+
+    @abc.abstractmethod
+    def is_valid(self, tensor: QuantizedTensor) -> bool:
+        r"""Returns whether ``tensor`` holds values and scales of this dtype.
+
+        Args:
+            tensor: A quantized tensor.
         """
 
 
 class Unquantized(KVCacheDType):
     r"""Leaves key/value projections as computed."""
 
-    def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
-        return entry.key_scale is None and entry.value_scale is None
+    def quantize(self, tensor: Tensor) -> Tensor:  # noqa: D102
+        return tensor
 
-    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
-        return entry
-
-    def dequantize(  # noqa: D102
-        self,
-        entry: KVCacheEntry,
-        dtype: torch.dtype,
-    ) -> KVCacheEntry:
-        return entry
+    def is_valid(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
+        return False
 
 
 class Float8PerHead(KVCacheDType):
-    r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
+    r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head.
 
-    def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
-        return all(
-            data.dtype == torch.float8_e4m3fn
-            and scale is not None
-            and scale.dtype == torch.float32
-            and scale.shape == (*data.shape[:-3], 1, data.size(-2), 1)
-            for data, scale in (
-                (entry.key, entry.key_scale),
-                (entry.value, entry.value_scale),
-            )
-        )
+    Tensors have shape ``[..., S, H, C]`` and their scales ``[..., 1, H, 1]``,
+    so that ``qdata * scale`` approximates the tensor.
+    """
 
-    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
-        if self.is_quantized(entry):
-            return entry
-        key, key_scale = self._quantize(entry.key)
-        value, value_scale = self._quantize(entry.value)
-        return KVCacheEntry(
-            key=key,
-            value=value,
-            key_scale=key_scale,
-            value_scale=value_scale,
-            kv_cache_dtype=self,
-        )
-
-    def dequantize(  # noqa: D102
-        self,
-        entry: KVCacheEntry,
-        dtype: torch.dtype,
-    ) -> KVCacheEntry:
-        return KVCacheEntry(
-            key=entry.key.to(dtype).mul_(cast(Tensor, entry.key_scale)),
-            value=entry.value.to(dtype).mul_(cast(Tensor, entry.value_scale)),
-        )
-
-    @staticmethod
-    def _quantize(tensor: Tensor) -> tuple[Tensor, Tensor]:
+    def quantize(self, tensor: Tensor) -> QuantizedTensor:  # noqa: D102
         amax = tensor.abs().amax(dim=(-3, -1), keepdim=True)  # [..., 1, H, 1]
         # Divide in the input dtype to avoid a full-size float32 copy:
         scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
-        data = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
-        return data, scale.float()
+        qdata = (tensor / scale).clamp_(-448, 448).to(torch.float8_e4m3fn)
+        return QuantizedTensor(qdata=qdata, scale=scale.float(), scheme=self)
+
+    def is_valid(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
+        qdata, scale = tensor.qdata, tensor.scale
+        return (
+            qdata.dtype == torch.float8_e4m3fn
+            and scale.dtype == torch.float32
+            and scale.shape == (*qdata.shape[:-3], 1, qdata.size(-2), 1)
+        )
 
 
 class Cache(MutableMapping[Hashable, object], DeviceMixin):

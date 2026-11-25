@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import Float8PerHead
+from sdm.cache import Float8PerHead, QuantizedTensor
 from sdm.nn import (
     SDPA,
     Attention,
@@ -764,6 +764,7 @@ def test_transformer_block_kv_cache() -> None:
             seqused_key_value=seqused_key_value,
             batch_size_limit=1,
         )
-    assert fp8_kv.key.dtype == torch.float8_e4m3fn
+    assert isinstance(fp8_kv.key, QuantizedTensor)
+    assert isinstance(fp8_kv.value, QuantizedTensor)
     torch.testing.assert_close(fp8_out, direct_out, atol=0.25, rtol=0)
     torch.testing.assert_close(fp8_cached_out, fp8_out)

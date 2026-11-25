@@ -14,7 +14,7 @@ from torch.nn import Linear
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
-from sdm.cache import KVCacheDType, KVCacheEntry
+from sdm.cache import KVCacheDType, KVCacheEntry, QuantizedTensor
 from sdm.nn import QueryScaling
 
 
@@ -416,18 +416,14 @@ class Attention(torch.nn.Module):
                 else None,
             )
             # TODO: Attention backend should decide whether to dequantize.
-            key_value = key_value.dequantize(query.dtype)
-            if (
-                key_value.key.dtype != query.dtype
-                or key_value.value.dtype != query.dtype
-            ):
+            key = _dequantize(key_value.key, query.dtype)
+            value = _dequantize(key_value.value, query.dtype)
+            if key.dtype != query.dtype or value.dtype != query.dtype:
                 raise ValueError(
                     f"Key/value projections were cached under dtypes "
-                    f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
-                    f"the query has dtype '{query.dtype}'"
+                    f"'{key.dtype}'/'{value.dtype}' but the query has dtype "
+                    f"'{query.dtype}'"
                 )
-            key = key_value.key
-            value = key_value.value
         elif key_value is None:
             query, key, value = self.qkv_lin(query).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -468,14 +464,17 @@ class Attention(torch.nn.Module):
         if return_key_value:
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
-            entry = KVCacheEntry(key=key.to(value.dtype), value=value)
+            dtype = value.dtype
+            key = key.to(dtype)
             if kv_cache_dtype is not None:
-                entry = kv_cache_dtype.quantize(entry)
-            entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
+                key = kv_cache_dtype.quantize(key)
+                value = kv_cache_dtype.quantize(value)
+            entry = KVCacheEntry(key=key, value=value)._apply_tensor(
+                lambda tensor: tensor.contiguous()
+            )
             # TODO: Attention backend should decide whether to dequantize.
-            stored = entry.dequantize(value.dtype)
-            key, value = stored.key, stored.value
-            del stored
+            key = _dequantize(entry.key, dtype)
+            value = _dequantize(entry.value, dtype)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -705,7 +704,7 @@ class TransformerBlock(torch.nn.Module):
             if isinstance(key_value, Tensor):
                 key_value_length = key_value.size(-2)
             elif isinstance(key_value, KVCacheEntry):
-                key_value_length = key_value.key.size(-3)
+                key_value_length = key_value.key.shape[-3]
 
             batch_size_limit = self.auto_batch_size_limit(
                 device=query.device,
@@ -925,7 +924,7 @@ def _batch_shape(
     if isinstance(key_value, Tensor):
         shapes.append(key_value.size()[:-2])
     elif isinstance(key_value, KVCacheEntry):
-        shapes += [key_value.key.size()[:-3], key_value.value.size()[:-3]]
+        shapes += [key_value.key.shape[:-3], key_value.value.shape[:-3]]
     if seqused_key_value is not None:
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
@@ -993,3 +992,12 @@ def _chunk(
         batch_indices.append(flat_index % size)
         flat_index = flat_index // size
     return tensor[tuple(reversed(batch_indices))]
+
+
+def _dequantize(
+    tensor: Tensor | QuantizedTensor,
+    dtype: torch.dtype,
+) -> Tensor:
+    if isinstance(tensor, QuantizedTensor):
+        return tensor.dequantize(dtype)
+    return tensor
