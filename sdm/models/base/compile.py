@@ -32,6 +32,13 @@ def compile_predict(
     zero or one compiles a graph of its own. With dynamic dimensions, a
     query without rows is predicted without the graph.
 
+    The columns (``-1``) are dynamic only without compiled preprocessing, as
+    the graph would otherwise hold the column names as constants. A
+    transformed query of only numerical columns, as the default recipe of
+    :class:`~sdm.models.KumoTabular` returns for numerical and categorical
+    ones, then runs without names, and a query with callbacks is predicted
+    without the graph. Other transformed queries keep the columns static.
+
     The lists of categories of a query are static: pass the same lists on
     every call, *e.g.*, a pandas ``Categorical`` with fixed categories. Lists
     with another number of categories or characters compile another graph,
@@ -85,6 +92,11 @@ def compile_predict(
         # Counted from the last dimension, *e.g.*, `{-2}` for the rows, as the
         # tensors that `fit` saved declare theirs.
         dims = {dim % x.dim() - x.dim() for dim in dynamic_dims}
+        if compile_preprocessing:
+            dims.discard(-1)
+        elif -1 in dims and callbacks:
+            # Callbacks may read the column names.
+            return model.predict(x, related_tables, callbacks=callbacks)
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows.
         # Without a copy, queries that are different slices of one table, such
@@ -94,10 +106,11 @@ def compile_predict(
         repeat = rows == 1 and -2 in dims and not callbacks
         if dims:
             x = x.clone(memory_format=torch.contiguous_format)
-            cache._mark_dynamic(dims)
         if repeat:
             x = torch.cat([x, x], dim=-2)
         if compile_preprocessing:
+            if dims:
+                cache._mark_dynamic(dims)
             _mark_dynamic(x, dims)
             out = compiled(x, related_tables, callbacks=callbacks)
         else:
@@ -107,6 +120,25 @@ def compile_predict(
                 related_tables,
                 callbacks=callbacks,
             )
+            if -1 in dims and all(
+                query.x.size(-1) == query.x.numerical.size(-1)
+                for query in queries
+            ):
+                # Numerical columns run without names.
+                queries = tuple(
+                    query._replace(
+                        x=TableTensor(
+                            columns={"numerical": None},
+                            numerical=query.x.numerical,
+                        )
+                    )
+                    for query in queries
+                )
+            else:
+                # Other columns, such as text ones, keep their names.
+                dims.discard(-1)
+            if dims:
+                cache._mark_dynamic(dims)
             for query in queries:
                 _mark_dynamic(query.x, dims)
             out = compiled(

@@ -216,7 +216,8 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
         # The dimensions of entries that follow the fitted data; see `_record`.
         self._dims: dict[Hashable, Mapping[int | None, int]] = {}
-        self._dynamic = False
+        # The dimensions of a table that `_mark_dynamic` marked.
+        self._dynamic: set[int] = set()
 
     @property
     def is_recording(self) -> bool:
@@ -261,7 +262,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def _record(
         self,
         key: Hashable,
-        value: KVCacheEntry,
+        value: Tensor | KVCacheEntry,
         dims: Mapping[int | None, int],
     ) -> None:
         r"""Store ``value`` and declare its dimensions that follow the table.
@@ -270,10 +271,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
         Args:
             key: The cache key.
-            value: The keys and values.
+            value: A tensor, or keys and values.
             dims: The dimensions of ``value`` by the dimension of the table,
                 ``[..., R, D]``, that they follow, *e.g.*, ``{-2: -3}`` for
-                keys and values of shape ``[..., R, H, C]``.
+                keys and values of shape ``[..., R, H, C]``, or ``{-1: -1}``
+                for a tensor of shape ``[..., D]``.
         """
         self[key] = value
         self._dims[key] = dims
@@ -284,12 +286,18 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         # Every fitted tensor with its declared dimensions; see `_record`.
         for key, value in self.items():
             dims = self._dims.get(key)
-            if dims is not None:
-                # Keys and values of `_record`, not the scales of quantized
-                # ones, which are per head.
-                entry = cast(KVCacheEntry, value)
-                yield entry.key, dims
-                yield entry.value, dims
+            if isinstance(value, KVCacheEntry) and dims is not None:
+                # Keys and values of `_record`. Their scales, `[..., 1, H, 1]`,
+                # follow only the dimensions before -3: columns, not rows.
+                yield value.key, dims
+                yield value.value, dims
+                scale_dims = {d: own for d, own in dims.items() if own < -3}
+                for scale in (value.key_scale, value.value_scale):
+                    if scale is not None:
+                        yield scale, scale_dims
+            elif dims is not None:
+                # A tensor of `_record`.
+                yield cast(Tensor, value), dims
             else:
                 # A nested cache or the recipe execution lists its own.
                 declared = getattr(value, "_dynamic_dims", None)
@@ -299,22 +307,27 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def _mark_dynamic(self, dims: Collection[int]) -> None:
         r"""Mark the declared dimensions that follow ``dims`` as dynamic.
 
-        Marks for :func:`torch.compile` stay on the tensors, so a cache is
-        marked once.
+        Marks for :func:`torch.compile` stay on the tensors, so each
+        dimension is marked once.
 
         Args:
             dims: The dimensions of a table, counted from its last one,
                 *e.g.*, ``{-2}`` for the rows.
         """
-        if self._dynamic:
+        if self._dynamic.issuperset(dims):
             return
         for tensor, follows in self._dynamic_dims():
             for table_dim, dim in follows.items():
                 # `None` stands for a dimension that follows the fitted data
                 # itself, such as a list of categories.
-                if table_dim is None or table_dim in dims:
+                if table_dim == -1 and table_dim in dims:
+                    # Graphs that hold the column names keep them static.
+                    torch._dynamo.maybe_mark_dynamic(
+                        tensor, dim % tensor.dim()
+                    )
+                elif table_dim is None or table_dim in dims:
                     _mark_dynamic(tensor, dim)
-        self._dynamic = True
+        self._dynamic.update(dims)
 
     def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
@@ -361,7 +374,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         # Caches saved before they recorded dimensions have none, and the
         # marks of a saved cache do not survive its tensors.
         self.__dict__.update({"_dims": {}} | state)
-        self._dynamic = False
+        self._dynamic = set()
         if not pinned or not torch.cuda.is_available():
             return
 

@@ -470,6 +470,55 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("kv_cache_dtype", [None, "fp8_per_head"])
+def test_compile_predict_columns(kv_cache_dtype: str | None) -> None:
+    model = _build("regression", "small")
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        compile_preprocessing=False,
+    )
+    # Without compiled preprocessing, fits on tables with other numbers of
+    # numerical and categorical columns and rows share one graph. The second
+    # table holds a constant column, and the last has more columns than an
+    # estimator keeps.
+    for num_numerical, num_categorical, rows in (
+        (17, 0, 40),
+        (5, 2, 30),
+        (0, 3, 40),
+        (510, 1, 12),
+    ):
+        x = torch.randn(rows + 9, num_numerical)
+        if num_numerical == 5:
+            x[:, 1] = 1.0
+        x = TableTensor.from_tensor(
+            x, columns=[f"{num_numerical}_{i}" for i in range(num_numerical)]
+        )
+        codes = torch.arange(rows + 9).unsqueeze(-1) % torch.arange(
+            3, 3 + num_categorical
+        )
+        categorical = TableTensor.from_tensor(
+            codes, columns=[f"c{i}" for i in range(num_categorical)]
+        )
+        x = torch.cat([x, categorical], dim=-1)
+        model.fit(
+            x[:rows],
+            torch.randn(rows, 1),
+            num_estimators=4,
+            kv_cache_dtype=kv_cache_dtype,
+        )
+        for query in (x[rows:], x[rows : rows + 3]):
+            torch.testing.assert_close(
+                actual=predict(query).numerical,
+                expected=model.predict(query).numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
+    assert counter.frame_count == 1
+
+
+@pytest.mark.usefixtures("compilation")
 def test_compile_predict_query_categories() -> None:
     def table(
         colors: list[str],
@@ -504,22 +553,30 @@ def test_compile_predict_query_categories() -> None:
     assert counter.frame_count == 1
 
     counter = CompileCounter()
-    predict = model._compile_predict(
+    predict_transformed = model._compile_predict(
         backend=counter,
         fullgraph=True,
         compile_preprocessing=False,
     )
     # Without compiled preprocessing, queries that declare other lists of
-    # categories share one graph as well.
+    # categories share one graph as well, and the first predictions still
+    # work after that one marks the columns as dynamic.
     for categories in (("a", "b", "c"), ("a", "b"), ("c", "a", "d", "e")):
         query = table(list(categories), categories)
         torch.testing.assert_close(
-            actual=predict(query).numerical,
+            actual=predict_transformed(query).numerical,
             expected=model.predict(query).numerical,
             atol=1e-4,
             rtol=1e-4,
         )
     assert counter.frame_count == 1
+    query = table(["a", "b"])
+    torch.testing.assert_close(
+        actual=predict(query).numerical,
+        expected=model.predict(query).numerical,
+        atol=1e-4,
+        rtol=1e-4,
+    )
 
 
 @pytest.mark.usefixtures("compilation")
