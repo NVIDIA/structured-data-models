@@ -144,6 +144,8 @@ def test_fp8_attention_backend(channels: int, context: int) -> None:
     assert not backend.supports(query, unquantized, **options)
     requires_grad = query.detach().requires_grad_()
     assert not backend.supports(requires_grad, key_value, **options)
+    supports = torch.compile(backend.supports, fullgraph=True)
+    assert not supports(query, key_value, **options)
     assert backend.supports(query, key_value, **options)
 
     with torch.inference_mode():
