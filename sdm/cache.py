@@ -20,7 +20,7 @@ from sdm._memory import set_pinned_max_round_threshold
 from sdm.tensor.mixin import DeviceMixin
 
 
-class _KVCacheEntry(NamedTuple):
+class _KeyValue(NamedTuple):
     key: Tensor
     value: Tensor
     key_scale: Tensor | None = None
@@ -28,8 +28,8 @@ class _KVCacheEntry(NamedTuple):
     kv_cache_dtype: "KVCacheDType | None" = None
 
 
-class KVCacheEntry(_KVCacheEntry, DeviceMixin):
-    r"""Cached key/value projections for a single transformer block.
+class KeyValue(_KeyValue, DeviceMixin):
+    r"""Key and value projections for attention, optionally quantized.
 
     Args:
         key: Key projections with shape ``[..., KV, H, C]``.
@@ -49,8 +49,8 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             )
         return self
 
-    def dequantize(self, dtype: torch.dtype) -> "KVCacheEntry":
-        r"""Returns the entry with quantized K/V dequantized to ``dtype``.
+    def dequantize(self, dtype: torch.dtype) -> "KeyValue":
+        r"""Returns the keys and values, dequantized to ``dtype`` if quantized.
 
         Args:
             dtype: The target dtype.
@@ -80,34 +80,34 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 
 
 class KVCacheDType(abc.ABC):
-    r"""Base class for the storage dtype of cached key/value projections."""
+    r"""Base class for the storage dtype of key/value projections."""
 
     @abc.abstractmethod
-    def is_quantized(self, entry: KVCacheEntry) -> bool:
-        r"""Returns whether K/V of ``entry`` are in this storage dtype.
+    def is_quantized(self, key_value: KeyValue) -> bool:
+        r"""Returns whether ``key_value`` is in this storage dtype.
 
         Args:
-            entry: Key/value projections.
+            key_value: Key/value projections.
         """
 
     @abc.abstractmethod
-    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:
-        r"""Returns ``entry`` in this storage dtype.
+    def quantize(self, key_value: KeyValue) -> KeyValue:
+        r"""Returns ``key_value`` in this storage dtype.
 
         Args:
-            entry: Key/value projections as computed by attention.
+            key_value: Key/value projections as computed by attention.
         """
 
     @abc.abstractmethod
     def dequantize(
         self,
-        entry: KVCacheEntry,
+        key_value: KeyValue,
         dtype: torch.dtype,
-    ) -> KVCacheEntry:
-        r"""Returns ``entry`` with key/value projections in ``dtype``.
+    ) -> KeyValue:
+        r"""Returns ``key_value`` with keys and values in ``dtype``.
 
         Args:
-            entry: Key/value projections in this storage dtype.
+            key_value: Key/value projections in this storage dtype.
             dtype: The target dtype.
         """
 
@@ -115,41 +115,41 @@ class KVCacheDType(abc.ABC):
 class Unquantized(KVCacheDType):
     r"""Leaves key/value projections as computed."""
 
-    def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
-        return entry.key_scale is None and entry.value_scale is None
+    def is_quantized(self, key_value: KeyValue) -> bool:  # noqa: D102
+        return key_value.key_scale is None and key_value.value_scale is None
 
-    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
-        return entry
+    def quantize(self, key_value: KeyValue) -> KeyValue:  # noqa: D102
+        return key_value
 
     def dequantize(  # noqa: D102
         self,
-        entry: KVCacheEntry,
+        key_value: KeyValue,
         dtype: torch.dtype,
-    ) -> KVCacheEntry:
-        return entry
+    ) -> KeyValue:
+        return key_value
 
 
 class Float8PerHead(KVCacheDType):
     r"""Quantizes key/value to FP8 (E4M3) with one FP32 scale per head."""
 
-    def is_quantized(self, entry: KVCacheEntry) -> bool:  # noqa: D102
+    def is_quantized(self, key_value: KeyValue) -> bool:  # noqa: D102
         return all(
             data.dtype == torch.float8_e4m3fn
             and scale is not None
             and scale.dtype == torch.float32
             and scale.shape == (*data.shape[:-3], 1, data.size(-2), 1)
             for data, scale in (
-                (entry.key, entry.key_scale),
-                (entry.value, entry.value_scale),
+                (key_value.key, key_value.key_scale),
+                (key_value.value, key_value.value_scale),
             )
         )
 
-    def quantize(self, entry: KVCacheEntry) -> KVCacheEntry:  # noqa: D102
-        if self.is_quantized(entry):
-            return entry
-        key, key_scale = self._quantize(entry.key)
-        value, value_scale = self._quantize(entry.value)
-        return KVCacheEntry(
+    def quantize(self, key_value: KeyValue) -> KeyValue:  # noqa: D102
+        if self.is_quantized(key_value):
+            return key_value
+        key, key_scale = self._quantize(key_value.key)
+        value, value_scale = self._quantize(key_value.value)
+        return KeyValue(
             key=key,
             value=value,
             key_scale=key_scale,
@@ -159,12 +159,16 @@ class Float8PerHead(KVCacheDType):
 
     def dequantize(  # noqa: D102
         self,
-        entry: KVCacheEntry,
+        key_value: KeyValue,
         dtype: torch.dtype,
-    ) -> KVCacheEntry:
-        return KVCacheEntry(
-            key=entry.key.to(dtype).mul_(cast(Tensor, entry.key_scale)),
-            value=entry.value.to(dtype).mul_(cast(Tensor, entry.value_scale)),
+    ) -> KeyValue:
+        return KeyValue(
+            key=key_value.key.to(dtype).mul_(
+                cast(Tensor, key_value.key_scale)
+            ),
+            value=key_value.value.to(dtype).mul_(
+                cast(Tensor, key_value.value_scale)
+            ),
         )
 
     @staticmethod

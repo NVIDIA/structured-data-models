@@ -6,8 +6,8 @@ KVCacheDType
 .. autoclass:: sdm.cache.KVCacheDType
     :members:
 
-KVCacheEntry
-============
+KeyValue
+========
 
-.. autoclass:: sdm.cache.KVCacheEntry
+.. autoclass:: sdm.cache.KeyValue
     :members:
