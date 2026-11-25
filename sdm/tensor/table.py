@@ -209,7 +209,7 @@ class TableTensor(Tensor):
     _text: StringTensor
     _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
-    _column_to_loc: dict[str, tuple[Stype, int]]
+    _stypes: dict[str, Stype]
 
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
@@ -330,10 +330,6 @@ class TableTensor(Tensor):
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
-        column_names = list(chain.from_iterable(columns.values()))
-        if len(column_names) != len(set(column_names)):
-            raise ValueError("Expected column names to be unique")
-
         # Keep enum objects out of captured graph arguments.
         return TableTensor._make_table_tensor(
             columns={str(stype): names for stype, names in columns.items()},
@@ -361,14 +357,16 @@ class TableTensor(Tensor):
         stype_columns = {
             Stype(stype): names for stype, names in columns.items()
         }
-        column_to_loc = {
-            name: (stype, i)
+        stypes = {
+            name: stype
             for stype, names in stype_columns.items()
-            for i, name in enumerate(names)
+            for name in names
         }
+        if len(stypes) != sum(map(len, stype_columns.values())):
+            raise ValueError("Expected column names to be unique")
         out = Tensor._make_wrapper_subclass(
             cls=cls,
-            size=(*numerical.size()[:-1], len(column_to_loc)),
+            size=(*numerical.size()[:-1], len(stypes)),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
@@ -379,7 +377,7 @@ class TableTensor(Tensor):
         out._text = text
         out._id = id
         out._columns = stype_columns
-        out._column_to_loc = column_to_loc
+        out._stypes = stypes
         return out
 
     @classmethod
@@ -902,12 +900,12 @@ class TableTensor(Tensor):
     @property
     def column_names(self) -> frozenset[str]:
         r"""The column names of this tensor."""
-        return frozenset(self._column_to_loc)
+        return frozenset(self._stypes)
 
     @property
     def stypes(self) -> Mapping[str, Stype]:
         r"""Return the semantic type for each column."""
-        return {key: stype for key, (stype, _) in self._column_to_loc.items()}
+        return self._stypes.copy()
 
     def stype(self, column: str) -> Stype:
         r"""Return the semantic type for a column.
@@ -915,7 +913,7 @@ class TableTensor(Tensor):
         Args:
             column: The column name.
         """
-        return self._column_to_loc[column][0]
+        return self._stypes[column]
 
     @property
     def active_stypes(self) -> frozenset[Stype]:
@@ -1084,7 +1082,7 @@ class TableTensor(Tensor):
         columns = {columns} if isinstance(columns, str) else set(columns)
 
         for column in columns:
-            if column not in self._column_to_loc:
+            if column not in self._stypes:
                 raise KeyError(column)
 
         index_dict: dict[Stype, list[int]] = defaultdict(list)
@@ -1127,7 +1125,7 @@ class TableTensor(Tensor):
         columns = {columns} if isinstance(columns, str) else set(columns)
 
         for column in columns:
-            if column not in self._column_to_loc:
+            if column not in self._stypes:
                 raise KeyError(column)
 
         columns = set(chain.from_iterable(self._columns.values())) - columns

@@ -64,6 +64,9 @@ MODEL_KWARGS: dict[str, dict[str, Any]] = {
 }
 
 
+_QUANTILE_COLUMNS = tuple(f"q{i:03d}" for i in range(1, 1000))
+
+
 class KumoTabular(ICLModel):
     r"""The tabular foundation model from the `"NVIDIA Kumo Tabular: Pushing
     the Accuracy-Efficiency Frontier for Tabular Prediction"
@@ -249,9 +252,7 @@ class KumoTabular(ICLModel):
                 cache=cache,
             )
             return TableTensor(
-                columns={
-                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
-                },
+                columns={Stype.numerical: _QUANTILE_COLUMNS},
                 numerical=out,
             )
 
