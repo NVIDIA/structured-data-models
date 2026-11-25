@@ -414,6 +414,31 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        callbacks = () if callbacks is None else callbacks
+        queries, requires_grad = self._transform_query(
+            x,
+            related_tables,
+            callbacks=callbacks,
+        )
+        return self._predict_queries(
+            queries,
+            device=x.device,
+            callbacks=callbacks,
+            requires_grad=requires_grad,
+        )
+
+    def _transform_query(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None,
+        callbacks: Sequence[Callback],
+    ) -> tuple[tuple[MemberQuery, ...], bool]:
+        r"""Transform the query of :meth:`predict` with the fitted recipe.
+
+        Returns:
+            The query of each member, and whether :meth:`_predict_queries`
+            requires gradients.
+        """
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -421,7 +446,6 @@ class ICLModel(Model):
                 "To fix, call `model.eval()`."
             )
 
-        callbacks = () if callbacks is None else callbacks
         inputs = [x]
         if related_tables is not None:
             inputs.extend(related_tables.tables.values())
@@ -461,25 +485,40 @@ class ICLModel(Model):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
+        with (
+            torch.amp.autocast(x.device.type, enabled=False),
+            inference_mode(
+                "grad"
+                if input_requires_grad
+                else "no_grad"
+                if requires_grad
+                else "inference"
+            ),
+        ):
+            queries = recipe_execution.transform(x, related_tables)
+        return queries, requires_grad
+
+    def _predict_queries(
+        self,
+        queries: tuple[MemberQuery, ...],
+        *,
+        device: torch.device,
+        callbacks: Sequence[Callback],
+        requires_grad: bool,
+    ) -> TableTensor:
+        r"""Predict the queries that :meth:`_transform_query` returned."""
+        assert self._cache is not None
+        recipe_execution = cast(
+            RecipeExecution,
+            self._cache["recipe_execution"],
+        )
         with self._prefetch(
             items=[
                 cast(Cache, self._cache[i])
                 for i in range(cast(int, self._cache["num_batches"]))
             ],
-            device=x.device,
+            device=device,
         ) as caches:
-            with (
-                torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode(
-                    "grad"
-                    if input_requires_grad
-                    else "no_grad"
-                    if requires_grad
-                    else "inference"
-                ),
-            ):
-                queries = recipe_execution.transform(x, related_tables)
-
             outs: list[TableTensor] = []
             start = 0
             for cache in caches:
@@ -520,26 +559,27 @@ class ICLModel(Model):
         # Regression: invert target before stacking estimator outputs.
         if cast(Cache, self._cache[0])["classes"] is None:
             with (
-                torch.amp.autocast(x.device.type, enabled=False),
+                torch.amp.autocast(device.type, enabled=False),
                 inference_mode("grad" if requires_grad else "inference"),
             ):
                 outs = list(recipe_execution.inverse_transform_target(outs))
 
         with (
-            torch.amp.autocast(x.device.type, enabled=False),
+            torch.amp.autocast(device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
             return recipe_execution.transform_output(outs)
 
     def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
-        r"""Compile :meth:`predict` using :func:`torch.compile`.
+        r"""Compile the model of :meth:`predict` using :func:`torch.compile`.
 
         Args:
             kwargs: Keyword arguments passed to
                 :func:`~sdm.models.base.compile.compile_predict`.
 
         Returns:
-            The compiled function, which is called like :meth:`predict`.
+            A function that is called like :meth:`predict`: it transforms
+            the query with the fitted recipe, and runs the compiled model.
             :meth:`predict` itself is not compiled.
         """
         return compile_predict(self, **kwargs)

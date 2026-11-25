@@ -454,11 +454,14 @@ def test_compile_predict(
 
 @pytest.mark.usefixtures("compilation")
 def test_compile_predict_query_categories() -> None:
-    def table(colors: list[str]) -> TableTensor:
+    def table(
+        colors: list[str],
+        categories: tuple[str, ...] = ("a", "b", "c"),
+    ) -> TableTensor:
         df = pd.DataFrame(
             {
                 "x": torch.randn(len(colors)).numpy(),
-                "color": pd.Categorical(colors, categories=["a", "b", "c"]),
+                "color": pd.Categorical(colors, categories=categories),
             }
         )
         return TableTensor.from_pandas(
@@ -471,10 +474,10 @@ def test_compile_predict_query_categories() -> None:
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # Queries that declare the same list of categories share one graph,
-    # whichever of the categories their rows contain.
-    for colors in (["a", "b", "c", "a"], ["b"], ["c", "a", "c"]):
-        query = table(colors)
+    # Queries share one graph, whichever list of categories they declare: the
+    # recipe encodes the categories before the graph.
+    for categories in (("a", "b", "c"), ("a", "b"), ("c", "a", "d", "e")):
+        query = table(list(categories), categories)
         torch.testing.assert_close(
             actual=predict(query).numerical,
             expected=model.predict(query).numerical,
