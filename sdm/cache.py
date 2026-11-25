@@ -4,6 +4,7 @@
 import abc
 from collections.abc import (
     Callable,
+    Collection,
     Hashable,
     Iterable,
     Iterator,
@@ -212,6 +213,10 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 f"Unsupported key/value cache dtype '{kv_cache_dtype}'"
             )
         self._items: dict[Hashable, object] = dict(*args, **kwargs)
+        # The dimensions of entries that follow the fitted data; see `_record`.
+        self._dims: dict[Hashable, Mapping[int, int]] = {}
+        # The dimensions of a table that `_mark_dynamic` marked.
+        self._dynamic: set[int] = set()
 
     @property
     def is_recording(self) -> bool:
@@ -253,6 +258,51 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         _freeze(self)
         return self
 
+    def _record(
+        self,
+        key: Hashable,
+        value: KVCacheEntry,
+        dims: Mapping[int, int],
+    ) -> None:
+        r"""Store ``value`` and declare its dimensions that follow the table.
+
+        Compiled predictions keep them dynamic along with those of the query.
+
+        Args:
+            key: The cache key.
+            value: The keys and values.
+            dims: The dimensions of ``value`` by the dimension of the table,
+                ``[..., R, D]``, that they follow, *e.g.*, ``{-2: -3}`` for
+                keys and values of shape ``[..., R, H, C]``.
+        """
+        self[key] = value
+        self._dims[key] = dims
+
+    def _mark_dynamic(self, dims: Collection[int]) -> None:
+        r"""Mark the declared dimensions that follow ``dims`` as dynamic.
+
+        Marks for :func:`torch.compile` stay on the tensors, so each
+        dimension is marked once.
+
+        Args:
+            dims: The dimensions of a table, counted from its last one,
+                *e.g.*, ``{-2}`` for the rows.
+        """
+        if self._dynamic.issuperset(dims):
+            return
+        for key, value in self.items():
+            if isinstance(value, Cache):
+                value._mark_dynamic(dims)
+                continue
+            for table_dim, dim in self._dims.get(key, {}).items():
+                if table_dim in dims:
+                    # Not the scales of quantized keys and values, which are
+                    # per head.
+                    entry = cast(KVCacheEntry, value)
+                    for tensor in (entry.key, entry.value):
+                        torch._dynamo.mark_dynamic(tensor, dim % tensor.dim())
+        self._dynamic.update(dims)
+
     def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:
             raise RuntimeError(
@@ -293,7 +343,10 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         pinned = set(
             cast(tuple[int, ...], state.pop("_pinned_tensor_indices", ()))
         )
-        self.__dict__.update(state)
+        # Caches saved before they recorded dimensions have none, and the
+        # pinned copies below are not marked.
+        self.__dict__.update({"_dims": {}} | state)
+        self._dynamic = set()
         if not pinned or not torch.cuda.is_available():
             return
 
@@ -349,4 +402,5 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         )
         out._kv_cache_dtype = self._kv_cache_dtype
         out._mode = self._mode
+        out._dims = dict(self._dims)
         return out

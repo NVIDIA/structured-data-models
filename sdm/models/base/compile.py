@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -19,23 +18,9 @@ if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
 
 
-@dataclass(frozen=True)
-class DynamicShapes:
-    r"""The dimensions that a compiled graph of a model keeps dynamic.
-
-    A model returns its default from ``ICLModel._default_dynamic_shapes``,
-    and :func:`compile_predict` marks them.
-    """
-
-    #: The dimensions of the transformed query. Rows (``-2``) require that the
-    #: model and its recipe predict every query row independently of the other
-    #: rows.
-    query: tuple[int, ...] = ()
-
-
 def compile_predict(
     model: ICLModel,
-    dynamic_shapes: DynamicShapes | None = None,
+    dynamic_dims: tuple[int, ...] | None = None,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile the model of ``model.predict`` using :func:`torch.compile`.
@@ -45,16 +30,19 @@ def compile_predict(
     the default one of :class:`~sdm.models.KumoTabular`, queries with any
     lists of categories share one graph.
 
-    One graph serves queries of any size along the default
-    :class:`DynamicShapes` of ``model``. A query without rows is predicted
-    without the graph.
+    One graph serves queries and fits of any size along the dynamic
+    dimensions, except that a fitted size of zero or one compiles a graph of
+    its own. A query without rows is predicted without the graph.
 
     Args:
         model: The model.
-        dynamic_shapes: The dimensions to mark as dynamic instead of the
-            default of ``model``, *e.g.*, ``DynamicShapes(query=(-2,))``
-            for the query rows. ``DynamicShapes()`` marks none: the query
-            shape is static, and every new shape compiles another graph. A
+        dynamic_dims: The dimensions of the transformed query to mark as
+            dynamic instead of the default of ``model``, *e.g.*, ``(-2,)``
+            for the rows, which requires that the model and its recipe
+            predict every query row independently of the other rows. The
+            tensors that ``fit`` saved follow the query: with ``-2``, the
+            context rows are dynamic as well. ``()`` marks none: the shapes
+            are static, and every new shape compiles another graph. A
             dimension that the model cannot keep dynamic fails to compile.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
@@ -63,8 +51,15 @@ def compile_predict(
             limit.
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
-    compiled = torch.compile(model._predict_queries, **kwargs)
-    shapes = dynamic_shapes or model._default_dynamic_shapes()
+    compiled: Callable[..., TableTensor] = torch.compile(
+        model._predict_queries,
+        **kwargs,
+    )
+    if dynamic_dims is None:
+        dynamic_dims = model._default_dynamic_dims()
+    if dynamic_dims:
+        for patch in model._dynamic_compile_patches():
+            compiled = patch(compiled)
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -73,14 +68,17 @@ def compile_predict(
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:
         rows = x.size(-2)
-        if rows == 0:
+        cache = model._cache
+        if rows == 0 or cache is None:
             return model.predict(x, related_tables, callbacks=callbacks)
+        # Counted from the last dimension, *e.g.*, `{-2}` for the rows, as the
+        # tensors that `fit` saved declare theirs.
+        dims = {dim % x.dim() - x.dim() for dim in dynamic_dims}
         # A graph specializes on sizes of zero and one, so a single row is
         # repeated if the rows are dynamic, unless callbacks see the rows.
         # Without a copy, queries that are different slices of one table, such
         # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
-        dims = {dim % x.dim() for dim in shapes.query}
-        repeat = rows == 1 and x.dim() - 2 in dims and not callbacks
+        repeat = rows == 1 and -2 in dims and not callbacks
         x = (
             torch.cat([x, x], dim=-2)
             if repeat
@@ -92,9 +90,10 @@ def compile_predict(
             related_tables,
             callbacks=callbacks,
         )
+        cache._mark_dynamic(dims)
         for query in queries:
             for dim in dims:
-                query.x._mark_dynamic(dim)
+                query.x._mark_dynamic(dim % x.dim())
         out = compiled(
             queries,
             device=x.device,
