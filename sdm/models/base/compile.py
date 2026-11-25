@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 def compile_predict(
     model: ICLModel,
     dynamic_dims: tuple[int, ...] | None = None,
+    *,
+    compiled_models: dict[Module, Callable[..., Tensor]] | None = None,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
@@ -43,7 +45,8 @@ def compile_predict(
     A single query row is repeated instead, and a query without rows is
     predicted without the graph.
 
-    Other models compile ``predict`` as a whole, with static shapes.
+    Other models compile ``predict`` as a whole, with static shapes and
+    without ``compiled_models``.
 
     Args:
         model: The model.
@@ -56,6 +59,10 @@ def compile_predict(
             marks, and every new shape of the query compiles another graph.
             A dimension of the query that the model cannot keep dynamic fails
             to compile. Not supported for a ``predict`` compiled as a whole.
+        compiled_models: The compiled models by model, to share between
+            models that share their models. It is filled lazily, holds strong
+            references to the models, and is for one compile configuration:
+            the ``kwargs`` of the first compile of a model apply.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -64,10 +71,10 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     if not model._compilable_models():
-        if dynamic_dims:
+        if dynamic_dims or compiled_models is not None:
             raise ValueError(
                 f"{model.__class__.__name__!r} does not support dynamic "
-                f"dimensions in a compiled 'predict'"
+                f"dimensions or shared compiled models in a compiled 'predict'"
             )
         return torch.compile(model.predict, **kwargs)
 
@@ -76,7 +83,7 @@ def compile_predict(
     )
     # By model, compiled on its first call: the models of ``model`` may be
     # replaced.
-    compiled: dict[Module, Callable[..., Tensor]] = {}
+    compiled_models = {} if compiled_models is None else compiled_models
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
@@ -86,9 +93,14 @@ def compile_predict(
     ) -> TableTensor:
         models = {}
         for task, module in model._compilable_models().items():
-            if module not in compiled:
-                compiled[module] = torch.compile(module, **kwargs)
-            models[task] = partial(_call, module, compiled[module], dims)
+            if module not in compiled_models:
+                compiled_models[module] = torch.compile(module, **kwargs)
+            models[task] = partial(
+                _call,
+                module,
+                compiled_models[module],
+                dims,
+            )
         return model._predict(
             x=x,
             related_tables=related_tables,
