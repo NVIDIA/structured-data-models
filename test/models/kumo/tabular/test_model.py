@@ -465,7 +465,7 @@ def test_compile_predict_query_categories() -> None:
         df = pd.DataFrame(
             {
                 "x": torch.randn(len(colors)).numpy(),
-                "color": pd.Categorical(colors, categories=["a", "b", "c"]),
+                "color": pd.Categorical(colors),
             }
         )
         return TableTensor.from_pandas(
@@ -478,9 +478,9 @@ def test_compile_predict_query_categories() -> None:
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # Queries that declare the same list of categories share one graph,
-    # whichever of the categories their rows contain.
-    for colors in (["a", "b", "c", "a"], ["b"], ["c", "a", "c"]):
+    # Queries share one graph, whichever categories their rows contain,
+    # including one that the context does not.
+    for colors in (["a", "b", "c", "a"], ["b", "a"], ["c", "d", "c"]):
         query = table(colors)
         torch.testing.assert_close(
             actual=predict(query).numerical,

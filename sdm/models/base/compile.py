@@ -12,6 +12,7 @@ import torch
 from torch import Tensor
 
 from sdm import TableTensor
+from sdm.tensor.var_len import _mark_dynamic
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -25,13 +26,12 @@ def compile_predict(
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
     One graph serves queries and fits of any size along the dynamic
-    dimensions, and fits with any categories, except that a fitted size of
-    zero or one compiles a graph of its own. With dynamic dimensions, a
-    query without rows is predicted without the graph.
-
-    The lists of categories of a query are static: pass the same lists on
-    every call, *e.g.*, a pandas ``Categorical`` with fixed categories. Lists
-    with another number of categories or characters compile another graph.
+    dimensions, with any lists of categories, except that a size of zero or
+    one compiles a graph of its own, *e.g.*, for a categorical column that
+    holds a single category or only missing values in the query or in the
+    context. Queries that declare the categories of the context, *e.g.*, a
+    pandas ``Categorical`` with fixed categories, avoid it. With dynamic
+    dimensions, a query without rows is predicted without the graph.
 
     Args:
         model: The model.
@@ -78,7 +78,7 @@ def compile_predict(
         x = x.clone(memory_format=torch.contiguous_format)
         if repeat:
             x = torch.cat([x, x], dim=-2)
-        _mark_dynamic(x, dims)
+        _mark_query(x, dims)
         cache._mark_dynamic(dims)
         out = compiled(x, *args, **kwargs)
         return out[..., :1, :] if repeat else out
@@ -86,10 +86,15 @@ def compile_predict(
     return predict
 
 
-def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:
+def _mark_query(x: Tensor, dims: set[int]) -> None:
     for dim in dims:
-        dim %= tensor.dim()
-        if isinstance(tensor, TableTensor):
-            tensor._mark_dynamic(dim)
+        dim %= x.dim()
+        if isinstance(x, TableTensor):
+            x._mark_dynamic(dim)
         else:
-            torch._dynamo.mark_dynamic(tensor, dim)
+            torch._dynamo.mark_dynamic(x, dim)
+    if isinstance(x, TableTensor):
+        # Like the fitted lists of categories, the lists of the query follow
+        # its data.
+        for categories in x.categorical.categories:
+            _mark_dynamic(categories, 0)
