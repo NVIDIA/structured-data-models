@@ -1,12 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Dynamic shapes of a compiled :meth:`~sdm.models.ICLModel.predict`."""
+"""Compilation of :meth:`~sdm.models.ICLModel.predict`."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -15,28 +14,16 @@ from torch import Tensor
 from torch.nn import Module
 
 from sdm import RelatedTables, TableTensor
+from sdm.cache import Cache
 from sdm.models.base import Callback
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
 
 
-@dataclass(frozen=True)
-class DynamicShapes:
-    r"""The dimensions that a compiled graph of a model keeps dynamic.
-
-    A model returns its default from ``ICLModel._default_dynamic_shapes``,
-    and :func:`compile_predict` marks them.
-    """
-
-    #: The dimensions of the query. Rows (``-2``) require that the model
-    #: predicts every query row independently of the other rows.
-    query: tuple[int, ...] = ()
-
-
 def compile_predict(
     model: ICLModel,
-    dynamic_shapes: DynamicShapes | None = None,
+    dynamic_dims: tuple[int, ...] | None = None,
     **kwargs: Any,
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
@@ -51,20 +38,24 @@ def compile_predict(
     :class:`~sdm.models.KumoTabular` shares a graph among up to 10 classes;
     more classes compile further graphs.
 
-    One graph serves queries of any size along the default
-    :class:`DynamicShapes` of ``model``. A query without rows is predicted
-    without the graph.
+    One graph serves queries and fits of any size along the dynamic
+    dimensions, except that a size of zero or one compiles a graph of its own.
+    A single query row is repeated instead, and a query without rows is
+    predicted without the graph.
 
     Other models compile ``predict`` as a whole, with static shapes.
 
     Args:
         model: The model.
-        dynamic_shapes: The dimensions to mark as dynamic instead of the
-            default of ``model``, *e.g.*, ``DynamicShapes(query=(-2,))``
-            for the query rows. ``DynamicShapes()`` marks none: the query
-            shape is static, and every new shape compiles another graph. A
-            dimension that the model cannot keep dynamic fails to compile.
-            Not supported for a ``predict`` compiled as a whole.
+        dynamic_dims: The dimensions of the query ``[..., R, C]`` of a model
+            to mark as dynamic instead of the default of ``model``, counted
+            from the last one, *e.g.*, ``(-2,)`` for the rows, which requires
+            that the model predicts every query row independently of the
+            other rows. The tensors that ``fit`` saved follow the query: with
+            ``-2``, the context rows are dynamic as well. ``()`` adds no
+            marks, and every new shape of the query compiles another graph.
+            A dimension of the query that the model cannot keep dynamic fails
+            to compile. Not supported for a ``predict`` compiled as a whole.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -73,14 +64,16 @@ def compile_predict(
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
     if not model._compilable_models():
-        if dynamic_shapes is not None and dynamic_shapes.query:
+        if dynamic_dims:
             raise ValueError(
                 f"{model.__class__.__name__!r} does not support dynamic "
-                f"shapes in a compiled 'predict'"
+                f"dimensions in a compiled 'predict'"
             )
         return torch.compile(model.predict, **kwargs)
 
-    shapes = dynamic_shapes or model._default_dynamic_shapes()
+    dims = (
+        model._default_dynamic_dims() if dynamic_dims is None else dynamic_dims
+    )
     # By model, compiled on its first call: the models of ``model`` may be
     # replaced.
     compiled: dict[Module, Callable[..., Tensor]] = {}
@@ -91,8 +84,6 @@ def compile_predict(
         *,
         callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:
-        # Counted from the last dimension: the models see stacked estimators.
-        dims = {dim % x.dim() - x.dim() for dim in shapes.query}
         models = {}
         for task, module in model._compilable_models().items():
             if module not in compiled:
@@ -111,14 +102,15 @@ def compile_predict(
 def _call(
     module: Module,
     compiled: Callable[..., Tensor],
-    dims: set[int],
+    dims: tuple[int, ...],
     x: Tensor,  # [..., R, C]
     *args: Any,
+    cache: Cache,
     **kwargs: Any,
 ) -> Tensor:
     rows = x.size(-2)
     if rows == 0:
-        return module(x, *args, **kwargs)
+        return module(x, *args, cache=cache, **kwargs)
     # A graph specializes on sizes of zero and one, so a single row is
     # repeated if the rows are dynamic. It also specializes on the strides and
     # the storage offset of a view, such as a slice or the expanded query of
@@ -129,7 +121,10 @@ def _call(
         if repeat
         else x.clone(memory_format=torch.contiguous_format)
     )
+    # The graph gets the query and the fitted state on its device, which are
+    # copies without the marks of earlier calls.
     for dim in dims:
         torch._dynamo.mark_dynamic(x, dim % x.dim())
-    out = compiled(x, *args, **kwargs)
+    cache._mark_dynamic(dims)
+    out = compiled(x, *args, cache=cache, **kwargs)
     return out[..., :1, :] if repeat else out

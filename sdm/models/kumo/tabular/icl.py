@@ -118,7 +118,9 @@ class ICLBlock(torch.nn.Module):
                         entry = entry._apply_tensor(
                             lambda t: _clone(t[..., :kv_heads, :])  # noqa: B023
                         )
-                    cache[cache_key] = entry
+                    # The rows of the table (-2) are the dimension -3 of
+                    # keys and values of shape `[..., R, H, C]`.
+                    cache._record(cache_key, entry, dims={-2: -3})
                     del entry
                 else:
                     x = result
