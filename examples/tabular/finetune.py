@@ -128,13 +128,15 @@ for epoch in range(1, args.max_epochs + 1):
     for chunk in torch.randperm(len(train_table)).split(args.max_chunk_size):
         if len(chunk) < 50:
             continue
-        context_rows, query_rows = train_test_split(
-            chunk,
-            test_size=args.query_fraction,
-            stratify=train_labels[chunk]
-            if args.task == "classification"
-            else None,
-        )
+        labels = train_labels[chunk] if args.task == "classification" else None
+        try:
+            context_rows, query_rows = train_test_split(
+                chunk, test_size=args.query_fraction, stratify=labels
+            )
+        except ValueError:
+            if labels is None:
+                raise
+            continue
         context = train_table[context_rows]
         query = train_table[query_rows]
 
@@ -167,6 +169,8 @@ for epoch in range(1, args.max_epochs + 1):
         total_loss += float(loss.detach())
         steps += 1
 
+    if steps == 0:
+        raise ValueError("No chunks could be split into context and query.")
     metric = evaluate(context=train_table, query=val_table)
     print(
         f"epoch={epoch}/{args.max_epochs} "
