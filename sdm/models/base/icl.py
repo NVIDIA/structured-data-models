@@ -4,6 +4,7 @@
 import abc
 import copy
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
+from contextlib import ContextDecorator
 from typing import Any, ClassVar, cast
 
 import torch
@@ -23,7 +24,7 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
-from sdm.models.base.compile import DynamicShapes, compile_predict
+from sdm.models.base.compile import compile_predict
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -550,9 +551,13 @@ class ICLModel(Model):
         """
         return compile_predict(self, **kwargs)
 
-    def _default_dynamic_shapes(self) -> DynamicShapes:
-        r"""Return the default dynamic shapes of a compiled :meth:`predict`."""
-        return DynamicShapes()
+    def _default_dynamic_dims(self) -> tuple[int, ...]:
+        r"""Return the default dynamic dimensions of a compiled query."""
+        return ()
+
+    def _dynamic_compile_patches(self) -> list[ContextDecorator]:
+        r"""Return the compiler settings for dynamic dimensions."""
+        return []
 
     # Abstract Methods ########################################################
 
