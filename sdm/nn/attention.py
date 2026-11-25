@@ -113,7 +113,7 @@ class SDPA(torch.nn.Module):
         ):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
 
-        batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
+        batch_shapes = [query.size()[:-3], key.shape[:-3], value.shape[:-3]]
         if seqused_key_value is not None:
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
@@ -134,13 +134,13 @@ class SDPA(torch.nn.Module):
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1).squeeze(-2)
             else:
-                key_len = key.size(-3)
+                key_len = key.shape[-3]
             query = self.query_scaling(query, key_len=key_len)
 
         # Broadcast and flatten batch dimensions => [B, S, H, C].
         query_size = query.size()[-3:]
-        key_size = key.size()[-3:]
-        value_size = value.size()[-3:]
+        key_size = key.shape[-3:]
+        value_size = value.shape[-3:]
 
         # FlashAttention rejects empty batches before PyTorch 2.10.
         if key_size[0] == 0 or 0 in batch_shape:
