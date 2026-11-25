@@ -7,9 +7,10 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
+from torch.nn import GELU, Sequential
 
 from sdm.nn import QueryScaling, RMSNorm, RotaryEmbedding, TransformerBlock
+from sdm.nn.linear import Linear
 
 
 class _RoPERMSNorm(Sequential):
