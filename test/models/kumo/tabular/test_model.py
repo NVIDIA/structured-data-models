@@ -379,8 +379,10 @@ def test_estimator_batching_many_classes(
 
 @pytest.mark.usefixtures("compilation")
 @pytest.mark.parametrize("task", ["classification", "regression"])
+@pytest.mark.parametrize("compile_preprocessing", [True, False])
 def test_compile_predict(
     task: Literal["classification", "regression"],
+    compile_preprocessing: bool,
 ) -> None:
     model = _build(task, "small")
     code = torch.arange(48, dtype=torch.int32).remainder(3).unsqueeze(-1)
@@ -418,7 +420,11 @@ def test_compile_predict(
         )
 
     counter = CompileCounter()
-    predict = model._compile_predict(backend=counter, fullgraph=True)
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        compile_preprocessing=compile_preprocessing,
+    )
     # One graph serves fits on 40 and 30 context rows with three and two
     # categories, and queries of any number of rows, including one and none.
     two_categories = cast(TableTensor, x).replace_blocks(
@@ -453,7 +459,11 @@ def test_compile_predict(
     # compile 3 graphs without dynamic rows, and 1 graph with them.
     for dims, graphs in (((), 3), ((-2,), 1)):
         counter = CompileCounter()
-        predict = model._compile_predict(backend=counter, dynamic_dims=dims)
+        predict = model._compile_predict(
+            backend=counter,
+            dynamic_dims=dims,
+            compile_preprocessing=compile_preprocessing,
+        )
         for query in (x[40:], x[41:44], x[42:43]):
             predict(query)
         assert counter.frame_count == graphs
@@ -461,11 +471,14 @@ def test_compile_predict(
 
 @pytest.mark.usefixtures("compilation")
 def test_compile_predict_query_categories() -> None:
-    def table(colors: list[str]) -> TableTensor:
+    def table(
+        colors: list[str],
+        categories: tuple[str, ...] = ("a", "b", "c"),
+    ) -> TableTensor:
         df = pd.DataFrame(
             {
                 "x": torch.randn(len(colors)).numpy(),
-                "color": pd.Categorical(colors, categories=["a", "b", "c"]),
+                "color": pd.Categorical(colors, categories=categories),
             }
         )
         return TableTensor.from_pandas(
@@ -482,6 +495,24 @@ def test_compile_predict_query_categories() -> None:
     # whichever of the categories their rows contain.
     for colors in (["a", "b", "c", "a"], ["b"], ["c", "a", "c"]):
         query = table(colors)
+        torch.testing.assert_close(
+            actual=predict(query).numerical,
+            expected=model.predict(query).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
+
+    counter = CompileCounter()
+    predict = model._compile_predict(
+        backend=counter,
+        fullgraph=True,
+        compile_preprocessing=False,
+    )
+    # Without compiled preprocessing, queries that declare other lists of
+    # categories share one graph as well.
+    for categories in (("a", "b", "c"), ("a", "b"), ("c", "a", "d", "e")):
+        query = table(list(categories), categories)
         torch.testing.assert_close(
             actual=predict(query).numerical,
             expected=model.predict(query).numerical,
