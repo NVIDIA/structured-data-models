@@ -10,7 +10,8 @@ from torch import Tensor
 
 from sdm.cache import Float8PerHead, QuantizedTensor
 from sdm.nn import SDPA
-from sdm.nn.attention_backend import TorchAttentionBackend
+from sdm.nn.attention_backend import FP8AttentionBackend, TorchAttentionBackend
+from sdm.testing import onlyCUDA
 
 
 @pytest.mark.parametrize("num_key_value_heads", [4, 2])
@@ -90,3 +91,82 @@ def test_sdpa_backend() -> None:
     out = torch_sdpa(query, key, quantized_value)
     expected = torch_sdpa(query, key, dequantized_value)
     torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("channels", "context"),
+    [(32, 513), (64, 513), (128, 513), (128, 32768), (256, 513)],
+)
+def test_fp8_attention_backend(channels: int, context: int) -> None:
+    pytest.importorskip("triton")
+    capability = torch.cuda.get_device_capability()
+    if capability not in {(8, 9), (9, 0), (12, 0), (12, 1)}:
+        pytest.skip("FP8AttentionBackend does not support this GPU")
+    query = torch.randn(
+        2, 129, 8, channels, device="cuda", dtype=torch.float16
+    )
+    key = torch.randn(
+        2, context, 2, channels, device="cuda", dtype=torch.float16
+    )
+    value = torch.randn_like(key)
+    # Give each batch element and head its own magnitude, so that a mixed-up
+    # scale changes the output:
+    query *= torch.linspace(0.25, 1, 16, device="cuda").view(2, 1, 8, 1)
+    key *= key.new_tensor([0.5, 1, 0.25, 0.75]).view(2, 1, 2, 1)
+    value *= value.new_tensor([0.01, 1, 100, 0.1]).view(2, 1, 2, 1)
+    fp8 = Float8PerHead()
+    quantized_key, quantized_value = fp8.quantize(key), fp8.quantize(value)
+    options = {
+        "attn_mask": None,
+        "seqused_key_value": None,
+        "is_causal": False,
+        "dropout_p": 0.0,
+        "scale": None,
+    }
+    backend = FP8AttentionBackend()
+    assert not backend.supports(query, key, value, **options)
+    assert not backend.supports(query, quantized_key, value, **options)
+    assert not backend.supports(
+        query=query,
+        key=QuantizedTensor.quantize(key, dim=(0, 1, 2, 3)),
+        value=quantized_value,
+        **options,
+    )
+    requires_grad = query.detach().requires_grad_()
+    assert not backend.supports(
+        query=requires_grad,
+        key=quantized_key,
+        value=quantized_value,
+        **options,
+    )
+    assert not backend.supports(
+        query=query,
+        key=fp8.quantize(key.detach().requires_grad_()),
+        value=quantized_value,
+        **options,
+    )
+    assert backend.supports(
+        query=query,
+        key=quantized_key,
+        value=quantized_value,
+        **options,
+    )
+
+    with torch.inference_mode():
+        out = backend.forward(
+            query=query,
+            key=quantized_key,
+            value=quantized_value,
+            **options,
+        )
+        expected = TorchAttentionBackend().forward(
+            query=query,
+            key=quantized_key.dequantize(query.dtype),
+            value=quantized_value.dequantize(query.dtype),
+            **options,
+        )
+    # Relative errors per batch element and head:
+    error = (out.float() - expected.float()).square().mean(dim=(1, 3)).sqrt()
+    norm = expected.float().square().mean(dim=(1, 3)).sqrt()
+    assert error.div(norm).max() < 0.08

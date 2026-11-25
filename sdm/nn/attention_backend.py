@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import abc
+from collections.abc import Callable
 from typing import cast
 
 import torch
@@ -10,6 +11,16 @@ from torch import Tensor
 from sdm._kernels.flash_attention import flash_attention
 from sdm._kernels.sdpa import sdpa
 from sdm.cache import QuantizedTensor
+
+_attn_fwd__qk_e4m3__pv_e4m3__scale_head: Callable[..., Tensor] | None = None
+try:
+    from sdm._kernels.triton.attn_fwd__qk_e4m3__pv_e4m3__scale_head import (
+        attn_fwd__qk_e4m3__pv_e4m3__scale_head as _attn_fwd_impl,
+    )
+except ImportError:
+    pass
+else:
+    _attn_fwd__qk_e4m3__pv_e4m3__scale_head = _attn_fwd_impl
 
 
 class AttentionBackend(abc.ABC):
@@ -158,3 +169,102 @@ class FlashAttention3Backend(AttentionBackend):
             lengths=seqused_key_value,
             scale=scale,
         )
+
+
+class FP8AttentionBackend(AttentionBackend):
+    r"""Attention backend with FP8 (E4M3) matrix multiplications.
+
+    It reads keys and values quantized with ``Float8PerHead`` and quantizes
+    queries with one scale per batch element and head. It runs on GPUs with
+    compute capability 8.9, 9.0, 12.0 or 12.1 and 32, 64, 128 or 256 channels
+    per head, and declines masks, padding, causal attention, dropout, and
+    gradients.
+    """
+
+    def supports(  # noqa: D102
+        self,
+        query: Tensor,
+        key: Tensor | QuantizedTensor,
+        value: Tensor | QuantizedTensor,
+        *,
+        attn_mask: Tensor | None,
+        seqused_key_value: Tensor | None,
+        is_causal: bool,
+        dropout_p: float,
+        scale: float | None,
+    ) -> bool:
+        return (
+            _attn_fwd__qk_e4m3__pv_e4m3__scale_head is not None
+            and isinstance(key, QuantizedTensor)
+            and isinstance(value, QuantizedTensor)
+            and key.scale.size() == (*key.size()[:-3], 1, key.size(-2), 1)
+            and value.scale.size()
+            == (*value.size()[:-3], 1, value.size(-2), 1)
+            and query.is_cuda
+            and torch.cuda.get_device_capability(query.device)
+            in {(8, 9), (9, 0), (12, 0), (12, 1)}
+            and query.size(-1) in {32, 64, 128, 256}
+            and value.shape[-1] == query.size(-1)
+            and attn_mask is None
+            and seqused_key_value is None
+            and not is_causal
+            and dropout_p == 0.0
+            and not (
+                torch.is_grad_enabled()
+                and (
+                    query.requires_grad
+                    or key.qdata.requires_grad
+                    or key.scale.requires_grad
+                    or value.qdata.requires_grad
+                    or value.scale.requires_grad
+                )
+            )
+        )
+
+    def forward(  # noqa: D102
+        self,
+        query: Tensor,  # [B, Q, Hq, C]
+        key: Tensor | QuantizedTensor,  # [B, KV, Hkv, C]
+        value: Tensor | QuantizedTensor,  # [B, KV, Hkv, C]
+        *,
+        attn_mask: Tensor | None,
+        seqused_key_value: Tensor | None,
+        is_causal: bool,
+        dropout_p: float,
+        scale: float | None,
+    ) -> Tensor:  # [B, Q, Hq, C]
+        assert _attn_fwd__qk_e4m3__pv_e4m3__scale_head is not None
+        key, value = cast(QuantizedTensor, key), cast(QuantizedTensor, value)
+        device = query.device.type
+        dtype = (
+            torch.get_autocast_dtype(device)
+            if torch.is_autocast_enabled(device)
+            else query.dtype
+        )
+        fp8_query = QuantizedTensor.quantize(query, dim=(-3, -1))
+
+        # Launch settings measured to avoid register spills:
+        channels, context = query.size(-1), key.shape[-3]
+        wide = channels == 256 or (channels == 128 and context >= 32768)
+        blackwell = channels == 64 and torch.cuda.get_device_capability(
+            query.device
+        ) in {(12, 0), (12, 1)}
+
+        out = _attn_fwd__qk_e4m3__pv_e4m3__scale_head(
+            q=fp8_query.qdata.transpose(1, 2).contiguous(),  # [B, Hq, Q, C]
+            k=key.qdata.transpose(1, 2).contiguous(),  # [B, Hkv, KV, C]
+            v=value.qdata.permute(0, 2, 3, 1).contiguous(),  # [B, Hkv, C, KV]
+            qs=fp8_query.scale.transpose(1, 2).contiguous(),  # [B, Hq, 1, 1]
+            ks=key.scale.transpose(1, 2).contiguous(),  # [B, Hkv, 1, 1]
+            vs=value.scale.transpose(1, 2).contiguous(),  # [B, Hkv, 1, 1]
+            dtype=dtype,
+            query_tile=64 if channels == 256 else 128,
+            scale=scale,
+            context_tile=64 if wide or blackwell or context < 32768 else 128,
+            warps=8 if wide else 4,
+            stages=4 if blackwell else 2,
+            accumulation_chunk=0 if blackwell else 16,
+            scale_weights_in_exp=blackwell,
+            fuse_score_scale=blackwell,
+        )  # [B, Hq, Q, C]
+        return out.transpose(1, 2)
