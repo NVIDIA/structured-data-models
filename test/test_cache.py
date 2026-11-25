@@ -6,8 +6,16 @@ from typing import cast
 
 import pytest
 import torch
+from torch import Tensor
 
-from sdm.cache import Cache, Float8PerHead, KVCacheEntry
+from sdm.cache import (
+    Cache,
+    Float8PerHead,
+    KVCacheDType,
+    KVCacheEntry,
+    QuantizedTensor,
+    Unquantized,
+)
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -122,29 +130,49 @@ def test_cache_serialization_without_cuda(
 
 def test_kv_cache_entry_scales() -> None:
     x = torch.ones(2, 3, 1, 4)  # [B, KV, H, C]
-    entry = Float8PerHead().quantize(KVCacheEntry(key=x, value=x))
+    quantized = Float8PerHead().quantize(x)
+    entry = KVCacheEntry(key=quantized, value=quantized)
     assert Cache(entry=entry).size() == 2 * 24 * 1 + 2 * 2 * 4
 
 
-def test_kv_cache_entry_rejects_mismatched_kv_cache_dtype() -> None:
+def test_quantized_tensor_rejects_mismatched_scheme() -> None:
     x = torch.randn(2, 3, 1, 4)
     with pytest.raises(ValueError, match="do not match"):
-        KVCacheEntry(key=x, value=x, kv_cache_dtype=Float8PerHead())
+        QuantizedTensor(qdata=x, scale=x, scheme=Float8PerHead())
     with pytest.raises(ValueError, match="do not match"):
-        KVCacheEntry(key=x, value=x, key_scale=x, value_scale=x)
+        QuantizedTensor(qdata=x, scale=x, scheme=Unquantized())
+
+
+class _Scaled(KVCacheDType):
+    def is_quantized(self, tensor: QuantizedTensor) -> bool:
+        return True
+
+    def quantize(
+        self,
+        tensor: Tensor | QuantizedTensor,
+    ) -> Tensor | QuantizedTensor:
+        return tensor
+
+
+def test_dequantize_keeps_quantized_values() -> None:
+    x = torch.ones(3)
+    quantized = QuantizedTensor(
+        qdata=x, scale=x.new_tensor(2.0), scheme=_Scaled()
+    )
+    torch.testing.assert_close(quantized.dequantize(x.dtype), 2 * x)
+    torch.testing.assert_close(x, torch.ones(3))
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
 def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
     key = torch.randn(2, 5, 3, 4, dtype=dtype)  # [B, KV, H, C]
-    value = torch.randn(2, 5, 3, 4, dtype=dtype)
-    entry = Float8PerHead().quantize(KVCacheEntry(key=key, value=value))
-    assert entry.key.dtype == torch.float8_e4m3fn
-    assert cast(torch.Tensor, entry.key_scale).size() == (2, 1, 3, 1)
+    quantized = Float8PerHead().quantize(key)
+    assert quantized.qdata.dtype == torch.float8_e4m3fn
+    assert quantized.scale.size() == (2, 1, 3, 1)
+    assert Float8PerHead().quantize(quantized) is quantized
 
-    out_key, out_value = entry.dequantize(dtype)
-    torch.testing.assert_close(out_key, key, rtol=2**-4, atol=1e-2)
-    torch.testing.assert_close(out_value, value, rtol=2**-4, atol=1e-2)
+    out = quantized.dequantize(dtype)
+    torch.testing.assert_close(out, key, rtol=2**-4, atol=1e-2)
 
     cache = Cache(kv_cache_dtype="fp8_per_head")
     assert isinstance(cache.kv_cache_dtype, Float8PerHead)
