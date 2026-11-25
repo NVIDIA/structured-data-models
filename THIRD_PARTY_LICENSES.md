@@ -12,6 +12,15 @@ Runtime, test, and documentation dependencies are declared in [`pyproject.toml`]
 
 `scikit-learn` is an optional dependency installed with `structured-data-models[prior]`; its source code is not bundled with this repository.
 
+## shapiq
+
+- Source: https://github.com/mmschlk/shapiq
+- License: MIT
+- Copyright: Copyright (c) 2023 the shapiq developers
+- License terms: https://github.com/mmschlk/shapiq/blob/main/LICENSE
+
+`shapiq` is an optional dependency installed with `structured-data-models[explain]`; its source code is not bundled with this repository.
+
 ## TabICLv2
 
 - Source: https://github.com/soda-inria/tabicl

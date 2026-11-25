@@ -72,6 +72,8 @@ nitpick_ignore = [
     ("py:class", "sdm.cache.QuantizedTensor"),
     ("py:class", "sdm.nn.attention_backend.AttentionBackend"),
     ("py:class", "sdm.nn.attention_backend.TorchAttentionBackend"),
+    # An optional dependency, which is only imported for type checking:
+    ("py:class", "InteractionValues"),
 ]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
