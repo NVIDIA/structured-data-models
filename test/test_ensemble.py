@@ -6,7 +6,15 @@ from typing import cast
 import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, EnsembleTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    EnsembleTable,
+    EnsembleTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 
 
 def test_tensor_member_selection() -> None:
@@ -49,6 +57,45 @@ def test_shared_member_table() -> None:
     assert next(ensemble_table._iter_groups()) is groups[0]
     for member_id in range(3):
         assert ensemble_table[member_id].equal(data)
+
+
+@pytest.mark.parametrize("stype", Stype.all())
+def test_column_blocks(stype: Stype) -> None:
+    # Two member tables with three rows and all five semantic types.
+    batched_table = TableTensor(
+        numerical=torch.arange(12, dtype=torch.float32).view(2, 3, 2),
+        categorical=CategoricalTensor(
+            code=torch.tensor([[[0], [1], [0]], [[1], [0], [1]]]),
+            categories=(torch.tensor([10, 20]),),
+        ),
+        datetime=torch.arange(6).view(2, 3, 1),
+        text=StringTensor.from_list(
+            [[["a"], ["b"], ["c"]], [["d"], ["e"], ["f"]]]
+        ),
+        id=ColumnarTensor((torch.arange(6).view(2, 3),)),
+    )
+    empty_table = TableTensor(
+        size=(1, 4)
+    )  # One member, four rows, no columns.
+    ensemble = EnsembleTable(
+        groups=(batched_table, empty_table),
+        locations=((0, 1), (1, 0), (0, 0), (0, 1)),
+    )
+    empty_ensemble = EnsembleTable(groups=(), locations=())
+
+    blocks = getattr(ensemble, stype)
+
+    assert isinstance(blocks, EnsembleTensor)
+    assert len(blocks) == len(ensemble)
+    for actual, table in zip(
+        blocks._iter_groups(), (batched_table, empty_table), strict=True
+    ):
+        # Access must reuse each whole batch, not copy or unpack its members.
+        assert actual is getattr(table, stype)
+    for member_id in range(len(ensemble)):
+        assert blocks[member_id].equal(getattr(ensemble[member_id], stype))
+    assert blocks[1].size() == (4, 0)
+    assert len(getattr(empty_ensemble, stype)) == 0
 
 
 def test_from_tables_keeps_tables_separate() -> None:

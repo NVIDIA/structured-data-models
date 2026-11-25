@@ -50,10 +50,7 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         device = next(ensemble_table._iter_groups()).device
-        widths = [
-            ensemble_table[member_id].numerical.size(-1)
-            for member_id in range(len(ensemble_table))
-        ]
+        widths = [numerical.size(-1) for numerical in ensemble_table.numerical]
         permutations = []
         if self.method == "latin":
             max_features = max(widths)
