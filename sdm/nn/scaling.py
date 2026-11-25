@@ -12,6 +12,8 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Linear, Parameter, Sequential
 
+from sdm._kernels.log_scale import log_scale
+
 
 class QueryScaling(torch.nn.Module, abc.ABC):
     r"""Base class for query scaling modules in :class:`SDPA`.
@@ -169,21 +171,22 @@ class LogScale(QueryScaling):
         key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
     ) -> Tensor:  # [..., S, H, C]
         r""":meta private:"""  # noqa: D415
+        return self._scale(query, key_len=key_len)
+
+    def _scale(
+        self,
+        query: Tensor,
+        *,
+        key_len: Tensor | int,
+        gate: Tensor | None = None,
+    ) -> Tensor:
         # Avoid a silently wrong result from broadcasting the head dimension.
         if query.size(-2) != self.head_scale.numel():
             raise ValueError(
                 "`query.size(-2)` must equal the number of per-head scales "
                 f"(got {query.size(-2)} and {self.head_scale.numel()})"
             )
-        if isinstance(key_len, Tensor):
-            key_len_tensor = key_len.float()
-        else:
-            key_len_tensor = query.new_full((), key_len, dtype=torch.float32)
-        log_key_len = key_len_tensor.clamp(min=1.0).log().to(query.dtype)
-        head_scale = self.head_scale.to(query.dtype).reshape(
-            *((1,) * (query.dim() - 2)), -1, 1
-        )
-        return query * log_key_len[..., None, None] * head_scale
+        return log_scale(query, key_len, self.head_scale, gate)
 
 
 class GatedLogScale(LogScale):
@@ -236,5 +239,4 @@ class GatedLogScale(LogScale):
         key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
     ) -> Tensor:  # [..., S, H, C]
         r""":meta private:"""  # noqa: D415
-        query_scaled = super().forward(query=query, key_len=key_len)
-        return query_scaled * (1 + self.gate(query).tanh())
+        return self._scale(query, key_len=key_len, gate=self.gate(query))
