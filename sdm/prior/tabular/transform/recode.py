@@ -19,7 +19,7 @@ from sdm.prior.util import random_weight
 
 
 class RecodeHighCardinality(PriorTransform):
-    """Recode selected finite feature columns as high-cardinality categories.
+    """Recode selected finite features as high-cardinality categories.
 
     Args:
         min_levels: Minimum requested levels and required number of rows.

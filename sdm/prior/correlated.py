@@ -195,3 +195,9 @@ class Correlated(HP[T]):
         gx = torch._standard_gamma(alpha, generator=generator)
         gy = torch._standard_gamma(beta, generator=generator)
         return self.hp.transform((gx / (gx + gy)).reshape(size))  # type: ignore
+
+
+__all__ = [
+    "CorrelatedContext",
+    "Correlated",
+]

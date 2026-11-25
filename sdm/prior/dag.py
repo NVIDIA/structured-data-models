@@ -241,3 +241,11 @@ def _sample_columns(
         generator=generator,
     )
     return eligible[index]
+
+
+__all__ = [
+    "DAG",
+    "DAGSampler",
+    "RandomCauchyDAGSampler",
+    "MixtureDAGSampler",
+]
