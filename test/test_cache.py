@@ -6,10 +6,12 @@ from typing import cast
 
 import pytest
 import torch
+from torch import Tensor
 
 from sdm.cache import (
     Cache,
     Float8PerHead,
+    KVCacheDType,
     KVCacheEntry,
     QuantizedTensor,
     Unquantized,
@@ -147,6 +149,26 @@ def test_quantized_tensor_rejects_mismatched_scheme() -> None:
         QuantizedTensor(qdata=qdata, scale=scale, scheme=Unquantized())
 
 
+class _Scaled(KVCacheDType):
+    def quantize(self, tensor: Tensor | QuantizedTensor) -> QuantizedTensor:
+        if isinstance(tensor, QuantizedTensor):
+            return tensor
+        scale = tensor.new_full((), 2.0)
+        return QuantizedTensor(qdata=tensor / scale, scale=scale, scheme=self)
+
+    def is_valid(self, tensor: QuantizedTensor) -> bool:
+        return True
+
+
+def test_dequantize_returns_new_tensor() -> None:
+    x = torch.randn(2, 5, 3, 4)  # [B, KV, H, C]
+    quantized = _Scaled().quantize(x)
+    out = quantized.dequantize(x.dtype)
+    torch.testing.assert_close(out, x)
+    out.zero_()  # Modifying the output leaves the stored values as is:
+    torch.testing.assert_close(quantized.dequantize(x.dtype), x)
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
 def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
     x = torch.randn(2, 5, 3, 4, dtype=dtype)  # [B, KV, H, C]
@@ -158,10 +180,6 @@ def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
     out = quantized.dequantize(dtype)
     assert out.dtype == dtype
     torch.testing.assert_close(out, x, rtol=2**-4, atol=1e-2)
-    out.zero_()  # Modifying the output leaves the stored values as is:
-    torch.testing.assert_close(
-        quantized.dequantize(dtype), x, rtol=2**-4, atol=1e-2
-    )
 
     cache = Cache(kv_cache_dtype="fp8_per_head")
     assert isinstance(cache.kv_cache_dtype, Float8PerHead)
