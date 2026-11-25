@@ -189,7 +189,7 @@ class MaskByTarget(PriorTransform):
 
 
 class MaskCategorical(PriorTransform):
-    """Mask independent random rows in selected categorical feature columns.
+    """Mask random rows in selected categorical feature columns.
 
     Args:
         rows: Range for the fraction of rows to mask per column.

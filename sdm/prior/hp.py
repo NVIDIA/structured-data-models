@@ -253,3 +253,14 @@ class Choice(HP[T]):
             generator=generator,
         )
         return torch.tensor(self.options, device="cpu")[index]
+
+
+__all__ = [
+    "HP",
+    "Constant",
+    "Uniform",
+    "UniformInt",
+    "LogUniform",
+    "LogUniformInt",
+    "Choice",
+]
