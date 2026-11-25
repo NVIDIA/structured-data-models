@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Callable
 from typing import Literal
 
 import pandas as pd
@@ -553,6 +554,31 @@ def test_compile_predict_classes_and_estimators() -> None:
             num_estimators=num_estimators,
             estimator_batch_size=batch_size,
         )
+
+
+@pytest.mark.usefixtures("compilation")
+def test_compile_predict_shared_models() -> None:
+    shared = _build("regression", "small").models["regression"]
+    x = torch.randn(48, 4)
+    counter = CompileCounter()
+    compiled_models: dict[torch.nn.Module, Callable[..., torch.Tensor]] = {}
+    # Models that share their model and the compiled models share one graph.
+    for _ in range(2):
+        model = KumoTabular(task="regression", size="small", pretrained=False)
+        model.models["regression"] = shared
+        model.fit(x[:40], torch.randn(40, 1), num_estimators=4)
+        predict = model._compile_predict(
+            backend=counter,
+            fullgraph=True,
+            compiled_models=compiled_models,
+        )
+        torch.testing.assert_close(
+            actual=predict(x[40:]).numerical,
+            expected=model.predict(x[40:]).numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+    assert counter.frame_count == 1
 
 
 @pytest.mark.usefixtures("compilation")
