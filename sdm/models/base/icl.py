@@ -318,7 +318,13 @@ class ICLModel(Model):
         contexts = [
             self._prepare_context(context, callbacks) for context in contexts
         ]
-        if x.is_cuda and len(contexts) > 1:
+        # Integrated GPUs share system memory with the CPU.
+        offload_cache = (
+            x.is_cuda
+            and len(contexts) > 1
+            and not torch.cuda.get_device_properties(x.device).is_integrated
+        )
+        if offload_cache:
             set_pinned_max_round_threshold(mb=1)
 
         class_values = _class_values(contexts, estimator_batch_size)
@@ -367,7 +373,7 @@ class ICLModel(Model):
                     **kwargs,
                 )
 
-            if x.is_cuda and len(contexts) > 1:
+            if offload_cache:
                 # Keep class labels on GPU for compiled prediction.
                 classes = batch_cache.pop("classes")
                 try:  # Copy to pinned CPU memory:
