@@ -146,6 +146,13 @@ def test_fp8_attention_backend(channels: int, context: int) -> None:
         value=quantized_value,
         **options,
     )
+    supports = torch.compile(backend.supports, fullgraph=True)
+    assert not supports(
+        query=query,
+        key=quantized_key,
+        value=quantized_value,
+        **options,
+    )
     assert backend.supports(
         query=query,
         key=quantized_key,

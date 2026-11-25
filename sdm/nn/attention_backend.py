@@ -177,8 +177,8 @@ class FP8AttentionBackend(AttentionBackend):
     It reads keys and values quantized with ``Float8PerHead`` and quantizes
     queries with one scale per batch element and head. It runs on GPUs with
     compute capability 8.9, 9.0, 12.0 or 12.1 and 32, 64, 128 or 256 channels
-    per head, and declines masks, padding, causal attention, dropout, and
-    gradients.
+    per head, and declines masks, padding, causal attention, dropout,
+    gradients, and ``torch.compile``.
     """
 
     def supports(  # noqa: D102
@@ -195,6 +195,7 @@ class FP8AttentionBackend(AttentionBackend):
     ) -> bool:
         return (
             _attn_fwd__qk_e4m3__pv_e4m3__scale_head is not None
+            and not torch.compiler.is_compiling()
             and isinstance(key, QuantizedTensor)
             and isinstance(value, QuantizedTensor)
             and key.scale.size() == (*key.size()[:-3], 1, key.size(-2), 1)
