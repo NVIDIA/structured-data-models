@@ -17,6 +17,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from collections.abc import Callable
 from typing import Any, cast
 
 import torch
@@ -44,7 +45,7 @@ class ECOC(torch.nn.Module):
 
     def forward(
         self,
-        model: torch.nn.Module,
+        model: Callable[..., Tensor],
         x: Tensor,
         y: Tensor,
         *,

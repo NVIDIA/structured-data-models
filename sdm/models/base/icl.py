@@ -414,6 +414,17 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        return self._predict(x, related_tables, callbacks=callbacks)
+
+    def _predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None,
+        *,
+        callbacks: Sequence[Callback] | None,
+        models: Mapping[Task, Callable[..., Tensor]] | None = None,
+    ) -> TableTensor:
+        r"""Run :meth:`predict`, with ``models`` passed to :meth:`_forward`."""
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -461,6 +472,9 @@ class ICLModel(Model):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
+        kwargs = cast(dict[str, Any], self._cache["kwargs"])
+        if models is not None:
+            kwargs = kwargs | {"models": models}
         with self._prefetch(
             items=[
                 cast(Cache, self._cache[i])
@@ -514,7 +528,7 @@ class ICLModel(Model):
                     callbacks=callbacks,
                     requires_grad=requires_grad,
                     generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
+                    **kwargs,
                 )
 
         # Regression: invert target before stacking estimator outputs.
@@ -547,6 +561,20 @@ class ICLModel(Model):
     def _default_dynamic_shapes(self) -> DynamicShapes:
         r"""Return the default dynamic shapes of a compiled :meth:`predict`."""
         return DynamicShapes()
+
+    def _compilable_models(self) -> Mapping[Task, torch.nn.Module]:
+        r"""Return the models by task that a compiled :meth:`predict` compiles.
+
+        A compiled prediction passes ``models`` to :meth:`_forward`: by task,
+        a function that takes the arguments of the model of that task and
+        returns its output. :meth:`_forward` has to call it instead of the
+        model, with plain tensors: the features ``[..., R, C]`` as the first
+        argument, and, if the model takes it, the mask of categorical columns
+        ``[..., C]``, whose last dimension follows the columns, as the keyword
+        ``categorical_mask``. Without any models (default), :meth:`predict`
+        is compiled as a whole.
+        """
+        return {}
 
     # Abstract Methods ########################################################
 
