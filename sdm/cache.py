@@ -89,11 +89,6 @@ class QuantizedTensor(DeviceMixin):
                 f"'{type(self.scheme).__name__}'"
             )
 
-    @property
-    def shape(self) -> torch.Size:
-        r"""The shape of the quantized values."""
-        return self.qdata.shape
-
     @overload
     def size(self) -> torch.Size: ...
 
