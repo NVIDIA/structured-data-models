@@ -259,7 +259,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def _record(
         self,
         key: Hashable,
-        value: KVCacheEntry,
+        value: Tensor | KVCacheEntry,
         dims: Mapping[int, int],
     ) -> None:
         r"""Store ``value`` and declare its dimensions that follow the table.
@@ -268,10 +268,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
         Args:
             key: The cache key.
-            value: The keys and values.
+            value: A tensor, or keys and values.
             dims: The dimensions of ``value`` by the dimension of the table,
                 ``[..., R, D]``, that they follow, *e.g.*, ``{-2: -3}`` for
-                keys and values of shape ``[..., R, H, C]``.
+                keys and values of shape ``[..., R, H, C]``, or ``{-1: -1}``
+                for a tensor of shape ``[..., D]``.
         """
         self[key] = value
         self._dims[key] = dims
@@ -286,14 +287,23 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         # Weakly: the marks stay on fitted tensors that are already on the
         # device, and another compiled prediction may keep a dimension static.
         mark = torch._dynamo.maybe_mark_dynamic
-        for key, entry_dims in self._dims.items():
-            entry = cast(KVCacheEntry, self[key])
-            for table_dim, dim in entry_dims.items():
-                if table_dim in dims:
-                    # Not the scales of quantized keys and values, which are
-                    # per head.
-                    mark(entry.key, dim % entry.key.dim())
-                    mark(entry.value, dim % entry.value.dim())
+        for key, value_dims in self._dims.items():
+            value = self[key]
+            for table_dim, dim in value_dims.items():
+                if table_dim not in dims:
+                    continue
+                if isinstance(value, Tensor):
+                    tensors = [value]
+                else:
+                    entry = cast(KVCacheEntry, value)
+                    tensors = [entry.key, entry.value]
+                    if dim < -3:
+                        # The scales of quantized keys and values,
+                        # `[..., 1, H, 1]`, have the dimensions before -3.
+                        scales = (entry.key_scale, entry.value_scale)
+                        tensors += [s for s in scales if s is not None]
+                for tensor in tensors:
+                    mark(tensor, dim % tensor.dim())
 
     def __setitem__(self, key: Hashable, value: object) -> None:
         if not self.is_recording:

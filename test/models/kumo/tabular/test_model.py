@@ -452,6 +452,55 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
+@pytest.mark.parametrize("kv_cache_dtype", [None, "fp8_per_head"])
+def test_compile_predict_columns(kv_cache_dtype: str | None) -> None:
+    model = _build("regression", "small")
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter, fullgraph=True)
+    # Fits on tables with other numbers of numerical and categorical columns
+    # and rows share one graph. The second table holds a constant column, and
+    # the last has more columns than an estimator keeps.
+    for num_numerical, num_categorical, rows in (
+        (17, 0, 40),
+        (5, 2, 30),
+        (0, 3, 40),
+        (510, 1, 12),
+    ):
+        x = torch.randn(rows + 9, num_numerical)
+        if num_numerical == 5:
+            x[:, 1] = 1.0
+        x = TableTensor.from_tensor(
+            tensor=x,
+            columns=[f"{num_numerical}_{i}" for i in range(num_numerical)],
+        )
+        cardinalities = torch.arange(3, 3 + num_categorical)
+        categorical = TableTensor.from_tensor(
+            tensor=torch.arange(rows + 9).unsqueeze(-1) % cardinalities,
+            columns=[f"c{i}" for i in range(num_categorical)],
+        )
+        x = torch.cat([x, categorical], dim=-1)
+        model.fit(
+            x[:rows],
+            torch.randn(rows, 1),
+            num_estimators=4,
+            kv_cache_dtype=kv_cache_dtype,
+        )
+        for query in (x[rows:], x[rows : rows + 3]):
+            torch.testing.assert_close(
+                actual=predict(query).numerical,
+                expected=model.predict(query).numerical,
+                atol=1e-4,
+                rtol=1e-4,
+            )
+    assert counter.frame_count == 1
+
+    # A query with other column names fails as in `predict`.
+    renamed = TableTensor.from_tensor(torch.randn(3, 510))
+    with pytest.raises(ValueError, match="same schema"):
+        predict(torch.cat([renamed, categorical[:3]], dim=-1))
+
+
+@pytest.mark.usefixtures("compilation")
 def test_compile_predict_classes_and_estimators() -> None:
     model = _build("classification", "small")
     x = torch.randn(48, 4)

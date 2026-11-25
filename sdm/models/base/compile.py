@@ -126,5 +126,9 @@ def _call(
     for dim in dims:
         torch._dynamo.mark_dynamic(x, dim % x.dim())
     cache._mark_dynamic(dims)
+    if -1 in dims and "categorical_mask" in kwargs:
+        # The mask of the columns, `[..., C]`, is a new view in every call.
+        mask = kwargs["categorical_mask"]
+        torch._dynamo.mark_dynamic(mask, mask.dim() - 1)
     out = compiled(x, *args, cache=cache, **kwargs)
     return out[..., :1, :] if repeat else out
