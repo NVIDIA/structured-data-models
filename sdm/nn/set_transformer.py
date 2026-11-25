@@ -127,8 +127,7 @@ class InducedTransformerBlock(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KeyValue`, as returned with
-                ``return_key_value=True``.
+                :class:`~sdm.cache.KeyValue`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and

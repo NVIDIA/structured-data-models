@@ -80,7 +80,7 @@ class KeyValue(_KeyValue, DeviceMixin):
 
 
 class KVCacheDType(abc.ABC):
-    r"""Base class for the storage dtype of key/value projections."""
+    r"""Base class for the storage dtype of cached key/value projections."""
 
     @abc.abstractmethod
     def is_quantized(self, key_value: KeyValue) -> bool:

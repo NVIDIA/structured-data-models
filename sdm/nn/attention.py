@@ -376,8 +376,7 @@ class Attention(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KeyValue`, as returned with
-                ``return_key_value=True``.
+                :class:`~sdm.cache.KeyValue`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -423,7 +422,7 @@ class Attention(torch.nn.Module):
                 or key_value.value.dtype != query.dtype
             ):
                 raise ValueError(
-                    f"Key/value projections have dtypes "
+                    f"Key/value projections were cached under dtypes "
                     f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
                     f"the query has dtype '{query.dtype}'"
                 )
@@ -641,8 +640,7 @@ class TransformerBlock(torch.nn.Module):
                 channels.
             key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
-                :class:`~sdm.cache.KeyValue`, as returned with
-                ``return_key_value=True``.
+                :class:`~sdm.cache.KeyValue`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -682,7 +680,7 @@ class TransformerBlock(torch.nn.Module):
         if return_key_value and isinstance(key_value, KeyValue):
             raise ValueError(
                 "'return_key_value=True' is not supported when 'key_value' is "
-                "a 'KeyValue'"
+                "already cached"
             )
 
         if torch.is_grad_enabled() or (
