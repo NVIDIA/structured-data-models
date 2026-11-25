@@ -153,6 +153,7 @@ def test_cache_fp8_per_head(dtype: torch.dtype) -> None:
     quantized = Float8PerHead().quantize(x)
     assert quantized.qdata.dtype == torch.float8_e4m3fn
     assert quantized.scale.size() == (2, 1, 3, 1)
+    assert Float8PerHead().quantize(quantized) is quantized
 
     out = quantized.dequantize(dtype)
     assert out.dtype == dtype

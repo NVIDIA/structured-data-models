@@ -104,8 +104,11 @@ class KVCacheDType(abc.ABC):
     r"""Base class for the storage dtype of cached key/value projections."""
 
     @abc.abstractmethod
-    def quantize(self, tensor: Tensor) -> Tensor | QuantizedTensor:
-        r"""Returns ``tensor`` in this storage dtype.
+    def quantize(
+        self,
+        tensor: Tensor | QuantizedTensor,
+    ) -> Tensor | QuantizedTensor:
+        r"""Returns ``tensor`` in this storage dtype, or as is if quantized.
 
         Args:
             tensor: Key or value projections as computed by attention.
@@ -138,7 +141,10 @@ class KVCacheDType(abc.ABC):
 class Unquantized(KVCacheDType):
     r"""Leaves key/value projections as computed."""
 
-    def quantize(self, tensor: Tensor) -> Tensor:  # noqa: D102
+    def quantize(  # noqa: D102
+        self,
+        tensor: Tensor | QuantizedTensor,
+    ) -> Tensor | QuantizedTensor:
         return tensor
 
     def is_valid(self, tensor: QuantizedTensor) -> bool:  # noqa: D102
@@ -152,7 +158,12 @@ class Float8PerHead(KVCacheDType):
     so that ``qdata * scale`` approximates the tensor.
     """
 
-    def quantize(self, tensor: Tensor) -> QuantizedTensor:  # noqa: D102
+    def quantize(  # noqa: D102
+        self,
+        tensor: Tensor | QuantizedTensor,
+    ) -> QuantizedTensor:
+        if isinstance(tensor, QuantizedTensor):
+            return tensor
         amax = tensor.abs().amax(dim=(-3, -1), keepdim=True)  # [..., 1, H, 1]
         # Divide in the input dtype to avoid a full-size float32 copy:
         scale = (amax / 448).clamp_min(torch.finfo(tensor.dtype).tiny)
