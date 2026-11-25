@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator, Mapping
 from typing import cast
 
 import torch
@@ -46,6 +47,15 @@ class DropConstantColumns(EnsembleProcessor):
         # TODO: Consider recording the fitted column names if transforms should
         # verify that the numerical schema and order match fit.
         self._kept_indices: tuple[tuple[int, ...], ...] = ()
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The columns of the table (-1) set the kept ones, the only dimension
+        # (-1) of `[C_kept]`. Processors pickled before had no index.
+        index = getattr(self, "_kept_index", None)
+        if index is not None:
+            yield index, {-1: -1}
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
         r""":meta private:"""  # noqa: D415

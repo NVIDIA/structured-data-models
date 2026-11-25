@@ -352,8 +352,14 @@ class ICLModel(Model):
                         else None
                     ),
                     class_values=class_values[batch],
-                    categorical_mask=categorical_mask,
                     kv_cache_dtype=kv_cache_dtype,
+                )
+                # The columns of the table (-1) are the dimension -1 of
+                # `[..., C]`.
+                batch_cache._record(
+                    "categorical_mask",
+                    categorical_mask,
+                    dims={-1: -1},
                 )
                 self._forward(
                     x_context=context.x,

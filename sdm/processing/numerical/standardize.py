@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator, Mapping
 from typing import Self
 
 import torch
@@ -38,6 +39,13 @@ class Standardize(Processor, InvertibleMixin):
         self.eps = eps
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The columns of the table (-1) are the dimension -1 of `[..., C]`.
+        yield self.mean, {-1: -1}
+        yield self.scale, {-1: -1}
 
     def with_state(self, mean: Tensor | float, scale: Tensor | float) -> Self:
         """Set fixed statistics in place and disable refitting.

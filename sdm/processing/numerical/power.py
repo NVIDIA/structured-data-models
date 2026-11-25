@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import math
+from collections.abc import Iterator, Mapping
 
 import torch
 from torch import Tensor
@@ -245,6 +246,15 @@ class PowerTransform(Processor, InvertibleMixin):
         self.register_buffer("max", torch.empty(0))
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The columns of the table (-1) are the dimension -1 of `[..., C]`.
+        yield self.lambdas, {-1: -1}
+        yield self.max, {-1: -1}
+        yield self.mean, {-1: -1}
+        yield self.scale, {-1: -1}
 
     def _optimize_lambdas(
         self,

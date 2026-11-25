@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator, Mapping
 from typing import Literal, cast
 
 import torch
@@ -34,6 +35,13 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         self.method = method
         self._permutations: BufferList[Tensor] = BufferList()
         self._host_permutations: tuple[tuple[int, ...], ...] = ()
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The columns of the table (-1) are the only dimension (-1) of `[C]`.
+        for permutation in self._permutations:
+            yield permutation, {-1: -1}
 
     def get_extra_state(self) -> tuple[tuple[int, ...], ...]:
         r""":meta private:"""  # noqa: D415

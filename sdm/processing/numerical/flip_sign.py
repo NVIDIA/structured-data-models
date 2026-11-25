@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections.abc import Iterator, Mapping
+
 import torch
 from torch import Tensor
 
@@ -26,6 +28,13 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         super().__init__()
         self.probability = probability
         self._signs: BufferList[Tensor] = BufferList()
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The columns of the table (-1) are the dimension -1 of `[..., 1, C]`.
+        for signs in self._signs:
+            yield signs, {-1: -1}
 
     def _fit_ensemble(
         self,

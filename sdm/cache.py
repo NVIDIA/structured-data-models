@@ -261,7 +261,7 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
     def _record(
         self,
         key: Hashable,
-        value: KVCacheEntry,
+        value: Tensor | KVCacheEntry,
         dims: Mapping[int | None, int],
     ) -> None:
         r"""Store ``value`` and declare its dimensions that follow the table.
@@ -270,10 +270,11 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
 
         Args:
             key: The cache key.
-            value: The keys and values.
+            value: A tensor, or keys and values.
             dims: The dimensions of ``value`` by the dimension of the table,
                 ``[..., R, D]``, that they follow, *e.g.*, ``{-2: -3}`` for
-                keys and values of shape ``[..., R, H, C]``.
+                keys and values of shape ``[..., R, H, C]``, or ``{-1: -1}``
+                for a tensor of shape ``[..., D]``.
         """
         self[key] = value
         self._dims[key] = dims
@@ -284,12 +285,18 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
         # Every fitted tensor with its declared dimensions; see `_record`.
         for key, value in self.items():
             dims = self._dims.get(key)
-            if dims is not None:
-                # Keys and values of `_record`, not the scales of quantized
-                # ones, which are per head.
-                entry = cast(KVCacheEntry, value)
-                yield entry.key, dims
-                yield entry.value, dims
+            if isinstance(value, KVCacheEntry) and dims is not None:
+                # Keys and values of `_record`. Their scales, `[..., 1, H, 1]`,
+                # follow only the dimensions before -3: columns, not rows.
+                yield value.key, dims
+                yield value.value, dims
+                scale_dims = {d: own for d, own in dims.items() if own < -3}
+                for scale in (value.key_scale, value.value_scale):
+                    if scale is not None:
+                        yield scale, scale_dims
+            elif dims is not None:
+                # A tensor of `_record`.
+                yield cast(Tensor, value), dims
             else:
                 # A nested cache or the recipe execution lists its own.
                 declared = getattr(value, "_dynamic_dims", None)
