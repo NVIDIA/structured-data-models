@@ -91,7 +91,18 @@ Random Functions
    :toctree: generated
    :nosignatures:
 
-{% for name in api_names("sdm.prior.functions") %}
+{% for name in api_names("sdm.prior.functions") if not name.endswith("ParentMerger") %}
+   ~sdm.prior.{{ name }}
+{% endfor %}
+
+Parent Mergers
+--------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.prior.functions") if name.endswith("ParentMerger") %}
    ~sdm.prior.{{ name }}
 {% endfor %}
 
