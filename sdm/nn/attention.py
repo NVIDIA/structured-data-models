@@ -705,7 +705,7 @@ class TransformerBlock(torch.nn.Module):
             if isinstance(key_value, Tensor):
                 key_value_length = key_value.size(-2)
             elif isinstance(key_value, KVCacheEntry):
-                key_value_length = key_value.key.size(-3)
+                key_value_length = key_value.key.shape[-3]
 
             batch_size_limit = self.auto_batch_size_limit(
                 device=query.device,
@@ -925,7 +925,7 @@ def _batch_shape(
     if isinstance(key_value, Tensor):
         shapes.append(key_value.size()[:-2])
     elif isinstance(key_value, KVCacheEntry):
-        shapes += [key_value.key.size()[:-3], key_value.value.size()[:-3]]
+        shapes += [key_value.key.shape[:-3], key_value.value.shape[:-3]]
     if seqused_key_value is not None:
         shapes.append(seqused_key_value.size())
     if attn_mask is not None:
