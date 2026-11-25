@@ -304,10 +304,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.prior.Correlated"><code class="docutils literal notranslate"><span class="pre">Correlated</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.prior.Correlated.sample_batch"><code class="docutils literal notranslate"><span class="pre">Correlated.sample_batch()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#sdm.prior.Correlated"><code class="docutils literal notranslate"><span class="pre">Correlated</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -350,40 +347,18 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Bases: <a class="reference internal" href="sdm.prior.HP.html#sdm.prior.HP" title="sdm.prior.hp.HP"><code class="xref py py-class docutils literal notranslate"><span class="pre">HP</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code>]</p>
 <p>Sample numerical values from a shared, randomly sampled distribution.</p>
 <p>A <a class="reference internal" href="sdm.prior.CorrelatedContext.html#sdm.prior.CorrelatedContext" title="sdm.prior.CorrelatedContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">CorrelatedContext</span></code></a> reuses Beta parameters for each
-key and supplies the generator for sampling.
-Without a context, each call samples new parameters. The Beta draws
-are mapped through <code class="docutils literal notranslate"><span class="pre">hp.transform</span></code>.</p>
+key across calls. For a batch of shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">N]</span></code>, the final <code class="docutils literal notranslate"><span class="pre">N</span></code> draws
+share Beta parameters, with an independent parameter set for leading
+dimensions.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>hp</strong> (<a class="reference internal" href="sdm.prior.HP.html#sdm.prior.HP" title="sdm.prior.hp.HP"><em>HP</em></a><em>[</em><em>T</em><em>]</em>) – Numerical parameter sampler with a <code class="docutils literal notranslate"><span class="pre">transform</span></code>
-method mapping quantile levels to values.</p></li>
+<li><p><strong>hp</strong> (<a class="reference internal" href="sdm.prior.HP.html#sdm.prior.HP" title="sdm.prior.hp.HP"><em>HP</em></a><em>[</em><em>T</em><em>]</em>) – Numerical parameter sampler.</p></li>
 <li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Hashable" title="(in Python v3.15)"><em>Hashable</em></a><em> | </em><em>None</em>) – Share Beta parameters with other samplers using this key.
 Defaults to this sampler’s identity.</p></li>
 </ul>
 </dd>
 </dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.prior.Correlated.sample_batch">
-<span class="sig-name descname"><span class="pre">sample_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.15)"><span class="pre">Size</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.prior.Correlated.sample_batch" title="Link to this definition">#</a></dt>
-<dd><p>Sample a tensor, sharing parameters along its final dimension.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.15)"><em>Size</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>...</em><em>]</em>) – Output shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">N]</span></code> or vector length. Leading
-dimensions identify independent parameter sets; <code class="docutils literal notranslate"><span class="pre">N</span></code>
-samples share each set. A scalar uses one parameter set.
-Shared keys must retain their leading shape in a scope.</p></li>
-<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom generator. In a context, omit it or pass
-the context’s generator.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a></p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -412,7 +387,7 @@ the context’s generator.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=b9a3b268"></script>
+      <script src="../../_static/documentation_options.js?v=103d1985"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

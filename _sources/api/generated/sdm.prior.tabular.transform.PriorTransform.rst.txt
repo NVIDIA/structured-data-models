@@ -6,3 +6,4 @@
 .. autoclass:: PriorTransform
    :members:
    :show-inheritance:
+   :special-members: __call__

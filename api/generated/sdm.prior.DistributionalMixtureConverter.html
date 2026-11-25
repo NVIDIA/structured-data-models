@@ -306,7 +306,6 @@ data-aria-dark="Switch to auto color mode">
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.prior.DistributionalMixtureConverter"><code class="docutils literal notranslate"><span class="pre">DistributionalMixtureConverter</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.prior.DistributionalMixtureConverter.sample_num_channels"><code class="docutils literal notranslate"><span class="pre">DistributionalMixtureConverter.sample_num_channels()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.prior.DistributionalMixtureConverter.forward"><code class="docutils literal notranslate"><span class="pre">DistributionalMixtureConverter.forward()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -388,29 +387,6 @@ The default is one channel per column.</p>
 </dl>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.prior.DistributionalMixtureConverter.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#sdm.prior.DistributionalMixtureConverter.forward" title="Link to this definition">#</a></dt>
-<dd><p>Return numerical column values and slices passed to child nodes.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>slices</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a>) – Node-channel slices per column with shape
-<code class="docutils literal notranslate"><span class="pre">[C,</span> <span class="pre">H,</span> <span class="pre">R]</span></code> for columns, channels, and rows. The channel
-count <code class="docutils literal notranslate"><span class="pre">H</span></code> may be ragged across columns.</p></li>
-<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom generator.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Column values with shape <code class="docutils literal notranslate"><span class="pre">[C,</span> <span class="pre">R]</span></code> and updated node-channel
-slices with the input shape for use by child nodes.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a>]</p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -439,7 +415,7 @@ slices with the input shape for use by child nodes.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=b9a3b268"></script>
+      <script src="../../_static/documentation_options.js?v=103d1985"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

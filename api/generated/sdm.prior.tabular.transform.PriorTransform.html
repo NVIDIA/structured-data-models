@@ -304,7 +304,10 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.prior.tabular.transform.PriorTransform"><code class="docutils literal notranslate"><span class="pre">PriorTransform</span></code></a></li>
+<li><a class="reference internal" href="#sdm.prior.tabular.transform.PriorTransform"><code class="docutils literal notranslate"><span class="pre">PriorTransform</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.prior.tabular.transform.PriorTransform.__call__"><code class="docutils literal notranslate"><span class="pre">PriorTransform.__call__()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -346,6 +349,29 @@ data-aria-dark="Switch to auto color mode">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.prior.tabular.transform.</span></span><span class="sig-name descname"><span class="pre">PriorTransform</span></span><a class="headerlink" href="#sdm.prior.tabular.transform.PriorTransform" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
 <p>Base class for transforming synthetic feature and target tables.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.prior.tabular.transform.PriorTransform.__call__">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">__call__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.prior.tabular.transform.PriorTransform.__call__" title="Link to this definition">#</a></dt>
+<dd><p>Transform a synthetic dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Feature table of shape <code class="docutils literal notranslate"><span class="pre">[R,</span> <span class="pre">C]</span></code> for <code class="docutils literal notranslate"><span class="pre">R</span></code> rows and <code class="docutils literal notranslate"><span class="pre">C</span></code>
+features.</p></li>
+<li><p><strong>y</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Target table of shape <code class="docutils literal notranslate"><span class="pre">[R,</span> <span class="pre">1]</span></code>.</p></li>
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom generator.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Transformed feature and target tables, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the dataset
+is rejected.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>, <a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>] | None</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -374,7 +400,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=b9a3b268"></script>
+      <script src="../../_static/documentation_options.js?v=103d1985"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
