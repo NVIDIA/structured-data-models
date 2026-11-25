@@ -16,7 +16,6 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
 from sdm.cache import Cache
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.base.compile import DynamicShapes
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
@@ -173,8 +172,9 @@ class KumoTabular(ICLModel):
         """  # noqa: D212
         return default_recipe()
 
-    def _default_dynamic_shapes(self) -> DynamicShapes:
-        return DynamicShapes(query=(-2,))
+    def _default_dynamic_dims(self) -> tuple[int, ...]:
+        # The rows of the query, and with them those of the fitted context.
+        return (-2,)
 
     def _compilable_models(self) -> Mapping[Task, torch.nn.Module]:
         return {Task(task): model for task, model in self.models.items()}
