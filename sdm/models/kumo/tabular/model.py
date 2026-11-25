@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -176,6 +176,9 @@ class KumoTabular(ICLModel):
     def _default_dynamic_shapes(self) -> DynamicShapes:
         return DynamicShapes(query=(-2,))
 
+    def _compilable_models(self) -> Mapping[Task, torch.nn.Module]:
+        return {Task(task): model for task, model in self.models.items()}
+
     def _load_from_pretrained(
         self,
         size: Literal["small", "medium", "large"],
@@ -213,6 +216,7 @@ class KumoTabular(ICLModel):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        models: Mapping[Task, Callable[..., Tensor]] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -240,9 +244,10 @@ class KumoTabular(ICLModel):
             )
 
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
+        models = self.models if models is None else models
 
         if classes is None:
-            out = self.models[Task.regression](
+            out = models[Task.regression](
                 x=x,
                 y=y,
                 categorical_mask=categorical_mask,
@@ -256,7 +261,7 @@ class KumoTabular(ICLModel):
             )
 
         out = self.ecoc(
-            model=self.models[Task.classification],
+            model=models[Task.classification],
             x=x,
             y=y,
             num_classes=len(classes),

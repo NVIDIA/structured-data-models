@@ -113,7 +113,11 @@ def _transfer(
 ) -> T:
     """Move a tensor or tensor container onto the prefetch stream."""
     if not torch.compiler.is_compiling():
-        with torch.cuda.stream(stream):
+        # The copies keep the kind of the fitted tensors, inference tensors or
+        # not, in any mode of the caller, as a compiled model guards on it.
+        tensors = item._tensors() if isinstance(item, DeviceMixin) else [item]
+        inference = any(t.is_inference() for t in tensors)  # type: ignore
+        with torch.inference_mode(inference), torch.cuda.stream(stream):
             return item.to(device=device, non_blocking=True)  # type: ignore
     if isinstance(item, DeviceMixin):
         return item._apply_tensor(
