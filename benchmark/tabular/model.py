@@ -7,6 +7,7 @@ import abc
 import argparse
 import copy
 import math
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Literal, cast
@@ -22,7 +23,8 @@ from autogluon.core.models.abstract.shared_weights import (
 from autogluon.tabular.models.abstract.abstract_torch_model import (
     AbstractTorchModel,
 )
-from tabarena.models.warmup import warmup_torch
+from tabarena.models.warmup import strip_ag_args, warmup_torch
+from tabarena.utils.synthetic_data import make_synthetic_frames
 
 import sdm
 import sdm.processing as sp
@@ -407,7 +409,56 @@ class SDMKumoTabularModel(SDMModel):
         hyperparameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
+        """Warm up PyTorch and, with ``compile``, the compiled models.
+
+        With ``compile``, random data of ``problem_type`` is fitted and
+        predicted with the estimators one by one and in one batch, the two
+        cases of ``estimator_batch_size="auto"``, so that the fits that follow
+        in this process find their graphs. This takes minutes, or seconds with
+        a persistent ``TORCHINDUCTOR_CACHE_DIR`` or with
+        ``torch.compiler.save_cache_artifacts`` and ``load_cache_artifacts``.
+        """
         warmup_torch(cuda=None if num_gpus is None else num_gpus > 0)
+        params = strip_ag_args(hyperparameters)
+        if not params.get("compile") or problem_type is None:
+            return
+
+        X, y, X_query = make_synthetic_frames(
+            problem_type,
+            n_rows=256,
+            n_features=8,
+            n_categorical=1,
+        )
+        resources = {
+            key: value
+            for key, value in (("num_cpus", num_cpus), ("num_gpus", num_gpus))
+            if value is not None
+        }
+        # Random numbers of the fits leave the generators as they were.
+        devices = (
+            range(torch.cuda.device_count())
+            if torch.cuda.is_initialized()
+            else ()
+        )
+        for estimator_batch_size in (1, None):
+            with (
+                tempfile.TemporaryDirectory() as path,
+                torch.random.fork_rng(devices=devices),
+            ):
+                model = cls(
+                    path=path,
+                    name="warmup",
+                    problem_type=problem_type,
+                    hyperparameters={
+                        **params,
+                        "estimator_batch_size": estimator_batch_size,
+                    },
+                )
+                model.fit(X=X, y=y, verbosity=0, **resources)
+                if problem_type == REGRESSION:
+                    model.predict(X_query)
+                else:
+                    model.predict_proba(X_query)
 
     @classmethod
     def _create_model(
