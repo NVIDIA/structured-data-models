@@ -27,7 +27,7 @@ class QuantizedTensor(DeviceMixin):
 
     Args:
         qdata: The quantized values.
-        scale: The scales of ``qdata``.
+        scale: The scales of ``qdata``, broadcastable to it.
         scheme: The storage dtype of ``qdata`` and ``scale``.
     """
 
