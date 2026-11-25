@@ -214,19 +214,19 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.rank.html">rank</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.modulo.html">modulo</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomFunction.html">RandomFunction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.ParentMerger.html">ParentMerger</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomLinear.html">RandomLinear</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomQuadratic.html">RandomQuadratic</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomNN.html">RandomNN</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomDiscretization.html">RandomDiscretization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.ConcatParentMerger.html">ConcatParentMerger</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MixtureFunction.html">MixtureFunction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MixtureParentMerger.html">MixtureParentMerger</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomTree.html">RandomTree</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomEMAssignment.html">RandomEMAssignment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomGP.html">RandomGP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.RandomProduct.html">RandomProduct</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MixtureFunction.html">MixtureFunction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.ParentMerger.html">ParentMerger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.ConcatParentMerger.html">ConcatParentMerger</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.ReduceParentMerger.html">ReduceParentMerger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MixtureParentMerger.html">MixtureParentMerger</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.MatrixSampler.html">MatrixSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.GaussianMatrixSampler.html">GaussianMatrixSampler</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.prior.PowerLawMatrixSampler.html">PowerLawMatrixSampler</a></li>
@@ -314,6 +314,7 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li><a class="reference internal" href="#random-functions">Random Functions</a></li>
+<li><a class="reference internal" href="#parent-mergers">Parent Mergers</a></li>
 <li><a class="reference internal" href="#matrix-samplers">Matrix Samplers</a></li>
 <li><a class="reference internal" href="#converters">Converters</a></li>
 <li><a class="reference internal" href="#filters">Filters</a></li>
@@ -544,29 +545,17 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.RandomFunction.html#sdm.prior.RandomFunction" title="sdm.prior.RandomFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomFunction</span></code></a></p></td>
 <td><p>Base class for random functions on node values.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.ParentMerger.html#sdm.prior.ParentMerger" title="sdm.prior.ParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParentMerger</span></code></a></p></td>
-<td><p>Base class for combining parent values into node values.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.RandomLinear.html#sdm.prior.RandomLinear" title="sdm.prior.RandomLinear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomLinear</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.RandomLinear.html#sdm.prior.RandomLinear" title="sdm.prior.RandomLinear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomLinear</span></code></a></p></td>
 <td><p>Apply a random linear function.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.RandomQuadratic.html#sdm.prior.RandomQuadratic" title="sdm.prior.RandomQuadratic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomQuadratic</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.RandomQuadratic.html#sdm.prior.RandomQuadratic" title="sdm.prior.RandomQuadratic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomQuadratic</span></code></a></p></td>
 <td><p>Apply a random quadratic function.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.RandomNN.html#sdm.prior.RandomNN" title="sdm.prior.RandomNN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomNN</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.RandomNN.html#sdm.prior.RandomNN" title="sdm.prior.RandomNN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomNN</span></code></a></p></td>
 <td><p>Apply a random neural network.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.RandomDiscretization.html#sdm.prior.RandomDiscretization" title="sdm.prior.RandomDiscretization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomDiscretization</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.RandomDiscretization.html#sdm.prior.RandomDiscretization" title="sdm.prior.RandomDiscretization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomDiscretization</span></code></a></p></td>
 <td><p>Replace each row with a linear transformation of its nearest center.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.ConcatParentMerger.html#sdm.prior.ConcatParentMerger" title="sdm.prior.ConcatParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConcatParentMerger</span></code></a></p></td>
-<td><p>Concatenate parent values and apply <code class="docutils literal notranslate"><span class="pre">random_fn</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.MixtureFunction.html#sdm.prior.MixtureFunction" title="sdm.prior.MixtureFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixtureFunction</span></code></a></p></td>
-<td><p>Pick one random function per call from a weighted pool.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.MixtureParentMerger.html#sdm.prior.MixtureParentMerger" title="sdm.prior.MixtureParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixtureParentMerger</span></code></a></p></td>
-<td><p>Pick one parent merger per call from a weighted pool.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.RandomTree.html#sdm.prior.RandomTree" title="sdm.prior.RandomTree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomTree</span></code></a></p></td>
 <td><p>Average the outputs of random symmetric trees.</p></td>
@@ -580,8 +569,29 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.RandomProduct.html#sdm.prior.RandomProduct" title="sdm.prior.RandomProduct"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RandomProduct</span></code></a></p></td>
 <td><p>Multiply the outputs of two sampled random functions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.ReduceParentMerger.html#sdm.prior.ReduceParentMerger" title="sdm.prior.ReduceParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReduceParentMerger</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.MixtureFunction.html#sdm.prior.MixtureFunction" title="sdm.prior.MixtureFunction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixtureFunction</span></code></a></p></td>
+<td><p>Pick one random function per call from a weighted pool.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="parent-mergers">
+<h2>Parent Mergers<a class="headerlink" href="#parent-mergers" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.ParentMerger.html#sdm.prior.ParentMerger" title="sdm.prior.ParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParentMerger</span></code></a></p></td>
+<td><p>Base class for combining parent values into node values.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.ConcatParentMerger.html#sdm.prior.ConcatParentMerger" title="sdm.prior.ConcatParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConcatParentMerger</span></code></a></p></td>
+<td><p>Concatenate parent values and apply <code class="docutils literal notranslate"><span class="pre">random_fn</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.prior.ReduceParentMerger.html#sdm.prior.ReduceParentMerger" title="sdm.prior.ReduceParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReduceParentMerger</span></code></a></p></td>
 <td><p>Apply <code class="docutils literal notranslate"><span class="pre">random_fn</span></code> to each parent and reduce the outputs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.prior.MixtureParentMerger.html#sdm.prior.MixtureParentMerger" title="sdm.prior.MixtureParentMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixtureParentMerger</span></code></a></p></td>
+<td><p>Pick one parent merger per call from a weighted pool.</p></td>
 </tr>
 </tbody>
 </table>
@@ -763,7 +773,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=103d1985"></script>
+      <script src="../_static/documentation_options.js?v=12c046b2"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
