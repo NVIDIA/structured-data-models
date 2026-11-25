@@ -148,3 +148,9 @@ class SchemaSampler:
             column_dims=tuple(column_dims.tolist()),
             target_dim=target_dim,
         )
+
+
+__all__ = [
+    "Schema",
+    "SchemaSampler",
+]

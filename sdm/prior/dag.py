@@ -168,10 +168,11 @@ class RandomCauchyDAGSampler(DAGSampler):
     def __init__(self, num_nodes: HP[int] | int) -> None:
         self.num_nodes = HP.from_value(num_nodes)
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         generator: torch.Generator | None = None,
     ) -> DAG:
+        r""":meta private:"""  # noqa: D415
         n = self.num_nodes.sample(generator)
 
         # Inverse-CDF sampling for standard Cauchy:
@@ -215,10 +216,11 @@ class MixtureDAGSampler(DAGSampler, Mixture[DAGSampler]):
     ) -> None:
         Mixture.__init__(self, samplers, correlated=False)
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         generator: torch.Generator | None = None,
     ) -> DAG:
+        r""":meta private:"""  # noqa: D415
         return self.pick(generator=generator).sample(generator=generator)
 
 
@@ -241,3 +243,11 @@ def _sample_columns(
         generator=generator,
     )
     return eligible[index]
+
+
+__all__ = [
+    "DAG",
+    "DAGSampler",
+    "RandomCauchyDAGSampler",
+    "MixtureDAGSampler",
+]

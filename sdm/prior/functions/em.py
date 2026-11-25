@@ -40,12 +40,13 @@ class RandomEMAssignment(RandomFunction):
         self.m = HP.from_value(m) if m is not None else None
         self.linear = linear or RandomLinear()
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = x.unsqueeze(0)
         batch_size, num_rows, in_channels = x.size()
 

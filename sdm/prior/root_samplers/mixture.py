@@ -29,12 +29,13 @@ class MixtureRootSampler(RootSampler, Mixture[RootSampler]):
     ) -> None:
         Mixture.__init__(self, samplers, correlated, key)
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         num_rows: int,
         channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         sampler = self.pick(generator=generator)
         return sampler.sample(
             num_rows=num_rows,

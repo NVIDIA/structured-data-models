@@ -32,12 +32,13 @@ class ActivationMatrixSampler(MatrixSampler):
         self.activation = activation
         self.normalize = normalize
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         size: torch.Size | tuple[int, ...],
         dtype: torch.dtype,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         W = self.matrix_sampler.sample(
             size,
             dtype=dtype,

@@ -24,12 +24,13 @@ class RandomTree(RandomFunction):
         self.num_trees = HP.from_value(num_trees)
         self.depth = HP.from_value(depth)
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         num_trees = self.num_trees.sample(generator=generator)
         depth = self.depth.sample(generator=generator)
 

@@ -24,11 +24,12 @@ class KumaraswamyNumericalConverter(NumericalConverter):
         self.a = HP.from_value(a)
         self.b = HP.from_value(b)
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         slices: Tensor,
         generator: torch.Generator | None = None,
     ) -> tuple[Tensor, Tensor]:
+        r""":meta private:"""  # noqa: D415
         x = slices.values() if slices.is_nested else slices.squeeze(1)
         num_cols = x.size(0)
 

@@ -28,12 +28,13 @@ class RandomDiscretization(RandomFunction):
         self.p = HP.from_value(p)
         self.linear = linear or RandomLinear()
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         num_rows = x.size(0)
         num_centers = min(
             self.num_centers.sample(generator=generator), num_rows

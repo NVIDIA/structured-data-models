@@ -29,12 +29,13 @@ class RandomQuadratic(RandomFunction):
         self.max_channels = max_channels
         self.matrix_sampler = matrix_sampler or GaussianMatrixSampler()
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         num_rows, in_channels = x.size()
 
         # Subsample input channels to keep the quadratic form small:

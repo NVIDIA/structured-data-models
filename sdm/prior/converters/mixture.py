@@ -44,12 +44,7 @@ class MixtureConverter(Mixture["T | MixtureConverter[T]"], Generic[T]):
         num_columns: int,
         generator: torch.Generator | None = None,
     ) -> list[T]:
-        """Select a concrete converter for each column, in column order.
-
-        Args:
-            num_columns: Number of columns.
-            generator: Pseudorandom generator.
-        """
+        r""":meta private:"""  # noqa: D415
         if num_columns == 0:
             return []
         choice = self._draw(num_samples=num_columns, generator=generator)

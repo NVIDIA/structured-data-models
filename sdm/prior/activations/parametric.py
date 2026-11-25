@@ -17,13 +17,17 @@ class ReLUPowActivation(Activation):
     """
 
     def __init__(
-        self, exponent: HP[float] | Correlated[float] | None = None
+        self,
+        exponent: HP[float] | Correlated[float] | None = None,
     ) -> None:
         self.exponent = exponent or Correlated(LogUniform(0.1, 10.0))
 
-    def forward(  # noqa: D102
-        self, x: Tensor, generator: torch.Generator | None = None
+    def forward(
+        self,
+        x: Tensor,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return x.relu().pow(self.exponent.sample(generator=generator))
 
 
@@ -36,13 +40,17 @@ class SignPowActivation(Activation):
     """
 
     def __init__(
-        self, exponent: HP[float] | Correlated[float] | None = None
+        self,
+        exponent: HP[float] | Correlated[float] | None = None,
     ) -> None:
         self.exponent = exponent or Correlated(LogUniform(0.1, 10.0))
 
-    def forward(  # noqa: D102
-        self, x: Tensor, generator: torch.Generator | None = None
+    def forward(
+        self,
+        x: Tensor,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return x.sign() * x.abs().pow(
             self.exponent.sample(generator=generator)
         )
@@ -57,13 +65,17 @@ class InversePowActivation(Activation):
     """
 
     def __init__(
-        self, exponent: HP[float] | Correlated[float] | None = None
+        self,
+        exponent: HP[float] | Correlated[float] | None = None,
     ) -> None:
         self.exponent = exponent or Correlated(LogUniform(0.1, 10.0))
 
-    def forward(  # noqa: D102
-        self, x: Tensor, generator: torch.Generator | None = None
+    def forward(
+        self,
+        x: Tensor,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return (x.abs() + 1e-3).pow(-self.exponent.sample(generator=generator))
 
 
@@ -76,11 +88,15 @@ class IntegerPowActivation(Activation):
     """
 
     def __init__(
-        self, exponent: HP[int] | Correlated[int] | None = None
+        self,
+        exponent: HP[int] | Correlated[int] | None = None,
     ) -> None:
         self.exponent = exponent or Correlated(UniformInt(2, 5))
 
-    def forward(  # noqa: D102
-        self, x: Tensor, generator: torch.Generator | None = None
+    def forward(
+        self,
+        x: Tensor,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return x.pow(self.exponent.sample(generator=generator))
