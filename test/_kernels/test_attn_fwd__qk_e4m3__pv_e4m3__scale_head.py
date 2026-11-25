@@ -26,7 +26,8 @@ pytestmark = [
 
 def quantize(x: Tensor) -> tuple[Tensor, Tensor]:
     # [B, H, S, D] -> FP8 [B, H, S, D] and FP32 per-head scales [B, H, 1, 1].
-    quantized = Float8PerHead().quantize(x.transpose(1, 2))
+    x = x.transpose(1, 2)
+    quantized = Float8PerHead().quantize(x)
     return (
         quantized.qdata.transpose(1, 2).contiguous(),
         quantized.scale.transpose(1, 2).contiguous(),
