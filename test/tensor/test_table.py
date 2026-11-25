@@ -61,11 +61,11 @@ def test_init() -> None:
     assert tensor.text_columns == ()
     assert tensor.id_columns == ()
 
-    assert tensor._column_to_loc == {
-        "age": (Stype.numerical, 0),
-        "income": (Stype.numerical, 1),
-        "country": (Stype.categorical, 0),
-        "segment": (Stype.categorical, 1),
+    assert tensor.stypes == {
+        "age": Stype.numerical,
+        "income": Stype.numerical,
+        "country": Stype.categorical,
+        "segment": Stype.categorical,
     }
 
     with pytest.raises(ValueError, match=r"datetime.*dtype"):
@@ -92,7 +92,7 @@ def test_empty() -> None:
         Stype.text: (),
         Stype.id: (),
     }
-    assert tensor._column_to_loc == {}
+    assert tensor.stypes == {}
 
 
 def test_column_groups() -> None:
@@ -537,7 +537,7 @@ def test_save_load() -> None:
     assert out.categorical.equal(tensor.categorical)
     assert out.datetime.equal(tensor.datetime)
     assert out.columns == tensor.columns
-    assert out._column_to_loc == tensor._column_to_loc
+    assert out.stypes == tensor.stypes
     for category1, category2 in zip(
         out.categorical.categories,
         tensor.categorical.categories,
@@ -569,7 +569,7 @@ def test_to_copy() -> None:
     assert out.datetime.equal(tensor.datetime)
     assert out.datetime.dtype == torch.int64
     assert out.columns == tensor.columns
-    assert out._column_to_loc == tensor._column_to_loc
+    assert out.stypes == tensor.stypes
 
 
 @withCUDA
