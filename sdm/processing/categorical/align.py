@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Literal, cast
 
 import torch
@@ -249,6 +249,15 @@ class AlignCategories(EnsembleProcessor):
             table,
             cast(Sequence[Sequence[Tensor]], self._categories),
         )[0]
+
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
+        # The fitted data (`None`) sets the number of categories, the only
+        # dimension (0) of each list.
+        for categories in self._categories:
+            for category in categories:
+                yield category, {None: 0}
 
     @staticmethod
     def _member_table_ids(

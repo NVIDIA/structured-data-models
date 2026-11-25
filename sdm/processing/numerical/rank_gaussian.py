@@ -48,7 +48,9 @@ class RankGaussian(Processor):
         self.register_buffer("_values", torch.empty(0))
         self.register_buffer("_probabilities", torch.empty(0))
 
-    def _dynamic_dims(self) -> Iterator[tuple[Tensor, Mapping[int, int]]]:
+    def _dynamic_dims(
+        self,
+    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
         # Up to `max_knots` knots per column follow the fitted rows: the rows
         # of the table (-2) are the last dimension (-1) of `[..., C, K]`.
         yield self._values, {-2: -1}
