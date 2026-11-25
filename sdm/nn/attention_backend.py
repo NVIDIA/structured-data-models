@@ -205,7 +205,7 @@ class FP8AttentionBackend(AttentionBackend):
             and torch.cuda.get_device_capability(query.device)
             in {(8, 9), (9, 0), (12, 0), (12, 1)}
             and query.size(-1) in {32, 64, 128, 256}
-            and value.shape[-1] == query.size(-1)
+            and value.size(-1) == query.size(-1)
             and attn_mask is None
             and seqused_key_value is None
             and not is_causal
@@ -245,7 +245,7 @@ class FP8AttentionBackend(AttentionBackend):
         fp8_query = QuantizedTensor.quantize(query, dim=(-3, -1))
 
         # Launch settings measured to avoid register spills:
-        channels, context = query.size(-1), key.shape[-3]
+        channels, context = query.size(-1), key.size(-3)
         wide = channels == 256 or (channels == 128 and context >= 32768)
         blackwell = channels == 64 and torch.cuda.get_device_capability(
             query.device
