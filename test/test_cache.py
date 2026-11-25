@@ -7,13 +7,7 @@ from typing import cast
 import pytest
 import torch
 
-from sdm.cache import (
-    Cache,
-    Float8PerHead,
-    KVCacheEntry,
-    QuantizedTensor,
-    Unquantized,
-)
+from sdm.cache import Cache, Float8PerHead, KVCacheEntry, QuantizedTensor
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -133,12 +127,12 @@ def test_kv_cache_entry_scales() -> None:
     assert Cache(entry=entry).size() == 2 * 24 * 1 + 2 * 2 * 4
 
 
-def test_quantized_tensor_rejects_mismatched_scheme() -> None:
+def test_quantized_tensor_rejects_invalid_data() -> None:
     x = torch.randn(2, 3, 1, 4)
-    with pytest.raises(ValueError, match="do not match"):
-        QuantizedTensor(qdata=x, scale=x, scheme=Float8PerHead())
-    with pytest.raises(ValueError, match="do not match"):
-        QuantizedTensor(qdata=x, scale=x, scheme=Unquantized())
+    with pytest.raises(ValueError, match="Expected FP8"):
+        QuantizedTensor(qdata=x, scale=x)
+    with pytest.raises(ValueError, match="Expected FP8"):
+        QuantizedTensor(qdata=x.to(torch.float8_e4m3fn), scale=x.half())
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
