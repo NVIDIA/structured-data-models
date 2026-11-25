@@ -416,18 +416,13 @@ class Attention(torch.nn.Module):
                 else None,
             )
             # TODO: Attention backend should decide whether to dequantize.
-            key_value = key_value.dequantize(query.dtype)
-            if (
-                key_value.key.dtype != query.dtype
-                or key_value.value.dtype != query.dtype
-            ):
+            key, value = key_value.dequantize(query.dtype)
+            if key.dtype != query.dtype or value.dtype != query.dtype:
                 raise ValueError(
                     f"Key/value projections were cached under dtypes "
-                    f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
+                    f"'{key.dtype}'/'{value.dtype}' but "
                     f"the query has dtype '{query.dtype}'"
                 )
-            key = key_value.key
-            value = key_value.value
         elif key_value is None:
             query, key, value = self.qkv_lin(query).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -473,9 +468,7 @@ class Attention(torch.nn.Module):
                 entry = kv_cache_dtype.quantize(entry)
             entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
             # TODO: Attention backend should decide whether to dequantize.
-            stored = entry.dequantize(value.dtype)
-            key, value = stored.key, stored.value
-            del stored
+            key, value = entry.dequantize(value.dtype)
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
