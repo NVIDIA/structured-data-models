@@ -13,7 +13,7 @@ from collections.abc import (
 )
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import NamedTuple, Self, cast
+from typing import NamedTuple, Self, cast, overload
 
 import torch
 from torch import Tensor
@@ -93,6 +93,20 @@ class QuantizedTensor(DeviceMixin):
     def shape(self) -> torch.Size:
         r"""The shape of the quantized values."""
         return self.qdata.shape
+
+    @overload
+    def size(self) -> torch.Size: ...
+
+    @overload
+    def size(self, dim: int) -> int: ...
+
+    def size(self, dim: int | None = None) -> torch.Size | int:
+        r"""Returns the size of the quantized values.
+
+        Args:
+            dim: The dimension to return the size of, or all if ``None``.
+        """
+        return self.qdata.size(dim)
 
     def dequantize(self, dtype: torch.dtype) -> Tensor:
         r"""Returns the tensor in ``dtype``.
