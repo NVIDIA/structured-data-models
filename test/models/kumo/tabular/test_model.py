@@ -453,12 +453,70 @@ def test_compile_predict(
 
 
 @pytest.mark.usefixtures("compilation")
+def test_compile_predict_classes_and_estimators() -> None:
+    model = _build("classification", "small")
+    x = torch.randn(48, 4)
+    counter = CompileCounter()
+    predict = model._compile_predict(backend=counter, fullgraph=True)
+
+    def check(num_classes: int, graphs: int, **kwargs: int | None) -> None:
+        y = TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor.from_tensor(
+                torch.arange(40).remainder(num_classes).unsqueeze(-1)
+            ),
+        )
+        model.fit(x[:40], y, **kwargs)
+        with torch.inference_mode():
+            actual = predict(x[40:])
+        expected = model.predict(x[40:])
+        assert actual.numerical_columns == expected.numerical_columns
+        torch.testing.assert_close(
+            actual=actual.numerical,
+            expected=expected.numerical,
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        assert counter.frame_count == graphs
+
+    # One graph serves fits with up to 10 classes and any number of
+    # estimators.
+    for num_classes in (3, 2, 5):
+        check(num_classes, graphs=1, num_estimators=4)
+    for num_estimators in (1, 8):
+        check(num_classes=3, graphs=1, num_estimators=num_estimators)
+    # More classes call the model on a batch of ECOC tasks, which compiles
+    # another graph per number of tasks: 12 and 15 classes have as many.
+    for num_classes in (12, 15):
+        check(num_classes, graphs=2, num_estimators=4)
+    # Estimators in batches compile one more graph per batch size. The third
+    # estimator of three in batches of two runs through the first graph.
+    for num_estimators, batch_size, graphs in (
+        (4, 2, 3),
+        (3, 2, 3),
+        (8, 2, 3),
+        (4, None, 4),
+        (8, None, 5),
+        (8, 1, 5),
+    ):
+        check(
+            num_classes=3,
+            graphs=graphs,
+            num_estimators=num_estimators,
+            estimator_batch_size=batch_size,
+        )
+
+
+@pytest.mark.usefixtures("compilation")
 def test_compile_predict_query_categories() -> None:
-    def table(colors: list[str]) -> TableTensor:
+    def table(
+        colors: list[str],
+        categories: tuple[str, ...] = ("a", "b", "c"),
+    ) -> TableTensor:
         df = pd.DataFrame(
             {
                 "x": torch.randn(len(colors)).numpy(),
-                "color": pd.Categorical(colors, categories=["a", "b", "c"]),
+                "color": pd.Categorical(colors, categories=categories),
             }
         )
         return TableTensor.from_pandas(
@@ -471,10 +529,10 @@ def test_compile_predict_query_categories() -> None:
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # Queries that declare the same list of categories share one graph,
-    # whichever of the categories their rows contain.
-    for colors in (["a", "b", "c", "a"], ["b"], ["c", "a", "c"]):
-        query = table(colors)
+    # Queries share one graph, whichever list of categories they declare: the
+    # recipe encodes the categories before the graph.
+    for categories in (("a", "b", "c"), ("a", "b"), ("c", "a", "d", "e")):
+        query = table(list(categories), categories)
         torch.testing.assert_close(
             actual=predict(query).numerical,
             expected=model.predict(query).numerical,

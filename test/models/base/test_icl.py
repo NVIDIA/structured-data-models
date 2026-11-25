@@ -18,6 +18,7 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import Callback, ICLModel
+from sdm.models.base.compile import DynamicShapes
 from sdm.processing import InvertibleMixin, Processor
 
 
@@ -557,6 +558,9 @@ def test_compile_predict() -> None:
         model.predict(x).numerical,
     )
     assert counter.frame_count == 1
+
+    with pytest.raises(ValueError, match="dynamic shapes"):
+        model._compile_predict(dynamic_shapes=DynamicShapes(query=(-2,)))
 
 
 def test_related_table_validation() -> None:

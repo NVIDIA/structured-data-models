@@ -5,14 +5,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
+from torch.nn import Module
 
-from sdm import TableTensor
+from sdm import RelatedTables, TableTensor
+from sdm.models.base import Callback
 
 if TYPE_CHECKING:
     from sdm.models.base.icl import ICLModel
@@ -26,8 +29,8 @@ class DynamicShapes:
     and :func:`compile_predict` marks them.
     """
 
-    #: The dimensions of the query. Rows (``-2``) require that the model and
-    #: its recipe predict every query row independently of the other rows.
+    #: The dimensions of the query. Rows (``-2``) require that the model
+    #: predicts every query row independently of the other rows.
     query: tuple[int, ...] = ()
 
 
@@ -38,13 +41,21 @@ def compile_predict(
 ) -> Callable[..., TableTensor]:
     r"""Compile ``model.predict`` using :func:`torch.compile`.
 
-    One graph serves queries of any size along the default
-    :class:`DynamicShapes` of ``model``. With dynamic shapes, a query without
-    rows is predicted without the graph.
+    For a model with ``_compilable_models``, a graph holds one call of the
+    model of a task on one batch of estimators, and is compiled on the first
+    such call. All other steps of ``predict`` run uncompiled, so that the
+    number of estimators and the names of columns, classes and categories do
+    not enter the graph. Calls reuse a graph while its guards hold, *e.g.*,
+    with the same precision, gradient mode, device and estimator batch size:
+    each batch size compiles its own graph.
+    :class:`~sdm.models.KumoTabular` shares a graph among up to 10 classes;
+    more classes compile further graphs.
 
-    The lists of categories of a query are static: pass the same lists on
-    every call, *e.g.*, a pandas ``Categorical`` with fixed categories. Lists
-    with another number of categories or characters compile another graph.
+    One graph serves queries of any size along the default
+    :class:`DynamicShapes` of ``model``. A query without rows is predicted
+    without the graph.
+
+    Other models compile ``predict`` as a whole, with static shapes.
 
     Args:
         model: The model.
@@ -53,6 +64,7 @@ def compile_predict(
             for the query rows. ``DynamicShapes()`` marks none: the query
             shape is static, and every new shape compiles another graph. A
             dimension that the model cannot keep dynamic fails to compile.
+            Not supported for a ``predict`` compiled as a whole.
         **kwargs: Keyword arguments passed to :func:`torch.compile`.
             ``dynamic`` defaults to ``False``, so that only the marked
             dimensions are dynamic. ``isolate_recompiles`` defaults to
@@ -60,43 +72,64 @@ def compile_predict(
             limit.
     """
     kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
-    compiled = torch.compile(model.predict, **kwargs)
+    if not model._compilable_models():
+        if dynamic_shapes is not None and dynamic_shapes.query:
+            raise ValueError(
+                f"{model.__class__.__name__!r} does not support dynamic "
+                f"shapes in a compiled 'predict'"
+            )
+        return torch.compile(model.predict, **kwargs)
+
     shapes = dynamic_shapes or model._default_dynamic_shapes()
-    # Without dynamic shapes, none of the steps below are needed.
-    if shapes == DynamicShapes():
-        return compiled
+    # By model, compiled on its first call: the models of ``model`` may be
+    # replaced.
+    compiled: dict[Module, Callable[..., Tensor]] = {}
 
     def predict(
         x: Tensor | TableTensor,  # [..., R, D]
-        *args: Any,
-        **kwargs: Any,
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:
-        rows = x.size(-2)
-        if rows == 0:
-            return model.predict(x, *args, **kwargs)
-        # A graph specializes on sizes of zero and one, so a single row is
-        # repeated if the rows are dynamic, unless callbacks see the rows.
-        # Without a copy, queries that are different slices of one table, such
-        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
-        dims = {dim % x.dim() for dim in shapes.query}
-        repeat = (
-            rows == 1 and x.dim() - 2 in dims and not kwargs.get("callbacks")
+        # Counted from the last dimension: the models see stacked estimators.
+        dims = {dim % x.dim() - x.dim() for dim in shapes.query}
+        models = {}
+        for task, module in model._compilable_models().items():
+            if module not in compiled:
+                compiled[module] = torch.compile(module, **kwargs)
+            models[task] = partial(_call, module, compiled[module], dims)
+        return model._predict(
+            x=x,
+            related_tables=related_tables,
+            callbacks=callbacks,
+            models=models,
         )
-        x = (
-            torch.cat([x, x], dim=-2)
-            if repeat
-            else x.clone(memory_format=torch.contiguous_format)
-        )
-        _mark_dynamic(x, dims)
-        out = compiled(x, *args, **kwargs)
-        return out[..., :1, :] if repeat else out
 
     return predict
 
 
-def _mark_dynamic(tensor: Tensor, dims: set[int]) -> None:
+def _call(
+    module: Module,
+    compiled: Callable[..., Tensor],
+    dims: set[int],
+    x: Tensor,  # [..., R, C]
+    *args: Any,
+    **kwargs: Any,
+) -> Tensor:
+    rows = x.size(-2)
+    if rows == 0:
+        return module(x, *args, **kwargs)
+    # A graph specializes on sizes of zero and one, so a single row is
+    # repeated if the rows are dynamic. It also specializes on the strides and
+    # the storage offset of a view, such as a slice or the expanded query of
+    # ECOC, so that the query is copied.
+    repeat = rows == 1 and -2 in dims
+    x = (
+        torch.cat([x, x], dim=-2)
+        if repeat
+        else x.clone(memory_format=torch.contiguous_format)
+    )
     for dim in dims:
-        if isinstance(tensor, TableTensor):
-            tensor._mark_dynamic(dim)
-        else:
-            torch._dynamo.mark_dynamic(tensor, dim)
+        torch._dynamo.mark_dynamic(x, dim % x.dim())
+    out = compiled(x, *args, **kwargs)
+    return out[..., :1, :] if repeat else out
