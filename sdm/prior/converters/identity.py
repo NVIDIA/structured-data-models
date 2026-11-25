@@ -10,10 +10,11 @@ from sdm.prior.converters import NumericalConverter
 class IdentityConverter(NumericalConverter):
     """Return single-channel values as numerical columns."""
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         slices: Tensor,
         generator: torch.Generator | None = None,
     ) -> tuple[Tensor, Tensor]:
+        r""":meta private:"""  # noqa: D415
         values = slices.values() if slices.is_nested else slices.squeeze(1)
         return values, slices

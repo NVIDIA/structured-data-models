@@ -29,7 +29,8 @@ class MixtureActivation(Activation, Mixture[Activation]):
     ) -> None:
         Mixture.__init__(self, activations, correlated, key)
 
-    def forward(  # noqa: D102
+    def forward(
         self, x: Tensor, generator: torch.Generator | None = None
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return self.pick(generator=generator).forward(x, generator=generator)

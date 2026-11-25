@@ -21,12 +21,13 @@ class SingularValuesMatrixSampler(MatrixSampler):
     def __init__(self, normalize: bool = True) -> None:
         self.normalize = normalize
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         size: torch.Size | tuple[int, ...],
         dtype: torch.dtype,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         *batch, m, k = size
         d = min(m, k)
         U = torch.randn(

@@ -33,11 +33,12 @@ class StandardizedActivation(Activation):
             else scale
         )
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         num_rows, channels = x.size()
 
         x, _ = standardize(x, dim=0)

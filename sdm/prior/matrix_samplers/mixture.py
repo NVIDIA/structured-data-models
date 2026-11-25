@@ -29,12 +29,13 @@ class MixtureMatrixSampler(MatrixSampler, Mixture[MatrixSampler]):
     ) -> None:
         Mixture.__init__(self, samplers, correlated, key)
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         size: torch.Size | tuple[int, ...],
         dtype: torch.dtype,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return self.pick(generator=generator).sample(
             size,
             dtype=dtype,

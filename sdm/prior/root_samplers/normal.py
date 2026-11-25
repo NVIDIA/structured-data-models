@@ -24,12 +24,13 @@ class NormalRootSampler(RootSampler):
         self.mean = HP.from_value(mean)
         self.std = HP.from_value(std)
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         num_rows: int,
         channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         mean = self.mean.sample(generator=generator)
         std = self.std.sample(generator=generator)
         rnd = torch.randn(

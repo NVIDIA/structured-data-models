@@ -20,7 +20,10 @@ class CallableActivation(Activation):
 
     function: Callable[[Tensor], Tensor]
 
-    def forward(  # noqa: D102
-        self, x: Tensor, generator: torch.Generator | None = None
+    def forward(
+        self,
+        x: Tensor,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         return self.function(x)

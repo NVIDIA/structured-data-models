@@ -35,12 +35,13 @@ class RandomGP(RandomFunction):
             correlated=True,
         )
 
-    def forward(  # noqa: D102
+    def forward(
         self,
         x: Tensor,
         out_channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         x = x.unsqueeze(0)
         batch_size, _, in_channels = x.size()
         eps = torch.finfo(x.dtype).eps

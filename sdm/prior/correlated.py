@@ -139,12 +139,10 @@ class Correlated(HP[T]):
 
     A :class:`~sdm.prior.CorrelatedContext` reuses Beta parameters for each
     key and supplies the generator for sampling.
-    Without a context, each call samples new parameters. The Beta draws
-    are mapped through ``hp.transform``.
+    Without a context, each call samples new parameters.
 
     Args:
-        hp: Numerical parameter sampler with a ``transform``
-            method mapping quantile levels to values.
+        hp: Numerical parameter sampler.
         key: Share Beta parameters with other samplers using this key.
             Defaults to this sampler's identity.
     """
@@ -168,16 +166,7 @@ class Correlated(HP[T]):
         size: int | torch.Size | tuple[int, ...] = (),
         generator: torch.Generator | None = None,
     ) -> Tensor:
-        """Sample a tensor, sharing parameters along its final dimension.
-
-        Args:
-            size: Output shape ``[..., N]`` or vector length. Leading
-                dimensions identify independent parameter sets; ``N``
-                samples share each set. A scalar uses one parameter set.
-                Shared keys must retain their leading shape in a scope.
-            generator: Pseudorandom generator. In a context, omit it or pass
-                the context's generator.
-        """
+        r""":meta private:"""  # noqa: D415
         size = (size,) if isinstance(size, int) else tuple(size)
         shape = size or (1,)
         if (ctx := _CONTEXT.get()) is not None:

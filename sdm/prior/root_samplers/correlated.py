@@ -18,12 +18,13 @@ class CorrelatedRootSampler(RootSampler):
     def __init__(self, base: RootSampler) -> None:
         self.base = base
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         num_rows: int,
         channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         points = self.base.sample(
             num_rows=num_rows,
             channels=channels,

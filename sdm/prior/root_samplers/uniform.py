@@ -24,12 +24,13 @@ class UniformRootSampler(RootSampler):
         self.low = HP.from_value(low)
         self.high = HP.from_value(high)
 
-    def sample(  # noqa: D102
+    def sample(
         self,
         num_rows: int,
         channels: int,
         generator: torch.Generator | None = None,
     ) -> Tensor:
+        r""":meta private:"""  # noqa: D415
         low = self.low.sample(generator=generator)
         high = self.high.sample(generator=generator)
         return low + torch.rand(
