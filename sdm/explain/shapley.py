@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from functools import cache, partial
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -134,6 +135,112 @@ class ShapleyExplainer:
         values = sp.ToNumerical().transform(x_query).numerical
         values = values.cpu().double().numpy()
         return list(explainer.explain_X(values, budget=self.budget))
+
+
+class RecontextualizedShapleyExplainer:
+    r"""Compute Shapley values of feature columns by recontextualization from
+    the `"Interpretable Machine Learning for TabPFN"
+    <https://arxiv.org/abs/2403.10923>`_ paper.
+
+    The columns outside a subset are dropped from both the in-context and the
+    query examples, so that the model predicts as if it had never seen them.
+    Each subset takes one model call for all query rows. A
+    ``shapiq.AgnosticExplainer`` then distributes the prediction of each row
+    over its numerical and then categorical columns.
+
+    Args:
+        output: The name of the predicted column to explain, *e.g.*, a class
+            or a quantile.
+        budget: The number of column subsets evaluated per query row. Values
+            are exact from ``2 ** D`` on, for ``D`` columns.
+        index: The interaction index of ``shapiq``. If ``None``, Shapley
+            values for ``max_order=1`` and k-Shapley interaction values
+            (``"k-SII"``) otherwise.
+        max_order: The maximum interaction order.
+    """
+
+    def __init__(
+        self,
+        output: str,
+        budget: int,
+        *,
+        index: str | None = None,
+        max_order: int = 1,
+    ) -> None:
+        self.output = output
+        self.budget = budget
+        self.index = index
+        self.max_order = max_order
+
+    def explain(
+        self,
+        model: ICLModel,
+        x_query: TableTensor,
+        *,
+        x_context: TableTensor,
+        y_context: TableTensor,
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> list[InteractionValues]:
+        r"""Explain the predictions of query examples.
+
+        Args:
+            model: The model. Its fitted state is neither used nor changed,
+                so repeat the arguments of its fit to explain the same
+                predictions.
+            x_query: The feature table of query examples with shape
+                ``[R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            x_context: The feature table of in-context examples with shape
+                ``[R_context, D]``.
+            y_context: The targets of in-context examples with shape
+                ``[R_context, 1]``.
+            generator: Pseudorandom number generator used for sampling column
+                subsets, which all query rows share, and for the model calls.
+                Both start from its current state and leave it unchanged.
+                Without it, each model call samples its ensemble anew.
+            kwargs: Additional keyword arguments passed to the model call,
+                *e.g.*, ``num_estimators``.
+
+        Returns:
+            The ``shapiq.InteractionValues`` of each row.
+        """
+        from shapiq import AgnosticExplainer
+
+        names = (*x_query.numerical_columns, *x_query.categorical_columns)
+
+        def state() -> torch.Generator | None:  # Leave `generator` unchanged.
+            return None if generator is None else generator.clone_state()
+
+        random_state = _seed(state())  # All rows share their column subsets.
+
+        @cache
+        def predict(coalition: tuple[bool, ...]) -> np.ndarray:  # [R_query]
+            absent = [name for name, keep in zip(names, coalition) if not keep]
+            pred = model(
+                x_context=x_context.drop_columns(absent),
+                y_context=y_context,
+                x_query=x_query.drop_columns(absent),
+                generator=state(),
+                **kwargs,
+            )[self.output]
+            return pred.numerical.squeeze(-1).cpu().double().numpy()
+
+        def game(coalitions: np.ndarray, row: int) -> np.ndarray:  # [N]
+            return np.array(
+                [predict(tuple(c))[row] for c in coalitions.tolist()]
+            )
+
+        values: list[InteractionValues] = []
+        for row in range(len(x_query)):  # shapiq explains one row per game.
+            explainer = AgnosticExplainer(
+                game=partial(game, row=row),
+                n_players=len(names),
+                index=_index(self.index, self.max_order),
+                max_order=self.max_order,
+                random_state=random_state,
+            )
+            values.append(explainer.explain(budget=self.budget))
+        return values
 
 
 def _seed(generator: torch.Generator | None) -> int:
