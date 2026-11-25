@@ -7,6 +7,7 @@ import abc
 import argparse
 import copy
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Literal, cast
 
@@ -37,6 +38,10 @@ from benchmark.tabular.finetune import (
 
 Task = Literal["classification", "regression"]
 KumoTabularSize = Literal["small", "medium", "large"]
+
+# Compiled models by pretrained model, for the lifetime of the process. Models
+# that share the pretrained model of their task also share its graphs.
+_COMPILED: dict[torch.nn.Module, Callable[..., torch.Tensor]] = {}
 
 _FINETUNE_ARGS: dict[str, tuple[type, str]] = {
     "finetune_epochs": (int, "Fine-tuning epochs (only for '-ft' variants)."),
@@ -97,6 +102,7 @@ class SDMModel(AbstractTorchModel, abc.ABC):
         self._set_default_param_value("max_columns", None)
         self._set_default_param_value("kv_cache", True)
         self._set_default_param_value("estimator_batch_size", "auto")
+        self._set_default_param_value("compile", False)
         self._set_default_param_value("finetune", False)
         self._set_default_param_value("finetune_epochs", None)
         self._set_default_param_value(
@@ -129,6 +135,15 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             raise ValueError(
                 "Use a Kumo -ft variant to fine-tune without changing "
                 "shared pretrained weights."
+            )
+        if params["compile"] and not (
+            params["kv_cache"]
+            and isinstance(self, SDMKumoTabularModel)
+            and not self.shared_weights.copy_per_fit
+        ):
+            raise ValueError(
+                "'compile' requires 'kv_cache' and a Kumo model that shares "
+                "its pretrained weights."
             )
         self._device = torch.device(
             self._resolve_fit_device(num_gpus=num_gpus)
@@ -274,7 +289,13 @@ class SDMModel(AbstractTorchModel, abc.ABC):
             ),
         ):
             if self._kv_cache:
-                out = self.model.predict(x_query)
+                predict = self.model.predict
+                if self._get_model_params()["compile"]:
+                    # Not kept on this object, which is pickled.
+                    predict = self.model._compile_predict(
+                        compiled_models=_COMPILED,
+                    )
+                out = predict(x_query)
             else:
                 generator = torch.Generator(self._device).set_state(
                     self._rng_state
