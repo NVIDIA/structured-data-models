@@ -70,6 +70,8 @@ suppress_warnings = ["config.cache"]
 nitpick_ignore = [
     ("py:class", "QuantizedTensor"),
     ("py:class", "sdm.cache.QuantizedTensor"),
+    ("py:class", "sdm.nn.attention_backend.AttentionBackend"),
+    ("py:class", "sdm.nn.attention_backend.TorchAttentionBackend"),
 ]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
