@@ -1,0 +1,8 @@
+﻿PermutationExplainer
+====================
+
+.. currentmodule:: sdm.explain
+
+.. autoclass:: PermutationExplainer
+   :members:
+   :show-inheritance:
