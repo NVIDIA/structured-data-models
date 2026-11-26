@@ -12,11 +12,7 @@ from sdm.cache import QuantizedTensor
 
 
 class AttentionBackend(abc.ABC):
-    r"""Base class for attention kernels of an attention layer.
-
-    A backend computes scaled dot-product attention on inputs with flattened
-    batch dimensions, reading keys and values in their storage format.
-    """
+    r"""Base class for attention kernels of an attention layer."""
 
     @abc.abstractmethod
     def supports(
@@ -33,17 +29,10 @@ class AttentionBackend(abc.ABC):
     ) -> bool:
         r"""Returns whether this backend can compute the attention call.
 
-        The result must depend on neither the batch size nor the number of
-        queries, so that a layer uses the same kernel when recording and
-        replaying its cache. Backends decline quantized tensors they cannot
-        read, and backends without gradients decline calls that need them.
-
         Args:
             query: Queries with shape ``[B, Q, Hq, C]``.
-            key: Keys with shape ``[B, KV, Hkv, C]``, possibly as a
-                ``QuantizedTensor``.
-            value: Values with shape ``[B, KV, Hkv, Cv]``, possibly as a
-                ``QuantizedTensor``.
+            key: Keys with shape ``[B, KV, Hkv, C]``.
+            value: Values with shape ``[B, KV, Hkv, Cv]``.
             attn_mask: Boolean or additive attention mask broadcastable to
                 ``[B, Hq, Q, KV]``. ``None`` if ``seqused_key_value`` is given.
             seqused_key_value: Valid key/value lengths with shape ``[B]``.
@@ -66,10 +55,7 @@ class AttentionBackend(abc.ABC):
         dropout_p: float,
         scale: float | None,
     ) -> Tensor:
-        r"""Returns the attention output with shape ``[B, Q, Hq, Cv]``.
-
-        It takes the arguments of :meth:`supports`.
-        """
+        r"""Returns the attention output with shape ``[B, Q, Hq, Cv]``."""
 
 
 class TorchAttentionBackend(AttentionBackend):
