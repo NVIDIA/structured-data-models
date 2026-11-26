@@ -67,6 +67,9 @@ Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 prior = [
     "scikit-learn",
 ]
+explain = [
+    "shapiq>=1.8; python_version >= '3.12'",
+]
 
 [dependency-groups]
 test-cpu = [
@@ -75,6 +78,7 @@ test-cpu = [
     "pandas",
     "pyg-lib; sys_platform == 'linux'",
     "sentence-transformers>=5.4",
+    "shapiq>=1.8; python_version >= '3.12'",
 ]
 test = [
     { include-group = "test-cpu" },
@@ -222,6 +226,7 @@ banned-module-level-imports = [
     "pylibcudf",
     "pytest",
     "sentence_transformers",
+    "shapiq",
     "transformers",
     "tokenizers",
 ]
@@ -267,4 +272,5 @@ allowed-unresolved-imports = [
     "graphviz.**",
     "pylibcugraph.**",
     "sentence_transformers.**",
+    "shapiq.**",
 ]

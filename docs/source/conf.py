@@ -78,6 +78,7 @@ intersphinx_mapping = {
     "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
     "sentence_transformers": ("https://sbert.net", None),
+    "shapiq": ("https://shapiq.readthedocs.io/en/latest", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
     "graphviz": ("https://graphviz.readthedocs.io/en/stable/", None),
     "typing_extensions": (
@@ -185,6 +186,7 @@ def _run_on_doctree_read(
 
 _reference_aliases = {
     "Tensor": "torch.Tensor",
+    "InteractionValues": "shapiq.InteractionValues",
     "pd.DataFrame": "pandas.DataFrame",
     "pa.Table": "pyarrow.Table",
     "StypeLike": "sdm.StypeLike",
