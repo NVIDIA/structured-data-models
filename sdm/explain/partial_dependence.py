@@ -166,8 +166,8 @@ class PartialDependenceExplainer(ICEExplainer):
             A dictionary from each column name to its grid table with shape
             ``[..., G]`` and its partial dependence with shape ``[..., G]``.
         """
-        curves = super().explain(model, x, output, inputs)
+        result = super().explain(model, x, output, inputs)
         return {
             name: (grid, curve.mean(dim=-2))
-            for name, (grid, curve) in curves.items()
+            for name, (grid, curve) in result.items()
         }
