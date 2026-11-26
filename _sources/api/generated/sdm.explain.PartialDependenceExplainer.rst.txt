@@ -1,0 +1,8 @@
+﻿PartialDependenceExplainer
+==========================
+
+.. currentmodule:: sdm.explain
+
+.. autoclass:: PartialDependenceExplainer
+   :members:
+   :show-inheritance:
