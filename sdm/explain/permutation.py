@@ -59,7 +59,7 @@ class PermutationExplainer:
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        r"""Explain the score of query examples.
+        r"""Explain the importance of input columns.
 
         Args:
             model: The fitted model.
