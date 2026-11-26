@@ -26,7 +26,6 @@ def test_loco_explainer(
     y = x["A"] if dtype.is_floating_point else x["B"]
 
     model = sdm.models.TabICLv2(pretrained=False, device=device)
-    model.fit(x, y)
 
     out = LOCOExplainer().explain(model, x, y, x, y)
     assert out.size() == (1, 2)
