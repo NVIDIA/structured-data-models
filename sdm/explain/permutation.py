@@ -4,6 +4,7 @@
 # ruff: noqa: D205
 
 from collections.abc import Callable
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -74,7 +75,7 @@ class PermutationExplainer:
             for _ in range(self.num_repeats)
         ]
         perm = torch.cat(perm, dim=0)
-        x = x.repeat(*([1] * (x.dim() - 2)), self.num_repeats, 1)
+        x = cast(TableTensor, torch.cat([x] * self.num_repeats, dim=-2))
 
         decreases: dict[str, Tensor] = {}
         for stype, block in x.items():
@@ -91,6 +92,7 @@ class PermutationExplainer:
                         torch.as_tensor(
                             ref - self.scoring(out[..., i, :, :], y),
                             device=out.device,
+                            dtype=out.numerical.dtype,
                         )
                         for i in range(self.num_repeats)
                     ],
