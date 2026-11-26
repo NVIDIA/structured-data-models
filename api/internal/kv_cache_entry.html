@@ -358,11 +358,11 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Base class for the storage dtype of cached key/value projections.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.cache.KVCacheDType.is_quantized">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_quantized</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><span class="pre">KVCacheEntry</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.is_quantized" title="Link to this definition">#</a></dt>
-<dd><p>Returns whether K/V of <code class="docutils literal notranslate"><span class="pre">entry</span></code> are in this storage dtype.</p>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_quantized</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">QuantizedTensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.is_quantized" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether <code class="docutils literal notranslate"><span class="pre">tensor</span></code> is in this storage dtype.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>entry</strong> (<a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><em>KVCacheEntry</em></a>) – Key/value projections.</p>
+<dd class="field-odd"><p><strong>tensor</strong> (<em>QuantizedTensor</em>) – A quantized tensor.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)">bool</a></p>
@@ -372,31 +372,31 @@ data-aria-dark="Switch to auto color mode">
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.cache.KVCacheDType.quantize">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">quantize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><span class="pre">KVCacheEntry</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><span class="pre">KVCacheEntry</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.quantize" title="Link to this definition">#</a></dt>
-<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">entry</span></code> in this storage dtype.</p>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">quantize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">QuantizedTensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">QuantizedTensor</span></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.quantize" title="Link to this definition">#</a></dt>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">tensor</span></code> in this storage dtype, or as is if quantized.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>entry</strong> (<a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><em>KVCacheEntry</em></a>) – Key/value projections as computed by attention.</p>
+<dd class="field-odd"><p><strong>tensor</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a><em> | </em><em>QuantizedTensor</em>) – Key or value projections as computed by attention.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><em>KVCacheEntry</em></a></p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a> | <em>QuantizedTensor</em></p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.cache.KVCacheDType.dequantize">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dequantize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><span class="pre">KVCacheEntry</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.15)"><span class="pre">dtype</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><span class="pre">KVCacheEntry</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.dequantize" title="Link to this definition">#</a></dt>
-<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">entry</span></code> with key/value projections in <code class="docutils literal notranslate"><span class="pre">dtype</span></code>.</p>
+<span class="sig-name descname"><span class="pre">dequantize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">QuantizedTensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.15)"><span class="pre">dtype</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.dequantize" title="Link to this definition">#</a></dt>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">tensor</span></code> in <code class="docutils literal notranslate"><span class="pre">dtype</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>entry</strong> (<a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><em>KVCacheEntry</em></a>) – Key/value projections in this storage dtype.</p></li>
+<li><p><strong>tensor</strong> (<em>QuantizedTensor</em>) – A tensor in this storage dtype.</p></li>
 <li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.15)"><em>dtype</em></a>) – The target dtype.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="#sdm.cache.KVCacheEntry" title="sdm.cache.KVCacheEntry"><em>KVCacheEntry</em></a></p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -408,22 +408,14 @@ data-aria-dark="Switch to auto color mode">
 <h1>KVCacheEntry<a class="headerlink" href="#kvcacheentry" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.cache.KVCacheEntry">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.cache.</span></span><span class="sig-name descname"><span class="pre">KVCacheEntry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.cache.KVCacheEntry" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.cache.</span></span><span class="sig-name descname"><span class="pre">KVCacheEntry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">QuantizedTensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">QuantizedTensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.cache.KVCacheEntry" title="Link to this definition">#</a></dt>
 <dd><p>Cached key/value projections for a single transformer block.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>key</strong> – Key projections with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p></li>
-<li><p><strong>value</strong> – Value projections with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p></li>
-<li><p><strong>key_scale</strong> – Optional scales broadcastable to <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p></li>
-<li><p><strong>value_scale</strong> – Optional scales broadcastable to <code class="docutils literal notranslate"><span class="pre">value</span></code>.</p></li>
-<li><p><strong>kv_cache_dtype</strong> – The storage dtype of K/V, if any.</p></li>
-<li><p><strong>args</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><em>Any</em></a>)</p></li>
-<li><p><strong>kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><em>Any</em></a>)</p></li>
+<li><p><strong>key</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a><em> | </em><em>QuantizedTensor</em>) – Key projections with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a><em> | </em><em>QuantizedTensor</em>) – Value projections with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.15)"><em>Self</em></a></p>
 </dd>
 </dl>
 <dl class="py method">
@@ -454,7 +446,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=e7fc5fbb"></script>
+      <script src="../../_static/documentation_options.js?v=548b57cf"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
