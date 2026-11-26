@@ -311,8 +311,10 @@ class Cache(MutableMapping[Hashable, object], DeviceMixin):
                 # Keys and values of `_record`, not the scales of quantized
                 # ones, which are per head.
                 entry = cast(KVCacheEntry, value)
-                yield entry.key, dims
-                yield entry.value, dims
+                for tensor in (entry.key, entry.value):
+                    if isinstance(tensor, QuantizedTensor):
+                        tensor = tensor.qdata
+                    yield tensor, dims
             else:
                 # A nested cache or the recipe execution lists its own.
                 declared = getattr(value, "_dynamic_dims", None)
