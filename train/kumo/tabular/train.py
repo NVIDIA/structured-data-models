@@ -30,8 +30,7 @@ from sdm import Task
 from sdm._kernels.flash_attention import load_flash_attention
 from sdm.models.kumo.tabular.block import KumoTabularTransformerBlock
 from sdm.models.kumo.tabular.model import MODEL_KWARGS, _KumoTabular
-from sdm.nn import SDPA, LogScale
-from sdm.nn.attention_backend import FlashAttention3Backend
+from sdm.nn import SDPA, Attention, LogScale
 
 
 class OneHotLinear(torch.nn.Linear):
@@ -256,8 +255,16 @@ def main() -> None:
                 )
             load_flash_attention()
             for module in model.modules():
-                if isinstance(module, SDPA):
-                    module.backend = FlashAttention3Backend()
+                if isinstance(module, Attention):
+                    sdpa = module.sdpa
+                    module.sdpa = SDPA(
+                        num_query_heads=sdpa.num_query_heads,
+                        num_key_value_heads=sdpa.num_key_value_heads,
+                        query_scaling=sdpa.query_scaling,
+                        scale=sdpa.scale,
+                        dropout=sdpa.dropout,
+                        backend="fa3",
+                    )
         optimizers, schedulers = configure_optimizers(
             model=model,
             lr=args.lr,

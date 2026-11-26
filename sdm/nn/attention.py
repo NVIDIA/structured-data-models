@@ -14,7 +14,11 @@ from torch.nn import Linear
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheDType, KVCacheEntry
 from sdm.nn import QueryScaling
-from sdm.nn.attention_backend import AttentionBackend, TorchAttentionBackend
+from sdm.nn.attention_backend import (
+    AttentionBackend,
+    FlashAttention3Backend,
+    TorchAttentionBackend,
+)
 
 
 class SDPA(torch.nn.Module):
@@ -37,10 +41,8 @@ class SDPA(torch.nn.Module):
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
         dropout: Attention dropout probability.
-        backend: The attention backend. ``None`` uses
-            :class:`~sdm.nn.attention_backend.TorchAttentionBackend`.
-            Calls the backend declines fall back to
-            :class:`~sdm.nn.attention_backend.TorchAttentionBackend`.
+        backend: ``"sdpa"`` (default) or ``"fa3"`` for FlashAttention-3 on
+            Hopper with FP16/BF16 inputs.
     """
 
     def __init__(
@@ -50,7 +52,7 @@ class SDPA(torch.nn.Module):
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
-        backend: AttentionBackend | None = None,
+        backend: Literal["sdpa", "fa3"] = "sdpa",
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -66,7 +68,14 @@ class SDPA(torch.nn.Module):
         self.query_scaling = query_scaling
         self.scale = scale
         self.dropout = dropout
-        self.backend = TorchAttentionBackend() if backend is None else backend
+
+        self._backend: AttentionBackend
+        if backend == "sdpa":
+            self._backend = TorchAttentionBackend()
+        elif backend == "fa3":
+            self._backend = FlashAttention3Backend()
+        else:
+            raise AssertionError(f"Unknown attention backend {backend!r}.")
 
     def forward(
         self,
@@ -184,18 +193,20 @@ class SDPA(torch.nn.Module):
                 -1
             )
 
-        options: dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "attn_mask": attn_mask,  # [B, Hq, Q, KV]
             "seqused_key_value": seqused_key_value,  # [B]
             "is_causal": is_causal,
             "dropout_p": self.dropout if self.training else 0.0,
             "scale": self.scale,
         }
-        backend = self.backend
-        if not backend.supports(query, key, value, **options):
-            backend = TorchAttentionBackend()
+        backend = self._backend
+        if not backend.supports(query, key, value, **kwargs):
+            raise RuntimeError(
+                f"{type(backend).__name__} does not support this SDPA call."
+            )
 
-        out = backend.forward(query, key, value, **options)
+        out = backend.forward(query, key, value, **kwargs)
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
 
