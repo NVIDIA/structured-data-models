@@ -714,6 +714,115 @@ def test_view_ops() -> None:
     assert out.categorical.size() == (3, 2, 1)
 
 
+@withCUDA
+@pytest.mark.parametrize(
+    "repeats",
+    [(1, 1, 1), (2, 1, 1), (1, 3, 1), (2, 3, 1), (2, 1, 3, 1), (1, 0, 1)],
+)
+@pytest.mark.parametrize("transpose", [False, True])
+def test_repeat(
+    device: torch.device,
+    repeats: tuple[int, ...],
+    transpose: bool,
+) -> None:
+    values = torch.arange(6, device=device).view(2, 3, 1)
+    strings = ["a", None, "", "longer", "é", "last"]
+    tensor = TableTensor(
+        columns={
+            "numerical": ["value"],
+            "categorical": ["category"],
+            "datetime": ["date"],
+            "text": ["text"],
+            "id": ["id"],
+        },
+        numerical=values.to(torch.float64),
+        categorical=CategoricalTensor(
+            code=(values % 2).to(torch.int32),
+            categories=(torch.arange(2, device=device),),
+        ),
+        datetime=values,
+        text=cast(
+            StringTensor,
+            StringTensor.from_list(strings, device=device).view(2, 3, 1),
+        ),
+        id=ColumnarTensor(columns=[values.squeeze(-1)]),
+    )
+    if transpose:
+        tensor = cast(TableTensor, tensor.transpose(0, 1))
+        values = values.transpose(0, 1)
+
+    out = tensor.repeat(repeats)
+    expected = values.repeat(repeats)
+    expected_text = StringTensor.from_list(
+        [strings[i] for i in expected.flatten().tolist()],
+        device=device,
+    ).view(expected.size())
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == (*expected.size()[:-1], 5)
+    assert out.columns == tensor.columns
+    assert out.device == device
+    torch.testing.assert_close(out.numerical, expected.to(torch.float64))
+    torch.testing.assert_close(out.categorical.code, (expected % 2).int())
+    assert torch.equal(
+        out.categorical.categories[0], tensor.categorical.categories[0]
+    )
+    assert torch.equal(out.datetime, expected)
+    assert torch.equal(out.text, expected_text)
+    assert torch.equal(out.id[..., 0], expected.squeeze(-1))
+
+
+@withCUDA
+@pytest.mark.parametrize("shape", [(0, 2), (2, 0), (0, 0)])
+def test_repeat_empty(device: torch.device, shape: tuple[int, int]) -> None:
+    values = torch.empty(shape, device=device)
+    tensor = TableTensor.from_tensor(values)
+
+    out = tensor.repeat(3, 1)
+    assert isinstance(out, TableTensor)
+
+    assert out.size() == (3 * shape[0], shape[1])
+    assert out.columns == tensor.columns
+    assert out.device == device
+    torch.testing.assert_close(out.numerical, values.repeat(3, 1))
+
+
+@pytest.mark.parametrize("repeats", [(2, 0), (2, 2), (2, -1)])
+def test_repeat_rejects_column_repetition(repeats: tuple[int, int]) -> None:
+    tensor = TableTensor.from_tensor(torch.ones(2, 1))
+
+    with pytest.raises(
+        RuntimeError, match="Can't repeat the column dimension"
+    ):
+        tensor.repeat(repeats)
+
+
+@pytest.mark.parametrize("repeats", [(1,), (-1, 1)])
+def test_repeat_invalid_factors(repeats: tuple[int, ...]) -> None:
+    tensor = TableTensor.from_tensor(torch.ones(2, 1))
+
+    with pytest.raises(RuntimeError):
+        tensor.repeat(repeats)
+
+
+def test_repeat_copies_and_preserves_grad() -> None:
+    values = torch.tensor([[1.0], [2.0]], requires_grad=True)
+    tensor = TableTensor.from_tensor(values)
+
+    out = tensor.repeat(3, 1)
+    assert isinstance(out, TableTensor)
+    out.numerical.sum().backward()
+
+    torch.testing.assert_close(values.grad, torch.full_like(values, 3))
+
+    copy = tensor.repeat(1, 1)
+    assert isinstance(copy, TableTensor)
+    with torch.no_grad():
+        copy.numerical.fill_(0)
+    torch.testing.assert_close(tensor.numerical, values.detach())
+    assert not torch.equal(copy.numerical, tensor.numerical)
+
+
 def test_slicing_ops() -> None:
     tensor = TableTensor(
         columns={

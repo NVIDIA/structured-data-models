@@ -1741,6 +1741,28 @@ def _expand(
     )
 
 
+@TableTensor.implements(aten.repeat.default)
+@preserve_autograd_state
+def _repeat(inp: TableTensor, repeats: Sequence[int]) -> TableTensor:
+    if not repeats or repeats[-1] != 1:
+        raise RuntimeError(
+            f"Can't repeat the column dimension of {inp.__class__.__name__!r}"
+        )
+
+    # Repeat row indices, so blocks keep their semantic types and metadata.
+    num_rows = math.prod(inp.size()[:-1])
+    index = torch.arange(num_rows, device=inp.device)
+    index = index.view(inp.size()[:-1]).repeat(repeats[:-1])
+    blocks = {
+        stype: tensor.contiguous().view(num_rows, tensor.size(-1))[index]
+        for stype, tensor in inp.items()
+    }
+    return inp.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **blocks,
+    )
+
+
 @TableTensor.implements(aten.transpose.int)
 @preserve_view_inference_mode
 def _transpose(inp: TableTensor, dim0: int, dim1: int) -> TableTensor:
