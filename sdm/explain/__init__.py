@@ -6,9 +6,11 @@
 from sdm.explain.base import ICLExplainer
 from sdm.explain.gradient import GradientExplainer
 from sdm.explain.permutation import PermutationExplainer
+from sdm.explain.loco import LOCOExplainer
 
 __all__ = [
     "ICLExplainer",
     "GradientExplainer",
     "PermutationExplainer",
+    "LOCOExplainer",
 ]
