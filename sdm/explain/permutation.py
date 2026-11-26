@@ -21,7 +21,7 @@ def default_scoring(  # noqa: D103
     if target.categorical.size(-1) > 0:  # Log loss:
         prob, index = to_class_indices(pred, target, missing_score=0.0)
         prob = prob.gather(-1, index.unsqueeze(-1)).squeeze(-1)  # [R]
-        return prob.clamp_min(torch.finfo(prob.dtype).tiny).log().mean(dim=-1)
+        return prob.clamp(min=torch.finfo(prob.dtype).tiny).log().mean(dim=-1)
     mean = pred.numerical.mean(dim=-1)  # [R]
     return -(mean - target.numerical[..., 0]).square().mean(dim=-1)
 
