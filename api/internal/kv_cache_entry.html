@@ -306,9 +306,7 @@ data-aria-dark="Switch to auto color mode">
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#">KVCacheDType</a><ul>
 <li><a class="reference internal" href="#sdm.cache.KVCacheDType"><code class="docutils literal notranslate"><span class="pre">KVCacheDType</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.cache.KVCacheDType.is_quantized"><code class="docutils literal notranslate"><span class="pre">KVCacheDType.is_quantized()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.cache.KVCacheDType.quantize"><code class="docutils literal notranslate"><span class="pre">KVCacheDType.quantize()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.cache.KVCacheDType.dequantize"><code class="docutils literal notranslate"><span class="pre">KVCacheDType.dequantize()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -357,20 +355,6 @@ data-aria-dark="Switch to auto color mode">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.cache.</span></span><span class="sig-name descname"><span class="pre">KVCacheDType</span></span><a class="headerlink" href="#sdm.cache.KVCacheDType" title="Link to this definition">#</a></dt>
 <dd><p>Base class for the storage dtype of cached key/value projections.</p>
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.cache.KVCacheDType.is_quantized">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_quantized</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">QuantizedTensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.is_quantized" title="Link to this definition">#</a></dt>
-<dd><p>Returns whether <code class="docutils literal notranslate"><span class="pre">tensor</span></code> is in this storage dtype.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>tensor</strong> (<em>QuantizedTensor</em>) – A quantized tensor.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)">bool</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="sdm.cache.KVCacheDType.quantize">
 <span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">quantize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">QuantizedTensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">QuantizedTensor</span></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.quantize" title="Link to this definition">#</a></dt>
 <dd><p>Returns <code class="docutils literal notranslate"><span class="pre">tensor</span></code> in this storage dtype, or as is if quantized.</p>
@@ -380,23 +364,6 @@ data-aria-dark="Switch to auto color mode">
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a> | <em>QuantizedTensor</em></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.cache.KVCacheDType.dequantize">
-<span class="sig-name descname"><span class="pre">dequantize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">QuantizedTensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.15)"><span class="pre">dtype</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.cache.KVCacheDType.dequantize" title="Link to this definition">#</a></dt>
-<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">tensor</span></code> in <code class="docutils literal notranslate"><span class="pre">dtype</span></code>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>tensor</strong> (<em>QuantizedTensor</em>) – A tensor in this storage dtype.</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.15)"><em>dtype</em></a>) – The target dtype.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -446,7 +413,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=548b57cf"></script>
+      <script src="../../_static/documentation_options.js?v=50151fde"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
