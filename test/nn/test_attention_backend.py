@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.cache import QuantizedTensor
+from sdm.cache import Float8PerHead, QuantizedTensor
 from sdm.nn import SDPA
 from sdm.nn.attention_backend import TorchAttentionBackend
 
