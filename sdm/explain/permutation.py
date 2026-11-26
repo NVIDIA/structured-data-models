@@ -14,7 +14,10 @@ from sdm.evaluation import to_class_indices
 from sdm.models import ICLModel
 
 
-def default_scoring(pred: TableTensor, target: TableTensor) -> Tensor:
+def default_scoring(  # noqa: D103
+    pred: TableTensor,
+    target: TableTensor,
+) -> Tensor:
     if target.categorical.size(-1) > 0:  # Log loss:
         prob, index = to_class_indices(pred, target, missing_score=0.0)
         prob = prob.gather(-1, index.unsqueeze(-1)).squeeze(-1)  # [R]
@@ -60,9 +63,9 @@ class PermutationExplainer:
 
         Args:
             model: The fitted model.
-            x_query: The feature table of query examples with shape
-                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
-            y_query: The targets of query examples with shape ``[R, 1]``.
+            x: The feature table of query examples with shape ``[..., R, D]``
+                with ``R`` rows and ``D`` columns.
+            y: The targets of query examples with shape ``[R, 1]``.
             generator: Pseudorandom number generator used for shuffling.
 
         Returns:
