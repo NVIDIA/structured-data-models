@@ -51,15 +51,16 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             )
         return self
 
-    def dequantize(self, dtype: torch.dtype) -> "KVCacheEntry":
-        r"""Returns the entry with quantized K/V dequantized to ``dtype``.
+    def dequantize(self, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
+        r"""Returns key and value with quantized ones dequantized to ``dtype``.
 
         Args:
             dtype: The target dtype.
         """
         if self.kv_cache_dtype is None:
-            return self
-        return self.kv_cache_dtype.dequantize(self, dtype)
+            return self.key, self.value
+        entry = self.kv_cache_dtype.dequantize(self, dtype)
+        return entry.key, entry.value
 
     def _tensors(self) -> Iterator[Tensor]:
         yield self.key
