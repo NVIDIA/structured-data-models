@@ -5,7 +5,10 @@
 
 from sdm.explain.base import ICLExplainer
 from sdm.explain.gradient import GradientExplainer
-from sdm.explain.shapley import ShapleyExplainer
+from sdm.explain.shapley import (
+    ShapleyExplainer,
+    RecontextualizedShapleyExplainer,
+)
 from sdm.explain.partial_dependence import (
     ICEExplainer,
     PartialDependenceExplainer,
@@ -17,6 +20,7 @@ __all__ = [
     "ICLExplainer",
     "GradientExplainer",
     "ShapleyExplainer",
+    "RecontextualizedShapleyExplainer",
     "ICEExplainer",
     "PartialDependenceExplainer",
     "PermutationExplainer",
