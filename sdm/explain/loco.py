@@ -26,72 +26,74 @@ class LOCOExplainer:
     the importance of a column is the score decrease without it.
 
     Args:
-        score: A function ``score(pred, target)`` that maps the predictions
+        scoring: A function ``scoring(pred, target)`` that maps the predictions
             and the targets of the query rows to one number, for which
             higher is better, *e.g.*, an accuracy or the negative of an
-            error. If ``None``, the negative log loss for a categorical
-            target, and the negative squared error of the mean over all
-            predicted columns otherwise.
+            error. If ``None``, will use the negative log loss for
+            categorical targets, and the negative mean squared error for
+            numerical targets.
     """
 
     def __init__(
         self,
-        score: Callable[[TableTensor, TableTensor], Tensor | float]
+        scoring: Callable[[TableTensor, TableTensor], Tensor | float]
         | None = None,
     ) -> None:
-        self.score = default_scoring if score is None else score
+        self.scoring = default_scoring if scoring is None else scoring
 
     def explain(
         self,
         model: ICLModel,
-        x_query: TableTensor,
-        *,
-        y_query: TableTensor,
         x_context: TableTensor,
         y_context: TableTensor,
-        generator: torch.Generator | None = None,
+        x_query: TableTensor,
+        y_query: TableTensor,
         **kwargs: Any,
     ) -> TableTensor:
-        r"""Explain the score of query examples.
+        r"""Explain the importance of feature columns.
 
         Args:
-            model: The model. Its fitted state is neither used nor changed,
-                so repeat the arguments of its fit to explain the same
-                predictions.
-            x_query: The feature table of query examples with shape
-                ``[R_query, D]`` with ``R_query`` rows and ``D`` columns.
-            y_query: The targets of query examples with shape
-                ``[R_query, 1]``.
-            x_context: The feature table of in-context examples with shape
-                ``[R_context, D]``.
+            model: The model.
+            x_context: The feature tensor of in-context examples with shape
+                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
             y_context: The targets of in-context examples with shape
                 ``[R_context, 1]``.
-            generator: Pseudorandom number generator used for the model calls,
-                which all start from its current state and leave it unchanged.
-                Without it, each model call samples its ensemble anew.
-            kwargs: Additional keyword arguments passed to the model call,
-                *e.g.*, ``num_estimators``.
+            x_query: The feature tensor of query examples with shape
+                ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            y_query: The targets of query examples with shape
+                ``[R_query, 1]``.
+            kwargs: Additional keyword arguments passed to the model call.
 
         Returns:
-            The table of score decreases with shape ``[1, D]``, named by the
-            numerical and then categorical columns.
+            The table of score decreases with shape ``[..., 1, D]``.
         """
-        names = (*x_query.numerical_columns, *x_query.categorical_columns)
+        generator = kwargs.pop("generator", None)
 
-        def score_without(*columns: str) -> Tensor | float:
-            state = None if generator is None else generator.clone_state()
-            pred = model(
+        def score(*columns: str) -> Tensor | float:
+            out = model(
                 x_context=x_context.drop_columns(columns),
                 y_context=y_context,
                 x_query=x_query.drop_columns(columns),
-                generator=state,
+                generator=None
+                if generator is None
+                else generator.clone_state(),
                 **kwargs,
             )
-            return self.score(pred, y_query)
+            return self.scoring(out, y_query)
 
-        baseline = score_without()
-        decreases = [baseline - score_without(name) for name in names]
+        ref = score()
+        decreases = {
+            name: torch.as_tensor(
+                ref - score(name),
+                device=x_query.device,
+                dtype=x_query.dtype,
+            )
+            for columns in x_query.columns.values()
+            for name in columns
+        }
+
         return TableTensor.from_tensor(
-            tensor=x_query.numerical.new_tensor([decreases]),  # [1, D]
-            columns=names,
+            tensor=torch.stack(list(decreases.values()), dim=-1).unsqueeze(-2),
+            columns=list(decreases),
         )
