@@ -67,6 +67,10 @@ napoleon_custom_sections = [
 copybutton_prompt_text = r">>> |\.\.\. "
 copybutton_prompt_is_regexp = True
 suppress_warnings = ["config.cache"]
+nitpick_ignore = [
+    ("py:class", "QuantizedTensor"),
+    ("py:class", "sdm.cache.QuantizedTensor"),
+]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),

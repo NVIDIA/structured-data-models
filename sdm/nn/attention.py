@@ -465,7 +465,10 @@ class Attention(torch.nn.Module):
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
             entry = KVCacheEntry(key=key.to(value.dtype), value=value)
             if kv_cache_dtype is not None:
-                entry = kv_cache_dtype.quantize(entry)
+                entry = KVCacheEntry(
+                    key=kv_cache_dtype.quantize(entry.key),
+                    value=kv_cache_dtype.quantize(entry.value),
+                )
             entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
             # TODO: Attention backend should decide whether to dequantize.
             key, value = entry.dequantize(value.dtype)
