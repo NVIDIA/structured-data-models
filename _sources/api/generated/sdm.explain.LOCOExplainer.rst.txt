@@ -1,0 +1,8 @@
+﻿LOCOExplainer
+=============
+
+.. currentmodule:: sdm.explain
+
+.. autoclass:: LOCOExplainer
+   :members:
+   :show-inheritance:
