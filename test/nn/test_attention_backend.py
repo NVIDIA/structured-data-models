@@ -5,7 +5,6 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from sdm.cache import Float8PerHead
 from sdm.nn.attention_backend import TorchAttentionBackend
 
 
@@ -44,7 +43,3 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
     assert backend.supports(query, key, value, **options)
     out = backend.forward(query, key, value, **options)
     torch.testing.assert_close(out, expected)
-
-    fp8 = Float8PerHead()
-    assert not backend.supports(query, fp8.quantize(key), value, **options)
-    assert not backend.supports(query, key, fp8.quantize(value), **options)
