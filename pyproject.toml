@@ -226,9 +226,9 @@ banned-module-level-imports = [
     "pylibcudf",
     "pytest",
     "sentence_transformers",
-    "shapiq",
     "transformers",
     "tokenizers",
+    "shapiq",
 ]
 
 [tool.ruff.lint.per-file-ignores]
