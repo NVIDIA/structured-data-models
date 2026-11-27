@@ -43,8 +43,6 @@ class SDPA(torch.nn.Module):
         dropout: Attention dropout probability.
         backend: ``"torch"`` (default) or ``"fa3"`` for FlashAttention-3 on
             Hopper with FP16/BF16 inputs.
-            Calls with quantized keys or values are retried with dequantized
-            tensors if the backend declines them.
     """
 
     def __init__(
@@ -96,12 +94,10 @@ class SDPA(torch.nn.Module):
                 ``Q`` is the query sequence length, ``Hq`` is the number of
                 query attention heads (``num_query_heads``), and ``C`` is the
                 channels per head.
-            key: The key tensor with shape ``[..., KV, Hkv, C]``, possibly
-                as a ``QuantizedTensor``.
+            key: The key tensor with shape ``[..., KV, Hkv, C]``.
                 ``KV`` is the key/value sequence length and ``Hkv`` is the
                 number of key/value heads (``num_key_value_heads``).
-            value: The value tensor with shape ``[..., KV, Hkv, C]``, possibly
-                as a ``QuantizedTensor``.
+            value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Attention mask with shape ``[..., Hq, Q, KV]``.
@@ -161,16 +157,18 @@ class SDPA(torch.nn.Module):
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
             if torch.is_grad_enabled():
+                if not isinstance(
+                    self.backend,
+                    (TorchAttentionBackend, FlashAttention3Backend),
+                ):
+                    raise RuntimeError(
+                        "Only the 'torch' and 'fa3' backends support "
+                        "empty-batch backward for now."
+                    )
                 # Summing an empty slice gives zero and keeps backward working.
                 for tensor in (query, key, value, attn_mask):
-                    parts = (
-                        tensor._tensors()
-                        if isinstance(tensor, QuantizedTensor)
-                        else (tensor,)
-                    )
-                    for part in parts:
-                        if isinstance(part, Tensor) and part.requires_grad:
-                            out = out + part[..., :0, :, :].sum()
+                    if isinstance(tensor, Tensor) and tensor.requires_grad:
+                        out = out + tensor[..., :0, :, :].sum()
             return out
 
         if (  # Softmax over a single key is one, so skip SDPA:

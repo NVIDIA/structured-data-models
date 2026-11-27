@@ -272,13 +272,6 @@ def test_sdpa_empty_batch(device: torch.device, value_channels: int) -> None:
     for tensor in (query, key, value):
         torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
 
-    key.grad = value.grad = None
-    fp8 = Float8PerHead()
-    out = module(query=query, key=fp8.quantize(key), value=fp8.quantize(value))
-    out.sum().backward()
-    for tensor in (key, value):
-        torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
-
 
 def test_sdpa_errors() -> None:
     channels = 3
