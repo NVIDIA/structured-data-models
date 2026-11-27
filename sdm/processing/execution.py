@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import NamedTuple, cast, overload
 
 import torch
@@ -59,19 +59,6 @@ class RecipeExecution:
         r"""The number of fitted members."""
         assert self._y_locations is not None
         return len(self._y_locations)
-
-    def _dynamic_dims(
-        self,
-    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
-        processors = [
-            self.recipe.features,
-            self.recipe.target,
-            *(self._related_processors or {}).values(),
-        ]
-        for processor in processors:
-            for module in _iter_modules(processor):
-                if isinstance(module, sp.Processor):
-                    yield from module._dynamic_dims()
 
     @overload
     def fit_transform(
@@ -277,10 +264,19 @@ class RecipeExecution:
         self,
         x: Tensor | TableTensor,
         related_tables: RelatedTables | None,
+        *,
+        features: Callable[..., EnsembleTable] | None = None,
     ) -> tuple[MemberQuery, ...]:
-        """Transform query data."""
+        """Transform query data.
+
+        ``features``, if given, is called with ``recipe.features`` and the
+        query instead of its ``transform_ensemble``.
+        """
         x: EnsembleTable = _to_ensemble_table(x, self._num_estimators)
-        x = self.recipe.features.transform_ensemble(x)
+        if features is None:
+            x = self.recipe.features.transform_ensemble(x)
+        else:
+            x = features(self.recipe.features, x)
 
         related_ensembles: Mapping[str, EnsembleTable] = {}
         if related_tables is not None:

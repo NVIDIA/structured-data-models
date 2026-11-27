@@ -1,100 +1,88 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Dynamic shapes of a compiled :meth:`~sdm.models.ICLModel.predict`."""
+r"""Compiled components of :meth:`~sdm.models.ICLModel.predict`.
+
+A compiled predict runs the steps that organize the work as plain Python:
+validation, the loop over estimator batches, the prefetch of the fitted cache
+and the stacking of estimators. It compiles only components, functions that
+do the work on tensors, *e.g.*, the model of one estimator batch.
+:meth:`~sdm.models.ICLModel._predict` takes the components in place of its
+default steps, so that each model chooses its own.
+
+A graph of a component specializes on the Python values among its inputs,
+*e.g.*, names of columns, and on sizes of zero and one. Keep both outside of
+components to reuse their graphs after fits on other data.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
-from sdm.tensor.var_len import _mark_dynamic
+from sdm import RelatedTables, TableTensor
 
 if TYPE_CHECKING:
-    from sdm.models.base.icl import ICLModel
+    from sdm.models.base import Callback
 
 
-def compile_predict(
-    model: ICLModel,
-    dynamic_dims: tuple[int, ...] | None = None,
+def compile_component(
+    fn: Callable[..., Any],
     **kwargs: Any,
-) -> Callable[..., TableTensor]:
-    r"""Compile ``model.predict`` using :func:`torch.compile`.
-
-    One graph serves queries and fits of any size along the dynamic
-    dimensions, with any lists of categories, except that a size of zero or
-    one compiles a graph of its own, *e.g.*, for a categorical column that
-    holds a single category or only missing values in the query or in the
-    context. Queries that declare the categories of the context, *e.g.*, a
-    pandas ``Categorical`` with fixed categories, avoid it. With dynamic
-    dimensions, a query without rows is predicted without the graph.
+) -> Callable[..., Any]:
+    r"""Compile a component of predict using :func:`torch.compile`.
 
     Args:
-        model: The model.
-        dynamic_dims: The dimensions of the query to mark as dynamic
-            instead of the default of ``model``, *e.g.*, ``(-2,)`` for the
-            rows. The tensors that ``fit`` saved follow the query: with
-            ``-2``, the context rows are dynamic as well. ``()`` marks none:
-            the shapes are static, and every new shape compiles another
-            graph. A dimension that the model cannot keep dynamic fails to
-            compile.
-        **kwargs: Keyword arguments passed to :func:`torch.compile`.
-            ``dynamic`` defaults to ``False``, so that only the marked
-            dimensions are dynamic. ``isolate_recompiles`` defaults to
-            ``True``, since all models would otherwise share one recompile
-            limit.
+        fn: The component.
+        kwargs: Keyword arguments passed to :func:`torch.compile`.
+            ``dynamic`` defaults to ``True``, so that all sizes are dynamic
+            from the first call; with ``None``, sizes are static until they
+            change or are marked, *e.g.*, by
+            :func:`torch._dynamo.maybe_mark_dynamic`. ``isolate_recompiles``
+            defaults to ``True``, since all components would otherwise share
+            one recompile limit.
     """
-    kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
-    compiled = torch.compile(model.predict, **kwargs)
-    if dynamic_dims is None:
-        dynamic_dims = model._default_dynamic_dims()
-    # Without dynamic dimensions, none of the steps below are needed.
-    if not dynamic_dims:
-        return compiled
-    for patch in model._dynamic_compile_patches():
-        compiled = patch(compiled)
+    kwargs = {"dynamic": True, "isolate_recompiles": True} | kwargs
+    # A copy, from which `torch.compile` removes some options.
+    if kwargs.get("options") is not None:
+        kwargs["options"] = dict(kwargs["options"])
+    # Sizes that are equal in the first call would otherwise share one symbol,
+    # and compile another graph once they differ.
+    return torch.fx.experimental._config.patch(use_duck_shape=False)(
+        torch.compile(fn, **kwargs)
+    )
 
-    def predict(
+
+def repeat_single_rows(
+    predict: Callable[..., TableTensor],
+    uncompiled: Callable[..., TableTensor],
+) -> Callable[..., TableTensor]:
+    r"""Keep queries of zero and one rows away from compiled components.
+
+    A query without rows runs ``uncompiled``, and a query of one row is
+    repeated and its first row returned, unless callbacks or related tables
+    see the rows.
+
+    Args:
+        predict: The compiled predict.
+        uncompiled: The uncompiled predict.
+    """
+
+    def wrapper(
         x: Tensor | TableTensor,  # [..., R, D]
-        *args: Any,
-        **kwargs: Any,
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
     ) -> TableTensor:
         rows = x.size(-2)
-        cache = model._cache
-        if rows == 0 or cache is None:
-            return model.predict(x, *args, **kwargs)
-        # Counted from the last dimension, *e.g.*, `{-2}` for the rows, as the
-        # tensors that `fit` saved declare theirs.
-        dims = {dim % x.dim() - x.dim() for dim in dynamic_dims}
-        # A graph specializes on sizes of zero and one, so a single row is
-        # repeated if the rows are dynamic, unless callbacks see the rows.
-        # Without a copy, queries that are different slices of one table, such
-        # as `table[40:]` and `table[41:44]`, recompile or fail to compile.
-        repeat = rows == 1 and -2 in dims and not kwargs.get("callbacks")
-        x = x.clone(memory_format=torch.contiguous_format)
-        if repeat:
-            x = torch.cat([x, x], dim=-2)
-        _mark_query(x, dims)
-        cache._mark_dynamic(dims)
-        out = compiled(x, *args, **kwargs)
-        return out[..., :1, :] if repeat else out
+        if rows == 0:
+            return uncompiled(x, related_tables, callbacks=callbacks)
+        if rows > 1 or related_tables is not None or callbacks:
+            return predict(x, related_tables, callbacks=callbacks)
+        out = predict(torch.cat([x, x], dim=-2), callbacks=callbacks)
+        return cast(TableTensor, out[..., :1, :])
 
-    return predict
-
-
-def _mark_query(x: Tensor, dims: set[int]) -> None:
-    for dim in dims:
-        dim %= x.dim()
-        if isinstance(x, TableTensor):
-            x._mark_dynamic(dim)
-        else:
-            torch._dynamo.mark_dynamic(x, dim)
-    if isinstance(x, TableTensor):
-        # Like the fitted lists of categories, the lists of the query follow
-        # its data.
-        for categories in x.categorical.categories:
-            _mark_dynamic(categories, 0)
+    return wrapper

@@ -299,18 +299,6 @@ class ColumnarTensor(Tensor):
             },
         )
 
-    def _mark_dynamic(self, dim: int) -> None:
-        r"""Mark a dimension as dynamic for :func:`torch.compile`.
-
-        Args:
-            dim: The non-negative dimension.
-        """
-        for column in self._columns:
-            if isinstance(column, VarLenTensor):
-                column._mark_dynamic(dim)
-            else:
-                torch._dynamo.mark_dynamic(column, dim)
-
     # Decorators ##############################################################
 
     @classmethod

@@ -5,21 +5,33 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from contextlib import ContextDecorator
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from functools import partial
 from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
 from torch.nn import Identity, Linear, ModuleDict
 
-from sdm import Recipe, RelatedTables, Stype, TableTensor, Task, TaskLike
-from sdm.cache import Cache
+import sdm.processing as sp
+from sdm import (
+    EnsembleTable,
+    Recipe,
+    RelatedTables,
+    Stype,
+    TableTensor,
+    Task,
+    TaskLike,
+)
+from sdm.cache import Cache, KVCacheEntry, QuantizedTensor
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base.compile import compile_component, repeat_single_rows
+from sdm.models.base.icl import _transform_output
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
 from sdm.models.kumo.tabular.row_embedding import RowEmbedding
+from sdm.processing.execution import MemberQuery, RecipeExecution
 
 MODEL_KWARGS: dict[str, dict[str, Any]] = {
     "small": {
@@ -176,24 +188,57 @@ class KumoTabular(ICLModel):
         """  # noqa: D212
         return default_recipe()
 
-    def _default_dynamic_dims(self) -> tuple[int, ...]:
-        # Mark the rows (`-2`) of the query as dynamic, and with them the rows
-        # of the context that `fit` saved.
-        return (-2,)
+    def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
+        r"""Compile components of :meth:`predict` using :func:`torch.compile`.
 
-    def _dynamic_compile_patches(self) -> list[ContextDecorator]:
-        return [
-            torch._dynamo.config.patch(
-                # Keep the marks on buffers, such as those of `RankGaussian`.
-                force_parameter_static_shapes=False,
-                # Avoid a failure of PyTorch 2.14.1 on CUDA when the copies of
-                # the cache to the device join the graph.
-                inline_single_use_invoke_subgraph=False,
-            ),
-            # Do not order kernels for the sizes of the first fit, which would
-            # cost time and memory after fits of other sizes.
-            torch._inductor.config.patch(reorder_for_peak_memory=False),
-        ]
+        Three components are compiled, see :mod:`sdm.models.base.compile`:
+
+        * the feature processors before the column shuffle, with all sizes
+          dynamic. Their graph specializes on the columns of a fit, *e.g.*,
+          on their names, and serves later fits with the same columns.
+        * the model of a task, one call per estimator batch, with the rows of
+          the query and of the context dynamic from the first call. Other
+          sizes, *e.g.*, the number of columns, are static until they change,
+          which compiles a graph in which they are dynamic.
+        * the output step of regression, with all sizes dynamic.
+
+        All other steps of :meth:`predict` run uncompiled, so that the names
+        and order of the shuffled columns and of the classes do not enter the
+        graphs. A query of one row is repeated, and one without rows runs
+        uncompiled.
+
+        Args:
+            kwargs: Keyword arguments passed to :func:`torch.compile`, see
+                :func:`~sdm.models.base.compile.compile_component`.
+
+        Returns:
+            The compiled function, which is called like :meth:`predict`.
+            :meth:`predict` itself is not compiled.
+        """
+        # The fitted buffers of the preprocessing, such as the knots of
+        # `RankGaussian`, follow the context as well.
+        features = torch._dynamo.config.patch(
+            force_parameter_static_shapes=False
+        )(
+            compile_component(
+                _transform_ensemble, **(kwargs | {"recompile_limit": 32})
+            )
+        )
+        models = {
+            task: partial(
+                _call_with_dynamic_rows,
+                compile_component(model, **(kwargs | {"dynamic": None})),
+            )
+            for task, model in self.models.items()
+        }
+        output = compile_component(_transform_quantile_output, **kwargs)
+        predict = partial(
+            self._predict,
+            transform=partial(_transform_query, features),
+            models=models,
+            output=partial(_transform_output_of_quantiles, output),
+        )
+        return repeat_single_rows(predict, self.predict)
 
     def _load_from_pretrained(
         self,
@@ -232,6 +277,7 @@ class KumoTabular(ICLModel):
         generator: torch.Generator | None,
         *,
         categorical_mask: Tensor,
+        models: Mapping[TaskLike, Callable[..., Tensor]] | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
@@ -259,9 +305,10 @@ class KumoTabular(ICLModel):
             )
 
         categorical_mask = categorical_mask.expand(*x.size()[:-2], -1)
+        models = self.models if models is None else models
 
         if classes is None:
-            out = self.models[Task.regression](
+            out = models[Task.regression](
                 x=x,
                 y=y,
                 categorical_mask=categorical_mask,
@@ -273,7 +320,7 @@ class KumoTabular(ICLModel):
             )
 
         out = self.ecoc(
-            model=self.models[Task.classification],
+            model=models[Task.classification],
             x=x,
             y=y,
             num_classes=len(classes),
@@ -380,3 +427,138 @@ class _KumoTabular(torch.nn.Module):
         )
         x = self.row_project(x)
         return self.icl_block(x=x, y=y, train_size=train_size)
+
+
+def _transform_query(
+    features: Callable[..., EnsembleTable],
+    recipe_execution: RecipeExecution,
+    x: Tensor | TableTensor,
+    related_tables: RelatedTables | None,
+) -> tuple[MemberQuery, ...]:
+    # A copy: a graph specializes on the layout of a view of strings, such as
+    # `table[40:]`.
+    return recipe_execution.transform(
+        x.clone(memory_format=torch.contiguous_format),
+        related_tables,
+        features=partial(_transform_features, features),
+    )
+
+
+def _transform_features(
+    prefix: Callable[..., EnsembleTable],
+    processor: sp.EnsembleProcessor,
+    ensemble_table: EnsembleTable,
+) -> EnsembleTable:
+    # `prefix` runs the processors before the first `ShuffleColumns`, whose
+    # column names follow the shuffle of the fit, which a graph would bake in.
+    # The columns that the leading `DropStypes` remove, such as text, would
+    # enter the graph, which specializes on their sizes, *e.g.*, on texts
+    # that are all empty.
+    children = list(processor) if isinstance(processor, sp.Sequential) else []
+    start = 0
+    while (
+        start < len(children)
+        and isinstance(children[start], sp.EnsembleProcessorAdapter)
+        and isinstance(children[start].processor, sp.DropStypes)
+    ):
+        start += 1
+    cut = next(
+        (
+            i
+            for i, child in enumerate(children)
+            if isinstance(child, sp.ShuffleColumns)
+        ),
+        len(children),
+    )
+    if cut <= start:
+        return processor.transform_ensemble(ensemble_table)
+    out = _transform_ensemble(children[:start], ensemble_table)
+    out = prefix(children[start:cut], out)
+    return _transform_ensemble(children[cut:], out)
+
+
+def _transform_output_of_quantiles(
+    output: Callable[..., TableTensor],
+    recipe_execution: RecipeExecution,
+    outs: Sequence[TableTensor],
+    *,
+    invert: bool,
+) -> TableTensor:
+    # Only the quantiles of regression: a graph would specialize on the
+    # classes, which each fit orders per estimator.
+    if not invert or any(
+        out.active_stypes != {Stype.numerical}
+        or out.numerical_columns != _QUANTILE_COLUMNS
+        for out in outs
+    ):
+        return _transform_output(recipe_execution, outs, invert=invert)
+    # Plain tensors: the outputs of one estimator batch share blocks, on which
+    # a graph would specialize.
+    return output(recipe_execution, [out.numerical for out in outs])
+
+
+def _transform_quantile_output(
+    recipe_execution: RecipeExecution,
+    outs: Sequence[Tensor],  # [..., R, 999]
+) -> TableTensor:
+    tables = [
+        # Not `Stype.numerical`, which the code of a graph that builds the
+        # table cannot name.
+        TableTensor(columns={"numerical": _QUANTILE_COLUMNS}, numerical=out)
+        for out in outs
+    ]
+    return _transform_output(recipe_execution, tables, invert=True)
+
+
+def _transform_ensemble(
+    processors: Sequence[sp.EnsembleProcessor],
+    ensemble_table: EnsembleTable,
+) -> EnsembleTable:
+    for processor in processors:
+        ensemble_table = processor.transform_ensemble(ensemble_table)
+    return ensemble_table
+
+
+def _call_with_dynamic_rows(
+    model: Callable[..., Tensor],
+    x: Tensor,  # [..., R, C]
+    y: Tensor,  # [..., R_context]
+    categorical_mask: Tensor,  # [..., C]
+    cache: Cache | None = None,
+) -> Tensor:  # [..., R, *]
+    batch = x.size()[:-2]
+    categorical_mask = categorical_mask.expand(*batch, -1)
+    if len(batch) > 1:
+        # One batch dimension for the estimators of a batch and the members
+        # of ECOC, so that the graph of estimator batches serves them.
+        def flatten(tensor: Tensor) -> Tensor:
+            if tensor.size()[: len(batch)] != batch:
+                return tensor
+            return tensor.reshape(batch.numel(), *tensor.size()[len(batch) :])
+
+        x, categorical_mask = flatten(x), flatten(categorical_mask)
+        # Without views, on whose bases a graph would specialize.
+        y = flatten(y).detach()
+        if cache is not None:
+            cache = cache._apply_tensor(lambda t: flatten(t).detach())
+    # A copy, as a graph specializes on whether the mask is a view.
+    categorical_mask = categorical_mask.clone()
+    # The rows of the query and of the fitted keys and values are dynamic from
+    # the first call; other sizes become dynamic once they change. Copies of
+    # the cache carry no marks, so every call marks them.
+    torch._dynamo.maybe_mark_dynamic(x, x.dim() - 2)
+    caches = [cache]
+    while caches:
+        node = caches.pop()
+        for value in () if node is None else node.values():
+            if isinstance(value, Cache):
+                caches.append(value)
+            elif isinstance(value, KVCacheEntry):
+                for tensor in (value.key, value.value):
+                    # The values of quantized ones, not their per-head scales.
+                    if isinstance(tensor, QuantizedTensor):
+                        tensor = tensor.qdata
+                    # `[..., R, H, C]`
+                    torch._dynamo.maybe_mark_dynamic(tensor, tensor.dim() - 3)
+    out = model(x=x, y=y, categorical_mask=categorical_mask, cache=cache)
+    return out.reshape(*batch, *out.size()[-2:])

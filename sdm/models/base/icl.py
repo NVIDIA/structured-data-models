@@ -4,7 +4,6 @@
 import abc
 import copy
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
-from contextlib import ContextDecorator
 from typing import Any, ClassVar, cast
 
 import torch
@@ -24,7 +23,6 @@ from sdm._inference import inference_mode
 from sdm._memory import set_pinned_max_round_threshold
 from sdm.cache import Cache
 from sdm.models.base import Callback, Model
-from sdm.models.base.compile import compile_predict
 from sdm.processing.execution import (
     MemberContext,
     MemberQuery,
@@ -421,6 +419,23 @@ class ICLModel(Model):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
+        return self._predict(x, related_tables, callbacks=callbacks)
+
+    def _predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R, D]
+        related_tables: RelatedTables | None = None,
+        *,
+        callbacks: Sequence[Callback] | None = None,
+        transform: Callable[..., tuple[MemberQuery, ...]] | None = None,
+        models: Mapping[TaskLike, Callable[..., Tensor]] | None = None,
+        output: Callable[..., TableTensor] | None = None,
+    ) -> TableTensor:
+        r"""Run :meth:`predict`, passing ``models`` on to :meth:`_forward`.
+
+        ``transform`` replaces :meth:`RecipeExecution.transform`, and
+        ``output`` replaces the output step, :func:`_transform_output`.
+        """
         if self.training:
             raise RuntimeError(
                 f"{self.__class__.__name__!r}.predict() does not support "
@@ -468,6 +483,9 @@ class ICLModel(Model):
             RecipeExecution,
             self._cache["recipe_execution"],
         )
+        kwargs = cast(dict[str, Any], self._cache["kwargs"])
+        if models is not None:
+            kwargs = kwargs | {"models": models}
         with self._prefetch(
             items=[
                 cast(Cache, self._cache[i])
@@ -485,7 +503,9 @@ class ICLModel(Model):
                     else "inference"
                 ),
             ):
-                queries = recipe_execution.transform(x, related_tables)
+                queries = (transform or RecipeExecution.transform)(
+                    recipe_execution, x, related_tables
+                )
 
             outs: list[TableTensor] = []
             start = 0
@@ -521,43 +541,37 @@ class ICLModel(Model):
                     callbacks=callbacks,
                     requires_grad=requires_grad,
                     generator=None,
-                    **cast(dict[str, Any], self._cache["kwargs"]),
+                    **kwargs,
                 )
-
-        # Regression: invert target before stacking estimator outputs.
-        if cast(Cache, self._cache[0])["classes"] is None:
-            with (
-                torch.amp.autocast(x.device.type, enabled=False),
-                inference_mode("grad" if requires_grad else "inference"),
-            ):
-                outs = list(recipe_execution.inverse_transform_target(outs))
+                # Free this batch's device copy before the next prefetch, so
+                # that at most two copies are alive.
+                del cache
 
         with (
             torch.amp.autocast(x.device.type, enabled=False),
             inference_mode("grad" if requires_grad else "inference"),
         ):
-            return recipe_execution.transform_output(outs)
+            return (output or _transform_output)(
+                recipe_execution,
+                outs,
+                invert=cast(Cache, self._cache[0])["classes"] is None,
+            )
 
     def _compile_predict(self, **kwargs: Any) -> Callable[..., TableTensor]:
         r"""Compile :meth:`predict` using :func:`torch.compile`.
 
         Args:
-            kwargs: Keyword arguments passed to
-                :func:`~sdm.models.base.compile.compile_predict`.
+            kwargs: Keyword arguments passed to :func:`torch.compile`.
+                ``dynamic`` defaults to ``False``. ``isolate_recompiles``
+                defaults to ``True``, since all models would otherwise share
+                one recompile limit.
 
         Returns:
             The compiled function, which is called like :meth:`predict`.
             :meth:`predict` itself is not compiled.
         """
-        return compile_predict(self, **kwargs)
-
-    def _default_dynamic_dims(self) -> tuple[int, ...]:
-        r"""Return the default dynamic dimensions of a compiled query."""
-        return ()
-
-    def _dynamic_compile_patches(self) -> list[ContextDecorator]:
-        r"""Return the compiler settings for dynamic dimensions."""
-        return []
+        kwargs = {"dynamic": False, "isolate_recompiles": True} | kwargs
+        return torch.compile(self.predict, **kwargs)
 
     # Abstract Methods ########################################################
 
@@ -854,6 +868,18 @@ class ICLModel(Model):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+
+def _transform_output(
+    recipe_execution: RecipeExecution,
+    outs: Sequence[TableTensor],
+    *,
+    invert: bool,
+) -> TableTensor:
+    # Regression: invert target before stacking estimator outputs.
+    if invert:
+        outs = recipe_execution.inverse_transform_target(outs)
+    return recipe_execution.transform_output(outs)
 
 
 def _stack(tables: Sequence[TableTensor]) -> TableTensor:

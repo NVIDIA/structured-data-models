@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Self
 
 import torch
@@ -134,15 +134,6 @@ class Processor(torch.nn.Module, abc.ABC):
             "_fitted_state", torch.ones_like(self._fitted_state, device=device)
         )
         self._update_fitted(True)
-
-    def _dynamic_dims(
-        self,
-    ) -> Iterator[tuple[Tensor, Mapping[int | None, int]]]:
-        # Fitted tensors with their dimensions by the dimension of the fitted
-        # table that they follow, such as `{-2: -1}` for one entry per row,
-        # or by `None` if they follow the fitted data itself. Compiled models
-        # keep them dynamic.
-        yield from ()
 
     def _check_is_fitted(self) -> None:
         if not self.is_fitted:

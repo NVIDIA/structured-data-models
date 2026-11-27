@@ -16,7 +16,6 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.explain.gradient import CaptureInputs
 from sdm.models import KumoTabular
 from sdm.testing import onlyMPS
 
@@ -419,8 +418,10 @@ def test_compile_predict(
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # One graph serves fits on 40 and 30 context rows with three and two
-    # categories, and queries of any number of rows, including one and none.
+    # One graph of the feature processors, one of the model and, in
+    # regression, one of the output step serve fits on 40 and 30 context rows
+    # with three and two categories and other orders of the columns, and
+    # queries of any number of rows.
     two_categories = cast(TableTensor, x).replace_blocks(
         categorical=CategoricalTensor(
             code=code.remainder(2),
@@ -432,8 +433,6 @@ def test_compile_predict(
             context,
             y[: context.size(-2)],
             num_estimators=4,
-            # The seed keeps the order of the columns.
-            generator=torch.Generator().manual_seed(0),
         )
         for query in (x[40:], x[41:44], x[42:43], x[40:40]):
             torch.testing.assert_close(
@@ -442,21 +441,7 @@ def test_compile_predict(
                 atol=1e-4,
                 rtol=1e-4,
             )
-    assert counter.frame_count == 1
-
-    # Callbacks see a single row as it is.
-    capture = CaptureInputs()
-    predict(x[42:43], callbacks=[capture])
-    assert capture.inputs[0][0].size(-2) == 1
-
-    # The caller chooses the dynamic dimensions. Queries of 8, 3 and 1 rows
-    # compile 3 graphs without dynamic rows, and 1 graph with them.
-    for dims, graphs in (((), 3), ((-2,), 1)):
-        counter = CompileCounter()
-        predict = model._compile_predict(backend=counter, dynamic_dims=dims)
-        for query in (x[40:], x[41:44], x[42:43]):
-            predict(query)
-        assert counter.frame_count == graphs
+    assert counter.frame_count == (3 if task == "regression" else 2)
 
 
 @pytest.mark.usefixtures("compilation")
@@ -478,7 +463,8 @@ def test_compile_predict_query_categories() -> None:
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # Queries share one graph, whichever categories their rows contain,
+    # Queries share one graph of the feature processors, one of the model and
+    # one of the output step, whichever categories their rows contain,
     # including one that the context does not.
     for colors in (["a", "b", "c", "a"], ["b", "a"], ["c", "d", "c"]):
         query = table(colors)
@@ -488,7 +474,7 @@ def test_compile_predict_query_categories() -> None:
             atol=1e-4,
             rtol=1e-4,
         )
-    assert counter.frame_count == 1
+    assert counter.frame_count == 3
 
 
 @pytest.mark.usefixtures("compilation")
@@ -513,8 +499,9 @@ def test_compile_predict_category_counts() -> None:
     model = _build("regression", "small")
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # One graph serves fits that count 55 and 52 categories, more than the
-    # 50 above which the default recipe adds a count column.
+    # One graph of the feature processors, one of the model and one of the
+    # output step serve fits that count 55 and 52 categories, more than the 50
+    # above which the default recipe adds a count column.
     for rows in (55, 52):
         model.fit(
             table(rows),
@@ -529,7 +516,7 @@ def test_compile_predict_category_counts() -> None:
             atol=1e-4,
             rtol=1e-4,
         )
-    assert counter.frame_count == 1
+    assert counter.frame_count == 3
 
 
 @onlyMPS
