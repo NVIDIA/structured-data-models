@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from functools import cache, partial
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -36,8 +37,8 @@ class ShapleyExplainer:
 
     Args:
         kwargs: Additional keyword arguments passed to
-            ``shapiq.TabularExplainer``, *e.g.*, ``imputer``, ``index``
-            or ``max_order``.
+            :class:`shapiq.explainer.TabularExplainer`, *e.g.*, ``imputer``,
+            ``index`` or ``max_order``.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -83,7 +84,8 @@ class ShapleyExplainer:
                 subsets and reference rows.
 
         Returns:
-            The ``shapiq.InteractionValues`` of each query row.
+            The :class:`shapiq.interaction_values.InteractionValues` of each
+            query row.
         """
         from shapiq import TabularExplainer
 
@@ -139,3 +141,98 @@ class ShapleyExplainer:
         )
         values = x.numerical.cpu().numpy()
         return list(explainer.explain_X(values, budget=budget))
+
+
+class RecontextualizedShapleyExplainer:
+    r"""Compute Shapley values of feature columns via recontextualization from
+    the `"Interpretable Machine Learning for TabPFN"
+    <https://arxiv.org/abs/2403.10923>`_ paper.
+
+    The columns outside a subset are dropped from both the in-context and the
+    query examples, so that the model predicts as if it had never seen them.
+
+    Args:
+        kwargs: Additional keyword arguments passed to
+            :class:`shapiq.explainer.AgnosticExplainer`, *e.g.*, ``index`` or
+            ``max_order``.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
+
+    def explain(
+        self,
+        model: ICLModel,
+        x_context: TableTensor,
+        y_context: TableTensor,
+        x_query: TableTensor,
+        output: str,
+        budget: int,
+        **kwargs: Any,
+    ) -> list[InteractionValues]:
+        r"""Explain the contributions of feature columns.
+
+        Args:
+            model: The model.
+            x_context: The feature tensor of in-context examples with shape
+                ``[R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
+            y_context: The targets of in-context examples with shape
+                ``[R_context, 1]``.
+            x_query: The feature tensor of query examples with shape
+                ``[R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            output: The name of the predicted column to explain.
+            budget: The budget to use for the approximation.
+            kwargs: Additional keyword arguments passed to the model.
+
+        Returns:
+            The :class:`shapiq.interaction_values.InteractionValues` of each
+            query row.
+        """
+        from shapiq import AgnosticExplainer
+
+        generator = kwargs.pop("generator", None)
+        names = [
+            name for columns in x_query.columns.values() for name in columns
+        ]
+
+        @cache
+        def predict(coalition: tuple[bool, ...]) -> np.ndarray:  # [R_query]
+            absent = [name for name, keep in zip(names, coalition) if not keep]
+            pred = model(
+                x_context=x_context.drop_columns(absent),
+                y_context=y_context,
+                x_query=x_query.drop_columns(absent),
+                generator=None
+                if generator is None
+                else generator.clone_state(),
+                **kwargs,
+            )[output]
+            return pred.numerical.squeeze(-1).cpu().double().numpy()
+
+        def game(coalitions: np.ndarray, row: int) -> np.ndarray:  # [N]
+            return np.array(
+                [predict(tuple(c))[row] for c in coalitions.tolist()]
+            )
+
+        random_state: int | None = None
+        if generator is not None:
+            random_state = int(
+                torch.randint(
+                    2**31,
+                    size=(),
+                    generator=generator.clone_state(),
+                    device=x_query.device,
+                )
+            )
+
+        values: list[InteractionValues] = []
+        for row in range(len(x_query)):
+            explainer = AgnosticExplainer(
+                game=partial(game, row=row),
+                n_players=x_query.size(-1),
+                random_state=random_state,
+                **self.kwargs,
+            )
+            values.append(explainer.explain(budget=budget))
+        return values
