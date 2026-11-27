@@ -141,6 +141,7 @@ PROCESSOR_CASES = (
     ProcessorCase(sp.ShuffleCategories()),
     ProcessorCase(sp.ImputeMode()),
     ProcessorCase(sp.AddCategoryCounts()),
+    ProcessorCase(sp.DropHighCardinalityColumns(threshold=2)),
     ProcessorCase(sp.AddCalendarFields(["month"])),
     ProcessorCase(sp.Softmax()),
     ProcessorCase(sp.SortQuantiles()),
