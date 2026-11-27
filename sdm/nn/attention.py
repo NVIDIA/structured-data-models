@@ -157,17 +157,12 @@ class SDPA(torch.nn.Module):
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
             if torch.is_grad_enabled():
-                if not isinstance(
-                    self.backend,
-                    (TorchAttentionBackend, FlashAttention3Backend),
-                ):
-                    raise RuntimeError(
-                        "Only the 'torch' and 'fa3' backends support "
-                        "empty-batch backward for now."
-                    )
                 # Summing an empty slice gives zero and keeps backward working.
                 for tensor in (query, key, value, attn_mask):
-                    if isinstance(tensor, Tensor) and tensor.requires_grad:
+                    if tensor is None:
+                        continue
+                    assert isinstance(tensor, Tensor)
+                    if tensor.requires_grad:
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
