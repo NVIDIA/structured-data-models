@@ -58,12 +58,12 @@ class LOCOExplainer:
                 ``[..., R_context, D]`` with ``R_context`` rows and ``D``
                 columns.
             y_context: The targets of in-context examples with shape
-                ``[R_context, 1]``.
+                ``[..., R_context, 1]``.
             x_query: The feature tensor of query examples with shape
                 ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
             y_query: The targets of query examples with shape
                 ``[R_query, 1]``.
-            kwargs: Additional keyword arguments passed to the model call.
+            kwargs: Additional keyword arguments passed to the model.
 
         Returns:
             The table of score decreases with shape ``[..., 1, D]``.

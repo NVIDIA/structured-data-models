@@ -37,8 +37,8 @@ class ShapleyExplainer:
 
     Args:
         kwargs: Additional keyword arguments passed to
-            ``shapiq.TabularExplainer``, *e.g.*, ``imputer``, ``index``
-            or ``max_order``.
+            :class:`shapiq.explainer.TabularExplainer`, *e.g.*, ``imputer``,
+            ``index`` or ``max_order``.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -84,7 +84,8 @@ class ShapleyExplainer:
                 subsets and reference rows.
 
         Returns:
-            The ``shapiq.InteractionValues`` of each query row.
+            The :class:`shapiq.interaction_values.InteractionValues` of each
+            query row.
         """
         from shapiq import TabularExplainer
 
@@ -143,80 +144,57 @@ class ShapleyExplainer:
 
 
 class RecontextualizedShapleyExplainer:
-    r"""Compute Shapley values of feature columns by recontextualization from
+    r"""Compute Shapley values of feature columns via recontextualization from
     the `"Interpretable Machine Learning for TabPFN"
     <https://arxiv.org/abs/2403.10923>`_ paper.
 
     The columns outside a subset are dropped from both the in-context and the
     query examples, so that the model predicts as if it had never seen them.
-    Each subset takes one model call for all query rows. A
-    ``shapiq.AgnosticExplainer`` then distributes the prediction of each row
-    over its numerical and then categorical columns.
 
     Args:
-        output: The name of the predicted column to explain, *e.g.*, a class
-            or a quantile.
-        budget: The number of column subsets evaluated per query row. Values
-            are exact from ``2 ** D`` on, for ``D`` columns.
-        index: The interaction index of ``shapiq``. If ``None``, Shapley
-            values for ``max_order=1`` and k-Shapley interaction values
-            (``"k-SII"``) otherwise.
-        max_order: The maximum interaction order.
+        kwargs: Additional keyword arguments passed to
+            :class:`shapiq.explainer.AgnosticExplainer`, *e.g.*, ``index`` or
+            ``max_order``.
     """
 
-    def __init__(
-        self,
-        output: str,
-        budget: int,
-        *,
-        index: str | None = None,
-        max_order: int = 1,
-    ) -> None:
-        self.output = output
-        self.budget = budget
-        self.index = index
-        self.max_order = max_order
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
 
     def explain(
         self,
         model: ICLModel,
-        x_query: TableTensor,
-        *,
         x_context: TableTensor,
         y_context: TableTensor,
-        generator: torch.Generator | None = None,
+        x_query: TableTensor,
+        output: str,
+        budget: int,
         **kwargs: Any,
     ) -> list[InteractionValues]:
-        r"""Explain the predictions of query examples.
+        r"""Explain the contributions of feature columns.
 
         Args:
-            model: The model. Its fitted state is neither used nor changed,
-                so repeat the arguments of its fit to explain the same
-                predictions.
-            x_query: The feature table of query examples with shape
-                ``[R_query, D]`` with ``R_query`` rows and ``D`` columns.
-            x_context: The feature table of in-context examples with shape
-                ``[R_context, D]``.
+            model: The model.
+            x_context: The feature tensor of in-context examples with shape
+                ``[R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
             y_context: The targets of in-context examples with shape
                 ``[R_context, 1]``.
-            generator: Pseudorandom number generator used for sampling column
-                subsets, which all query rows share, and for the model calls.
-                Both start from its current state and leave it unchanged.
-                Without it, each model call samples its ensemble anew.
-            kwargs: Additional keyword arguments passed to the model call,
-                *e.g.*, ``num_estimators``.
+            x_query: The feature tensor of query examples with shape
+                ``[R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            output: The name of the predicted column to explain.
+            budget: The budget to use for the approximation.
+            kwargs: Additional keyword arguments passed to the model.
 
         Returns:
-            The ``shapiq.InteractionValues`` of each row.
+            The :class:`shapiq.interaction_values.InteractionValues` of each
+            query row.
         """
         from shapiq import AgnosticExplainer
 
-        names = (*x_query.numerical_columns, *x_query.categorical_columns)
-
-        def state() -> torch.Generator | None:  # Leave `generator` unchanged.
-            return None if generator is None else generator.clone_state()
-
-        random_state = _seed(state())  # All rows share their column subsets.
+        generator = kwargs.pop("generator", None)
+        names = [
+            name for columns in x_query.columns.values() for name in columns
+        ]
 
         @cache
         def predict(coalition: tuple[bool, ...]) -> np.ndarray:  # [R_query]
@@ -225,9 +203,11 @@ class RecontextualizedShapleyExplainer:
                 x_context=x_context.drop_columns(absent),
                 y_context=y_context,
                 x_query=x_query.drop_columns(absent),
-                generator=state(),
+                generator=None
+                if generator is None
+                else generator.clone_state(),
                 **kwargs,
-            )[self.output]
+            )[output]
             return pred.numerical.squeeze(-1).cpu().double().numpy()
 
         def game(coalitions: np.ndarray, row: int) -> np.ndarray:  # [N]
@@ -235,28 +215,24 @@ class RecontextualizedShapleyExplainer:
                 [predict(tuple(c))[row] for c in coalitions.tolist()]
             )
 
+        random_state: int | None = None
+        if generator is not None:
+            random_state = int(
+                torch.randint(
+                    2**31,
+                    size=(),
+                    generator=generator.clone_state(),
+                    device=x_query.device,
+                )
+            )
+
         values: list[InteractionValues] = []
-        for row in range(len(x_query)):  # shapiq explains one row per game.
+        for row in range(len(x_query)):
             explainer = AgnosticExplainer(
                 game=partial(game, row=row),
-                n_players=len(names),
-                index=_index(self.index, self.max_order),
-                max_order=self.max_order,
+                n_players=x_query.size(-1),
                 random_state=random_state,
+                **self.kwargs,
             )
-            values.append(explainer.explain(budget=self.budget))
+            values.append(explainer.explain(budget=budget))
         return values
-
-
-def _seed(generator: torch.Generator | None) -> int:
-    # Draw a seed for `shapiq`, whose sampling takes an integer.
-    device = None if generator is None else generator.device
-    seed = torch.randint(2**31, size=(), generator=generator, device=device)
-    return int(seed)
-
-
-def _index(index: str | None, max_order: int) -> Any:
-    # Return the interaction index, which `shapiq` types as a literal.
-    if index is not None:
-        return index
-    return "SV" if max_order == 1 else "k-SII"

@@ -65,7 +65,7 @@ class PermutationExplainer:
             model: The fitted model.
             x: The feature tensor of query examples with shape ``[..., R, D]``
                 with ``R`` rows and ``D`` columns.
-            y: The targets of query examples with shape ``[R, 1]``.
+            y: The targets of query examples with shape ``[..., R, 1]``.
             generator: Pseudorandom number generator used for shuffling.
 
         Returns:
