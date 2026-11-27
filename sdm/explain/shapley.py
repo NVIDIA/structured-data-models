@@ -5,15 +5,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 from torch import Tensor
 
-import sdm.processing as sp
-from sdm import CategoricalTensor, TableTensor
+from sdm import Stype, TableTensor
+from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.processing.execution import RecipeExecution
 
 if TYPE_CHECKING:
     from shapiq import InteractionValues
@@ -25,142 +26,111 @@ class ShapleyExplainer:
     <https://arxiv.org/abs/1705.07874>`_ paper.
 
     A fitted model is evaluated on subsets of the columns of each query row,
-    and the columns outside a subset are removed by imputation. A
-    ``shapiq.TabularExplainer`` then distributes the prediction of each row
-    over its numerical and then categorical columns.
+    and the columns outside a subset are removed by imputation.
+    The resulting attributions describe each feature's contribution to the
+    difference between the row's prediction and the baseline prediction.
 
     Args:
-        output: The name of the predicted column to explain, *e.g.*, a class
-            or a quantile.
-        budget: The number of column subsets evaluated per query row. Values
-            are exact from ``2 ** D`` on, for ``D`` columns.
-        imputer: How the columns outside a subset are removed. ``"baseline"``
-            replaces them by the mean or most frequent category of the
-            reference rows, ``"marginal"`` by the values of sampled reference
-            rows, and ``"missing"`` by missing values, which the model handles
-            itself.
-        index: The interaction index of ``shapiq``. If ``None``, Shapley
-            values for ``max_order=1`` and k-Shapley interaction values
-            (``"k-SII"``) otherwise.
-        max_order: The maximum interaction order.
         kwargs: Additional keyword arguments passed to
-            ``shapiq.TabularExplainer``, *e.g.*, the ``sample_size`` of
-            ``"marginal"``.
+            ``shapiq.TabularExplainer``, *e.g.*, ``imputer``, ``index``
+            or ``max_order``.
     """
 
-    def __init__(
-        self,
-        output: str,
-        budget: int,
-        *,
-        imputer: Literal["baseline", "marginal", "missing"] = "baseline",
-        index: str | None = None,
-        max_order: int = 1,
-        **kwargs: Any,
-    ) -> None:
-        self.output = output
-        self.budget = budget
-        self.imputer = imputer
-        self.index = index
-        self.max_order = max_order
+    def __init__(self, **kwargs: Any) -> None:
+        if "model" in kwargs:
+            raise ValueError(
+                "'model' should be supplied by 'explain(model=...)'"
+            )
+        if "data" in kwargs:
+            raise ValueError(
+                "'data' should be supplied by 'explain(background=...)'"
+            )
+        if "categorical_features" in kwargs:
+            raise ValueError(
+                "'categorical_features' are supplied automatically"
+            )
+        if "random_state" in kwargs:
+            raise ValueError(
+                "'random_state' should be supplied by 'explain(generator=...)'"
+            )
         self.kwargs = kwargs
 
     def explain(
         self,
         model: ICLModel,
-        x_query: TableTensor,
+        x: TableTensor,
+        output: str,
+        background: TableTensor,
+        budget: int,
         *,
-        background: TableTensor | None = None,
         generator: torch.Generator | None = None,
     ) -> list[InteractionValues]:
-        r"""Explain the predictions of query examples.
+        r"""Explain the contributions of feature columns to predictions.
 
         Args:
             model: The fitted model.
-            x_query: The feature table of query examples with shape
-                ``[R, D]`` with ``R`` rows and ``D`` columns.
-            background: The feature table of reference rows with shape
+            x: The feature tensor of query examples with shape ``[R, D]``
+                with ``R`` rows and ``D`` columns.
+            output: The name of the predicted column to explain.
+            background: The feature tensor of reference rows with shape
                 ``[R_background, D]``, *e.g.*, the in-context examples.
-                Required unless ``imputer="missing"``. Categories of the
-                query rows that do not occur in it are treated as missing.
+            budget: The budget to use for the approximation.
             generator: Pseudorandom number generator used for sampling column
                 subsets and reference rows.
 
         Returns:
-            The ``shapiq.InteractionValues`` of each row.
+            The ``shapiq.InteractionValues`` of each query row.
         """
         from shapiq import TabularExplainer
 
-        if self.imputer == "missing":
-            data = np.full((1, x_query.size(-1)), np.nan)
-        else:
-            assert background is not None
-            if not background.is_same_schema(x_query):
-                raise ValueError(
-                    "Expected 'background' and 'x_query' to share the same "
-                    "schema"
-                )
-            # Give each category the same code in both tables:
-            align = sp.AlignCategories().fit(background)
-            background = align.transform(background)
-            x_query = align.transform(x_query)
-            data = sp.ToNumerical().transform(background).numerical
-            if self.imputer == "baseline":  # Let the mean skip missing values:
-                data = data.where(~data.isnan(), data.nanmean(dim=0))
-            data = data.cpu().double().numpy()
-        # shapiq leaves the base value of a single row at 0:
+        if model._cache is None:
+            raise RuntimeError(
+                f"{model.__class__.__name__!r} not yet fitted. Make sure to "
+                f"call '{model.__class__.__name__}.fit()' before."
+            )
+        recipe_execution = cast(
+            RecipeExecution,
+            model._cache["recipe_execution"],
+        )
+        if recipe_execution.num_members != 1:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} requires exactly one estimator "
+                f"in {model.__class__.__name__!r}"
+            )
+
+        x = recipe_execution.transform(x, related_tables=None)[0].x
+        background = recipe_execution.transform(background, None)[0].x
+
+        data = background.numerical.cpu().numpy()
         if len(data) == 1:
             data = data.repeat(2, axis=0)
 
-        def predict(values: np.ndarray) -> np.ndarray:  # [N, D] -> [N]
-            # shapiq passes object arrays for "baseline", so cast them:
-            values = values.astype(np.float64)
-            tensor = torch.as_tensor(values, device=x_query.device)
-            pred = model.predict(_to_table(tensor, like=x_query))[self.output]
-            return pred.numerical.squeeze(-1).cpu().double().numpy()
+        mask = cast(Tensor, cast(Cache, model._cache[0])["categorical_mask"])
+        random_state: int | None = None
+        if generator is not None:
+            random_state = int(
+                torch.randint(2**31, (), generator=generator, device=x.device)
+            )
+
+        def predict(values: np.ndarray) -> np.ndarray:
+            values = values.astype(data.dtype, copy=False)
+            table = TableTensor(
+                columns={Stype.numerical: x.columns[Stype.numerical]},
+                numerical=torch.from_numpy(values).to(x.device),
+            )
+            processor = recipe_execution.recipe.features
+            try:
+                recipe_execution.recipe.features = None
+                out = model.predict(table)
+            finally:
+                recipe_execution.recipe.features = processor
+            return out[output].numerical.squeeze(-1).cpu().numpy()
 
         explainer = TabularExplainer(
             model=predict,
             data=data,
-            imputer="baseline" if self.imputer == "missing" else self.imputer,
-            categorical_features=list(
-                range(x_query.numerical.size(-1), x_query.size(-1))
-            ),
-            index=_index(self.index, self.max_order),
-            max_order=self.max_order,
-            random_state=_seed(generator),
+            categorical_features=mask.nonzero().view(-1).tolist(),
+            random_state=random_state,
             **self.kwargs,
         )
-        values = sp.ToNumerical().transform(x_query).numerical
-        values = values.cpu().double().numpy()
-        return list(explainer.explain_X(values, budget=self.budget))
-
-
-def _to_table(values: Tensor, like: TableTensor) -> TableTensor:
-    # Invert `ToNumerical`: return features `[R, D]`, whose categorical
-    # columns hold codes, as a table with the columns of `like`.
-    numerical, code = values.tensor_split([like.numerical.size(-1)], dim=-1)
-    # Casting NaN to an integer gives a valid code, so replace it first:
-    code = code.nan_to_num(nan=-1.0).to(like.categorical.code.dtype)
-    return TableTensor(
-        columns={
-            "numerical": like.numerical_columns,
-            "categorical": like.categorical_columns,
-        },
-        numerical=numerical.to(like.numerical.dtype),
-        categorical=CategoricalTensor(code, like.categorical.categories),
-    )
-
-
-def _seed(generator: torch.Generator | None) -> int:
-    # Draw a seed for `shapiq`, whose sampling takes an integer.
-    device = None if generator is None else generator.device
-    seed = torch.randint(2**31, size=(), generator=generator, device=device)
-    return int(seed)
-
-
-def _index(index: str | None, max_order: int) -> Any:
-    # Return the interaction index, which `shapiq` types as a literal.
-    if index is not None:
-        return index
-    return "SV" if max_order == 1 else "k-SII"
+        return list(explainer.explain_X(x.numerical.cpu().numpy(), budget))
