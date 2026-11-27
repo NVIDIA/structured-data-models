@@ -8,6 +8,7 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import TensorStep
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
     _isfinite,
@@ -81,10 +82,12 @@ class Standardize(Processor, InvertibleMixin):
             self.scale.add_(self.eps)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        mean = self.mean.to(table.device)
-        scale = self.scale.to(table.device)
-        numerical = (table.numerical - mean).div_(scale)
-        return table.replace_blocks(numerical=numerical)
+        return table.replace_blocks(
+            numerical=_standardize(table.numerical, self.mean, self.scale)
+        )
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        return (TensorStep(_standardize, (self.mean, self.scale)),)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = table.numerical.unflatten(-1, (self.scale.size(-1), -1))
@@ -96,3 +99,7 @@ class Standardize(Processor, InvertibleMixin):
         if self.eps == 0:
             return super().__repr__(indent=indent)
         return f"{' ' * indent}{self.__class__.__name__}(eps={self.eps})"
+
+
+def _standardize(x: Tensor, mean: Tensor, scale: Tensor) -> Tensor:
+    return (x - mean.to(x.device)).div_(scale.to(x.device))

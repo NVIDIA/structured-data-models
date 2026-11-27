@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Self
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import torch
 from torch import Tensor
@@ -14,6 +14,23 @@ from sdm import Stype, TableTensor
 
 if TYPE_CHECKING:
     from sdm.processing import Sequential
+
+
+class TensorStep(NamedTuple):
+    r"""A step of a transform of a numerical block, as a function of tensors.
+
+    ``fn(x, *args)`` maps a block ``x`` of shape ``[..., R, C]`` to a block
+    of the same rows. ``args`` are fitted tensors, whose leading dimensions
+    are the batch dimensions of the fitted table, and settings of the
+    processor, *e.g.*, a bound or a dtype, which do not depend on the data.
+    """
+
+    fn: Callable[..., Tensor]
+    args: tuple[Any, ...] = ()
+
+
+def _select_columns(x: Tensor, index: Tensor) -> Tensor:
+    return x.index_select(-1, index)
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -153,6 +170,16 @@ class Processor(torch.nn.Module, abc.ABC):
     @abc.abstractmethod
     def _transform(self, table: TableTensor) -> TableTensor:
         pass
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...] | None:
+        r"""The transform of a table of numerical columns as tensor steps.
+
+        A processor whose transform only maps the numerical block, keeping
+        its columns, may return the tensor steps that do the same, so that the
+        transform runs on plain tensors, *e.g.*, compiled. ``None`` if the
+        transform is no such function.
+        """
+        return None
 
     def _fit_transform(
         self,

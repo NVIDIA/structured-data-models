@@ -5,9 +5,11 @@ import math
 from typing import Literal
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import TensorStep
 from sdm.processing.numerical._stats import _isfinite
 
 
@@ -64,21 +66,16 @@ class Clip(Processor, InvertibleMixin):
         self.method = method
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = table.numerical
+        (step,) = self._tensor_steps()
+        return table.replace_blocks(
+            numerical=step.fn(table.numerical, *step.args)
+        )
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
         if self.method == "hard":
-            return table.replace_blocks(
-                numerical=numerical.clamp(self.min_value, self.max_value)
-            )
+            return (TensorStep(_clamp, (self.min_value, self.max_value)),)
         assert self.method == "saturate"
-        assert not numerical.requires_grad
-        bound = self.max_value
-        unit = numerical.div(bound).abs_()
-        root = unit.square().add_(1).sqrt_()
-        unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
-        del root
-        clipped = unit.mul_(bound).mul_(numerical.sign())
-        torch.where(numerical.isnan(), numerical, clipped, out=clipped)
-        return table.replace_blocks(numerical=clipped)
+        return (TensorStep(_saturate, (self.max_value,)),)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return table
@@ -89,3 +86,17 @@ class Clip(Processor, InvertibleMixin):
             f"{' ' * indent}{self.__class__.__name__}("
             f"{self.min_value}, {self.max_value}{extra})"
         )
+
+
+def _clamp(x: Tensor, min_value: float, max_value: float) -> Tensor:
+    return x.clamp(min_value, max_value)
+
+
+def _saturate(x: Tensor, bound: float) -> Tensor:
+    assert not x.requires_grad
+    unit = x.div(bound).abs_()
+    root = unit.square().add_(1).sqrt_()
+    unit.div_(root).masked_fill_(~_isfinite(root), 1.0)
+    del root
+    clipped = unit.mul_(bound).mul_(x.sign())
+    return torch.where(x.isnan(), x, clipped)

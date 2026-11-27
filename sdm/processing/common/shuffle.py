@@ -9,6 +9,7 @@ from torch import Tensor
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.base import TensorStep, _select_columns
 
 
 class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -145,6 +146,15 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
             tables=tables,
             member_table_ids=range(len(tables)),
         )
+
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]]:
+        permutation = self._host_permutations[member_id]
+        step = TensorStep(_select_columns, (self._permutations[member_id],))
+        return (step,), tuple(columns[i] for i in permutation)
 
     def _inverse_transform_ensemble(
         self,

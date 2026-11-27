@@ -7,7 +7,9 @@ from torch import Tensor
 from sdm import Stype, TableTensor
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import TensorStep
 from sdm.processing.numerical._stats import _isfinite
+from sdm.processing.numerical.standardize import _standardize
 
 
 class RobustScale(Processor, InvertibleMixin):
@@ -78,8 +80,12 @@ class RobustScale(Processor, InvertibleMixin):
         self._set_buffer("scale", scale.to(dtype=numerical.dtype))
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        numerical = (table.numerical - self.median).div_(self.scale)
-        return table.replace_blocks(numerical=numerical)
+        return table.replace_blocks(
+            numerical=_standardize(table.numerical, self.median, self.scale)
+        )
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        return (TensorStep(_standardize, (self.median, self.scale)),)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = (table.numerical * self.scale).add_(self.median)

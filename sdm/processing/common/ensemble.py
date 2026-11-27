@@ -6,6 +6,7 @@ from itertools import repeat
 from typing import cast
 
 import torch
+from torch import Tensor
 from torch.nn import ModuleList
 
 from sdm import EnsembleTable, Stype
@@ -15,6 +16,7 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
 )
+from sdm.processing.base import TensorStep
 
 
 class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -137,6 +139,39 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                 )
             outputs.append(processor.inverse_transform(group))
         return ensemble_table.replace_groups(outputs)
+
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]] | None:
+        processor, position, group_size = self.processor, 0, 1
+        if self.requires_fit:
+            group_id, position = self._fitted_locations[member_id]
+            processor = self._processors[group_id]
+            group_size = 1 + max(
+                p for g, p in self._fitted_locations if g == group_id
+            )
+        steps = processor._tensor_steps()
+        if steps is None:
+            return None
+
+        # The state fitted on a stacked group leads with its batch dimension,
+        # of which the member owns one position.
+        def select(arg: object) -> object:
+            if (
+                group_size > 1
+                and isinstance(arg, Tensor)
+                and arg.dim() > 0
+                and arg.size(0) == group_size
+            ):
+                return arg[position : position + 1]
+            return arg
+
+        return tuple(
+            TensorStep(step.fn, tuple(select(arg) for arg in step.args))
+            for step in steps
+        ), columns
 
     def _aligned_processors(
         self,

@@ -9,6 +9,7 @@ from torch.nn import ModuleList
 
 from sdm import EnsembleTable
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.base import TensorStep
 
 
 class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -154,6 +155,18 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             for option_id, table in self._tables_by_option(ensemble_table)
         }
         return self._gather_outputs(ensemble_table, outputs)
+
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]] | None:
+        # The members of an option are numbered among its own members.
+        option_id = self._option_ids[member_id]
+        option_member_id = self._option_ids[:member_id].count(option_id)
+        return self.options[option_id]._member_tensor_steps(
+            option_member_id, columns
+        )
 
     def _inverse_transform_ensemble(
         self,

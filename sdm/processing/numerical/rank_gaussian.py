@@ -8,6 +8,7 @@ from torch import Tensor
 from sdm import Stype, TableTensor
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
+from sdm.processing.base import TensorStep
 from sdm.processing.numerical._stats import _isfinite, _ndtri
 from sdm.processing.numerical.quantile import _batched_interp
 
@@ -157,17 +158,43 @@ class RankGaussian(Processor):
             _split_tensor(output, size, dim=-2),
             strict=True,
         ):
-            quantiles = _batched_interp(
-                rows.flatten(end_dim=-2).to(values.dtype).contiguous(),
-                values,
-                probabilities,
-            )
-            normal = _ndtri(quantiles).reshape(rows.shape)
-            out.copy_(normal.masked_fill_(rows.isnan(), torch.nan).mT)
+            out.copy_(_rank_gaussian(rows, values, probabilities))
         return table.replace_blocks(numerical=output)
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        args = (self._values, self._probabilities)
+        return (TensorStep(_rank_gaussian_block, args),)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
             f"{' ' * indent}{self.__class__.__name__}("
             f"max_knots={self.max_knots})"
         )
+
+
+def _rank_gaussian(
+    rows: Tensor,  # [..., C, R]
+    values: Tensor,  # [N, K], N = prod(...) * C
+    probabilities: Tensor,  # [N, K]
+) -> Tensor:  # [..., R, C]
+    quantiles = _batched_interp(
+        rows.flatten(end_dim=-2).to(values.dtype).contiguous(),
+        values,
+        probabilities,
+    )
+    normal = _ndtri(quantiles).reshape(rows.shape)
+    return normal.masked_fill_(rows.isnan(), torch.nan).mT
+
+
+def _rank_gaussian_block(
+    x: Tensor,  # [..., R, C]
+    values: Tensor,  # [..., C, K]
+    probabilities: Tensor,  # [..., C, K]
+) -> Tensor:  # [..., R, C]
+    out = _rank_gaussian(
+        x.movedim(-1, -2),
+        values.flatten(end_dim=-2),
+        probabilities.flatten(end_dim=-2),
+    )
+    # The dtype of the block, as `RankGaussian._transform` writes into it.
+    return out.to(x.dtype)

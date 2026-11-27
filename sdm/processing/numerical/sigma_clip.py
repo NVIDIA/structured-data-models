@@ -10,6 +10,7 @@ from torch import Tensor
 from sdm import Stype, TableTensor
 from sdm._memory import _split_tensor, split_size
 from sdm.processing import Processor
+from sdm.processing.base import TensorStep
 from sdm.processing.numerical._stats import _isfinite
 
 
@@ -122,11 +123,12 @@ class ClipSigma(Processor):
             _split_tensor(out, size, dim=-2),
             strict=True,
         ):
-            log_abs = inp.abs().log1p_().to(dtype)
-            torch.sub(self.lower_bound, log_abs, out=clipped)
-            torch.maximum(clipped, inp, out=clipped)
-            torch.minimum(log_abs.add_(self.upper_bound), clipped, out=clipped)
+            clipped.copy_(_log_clip(inp, self.lower_bound, self.upper_bound))
         return table.replace_blocks(numerical=out)
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        fn = _hard_clip if self.method == "hard" else _log_clip
+        return (TensorStep(fn, (self.lower_bound, self.upper_bound)),)
 
     def __repr__(self, *, indent: int = 0) -> str:
         extra = "" if self.method == "hard" else f", method={self.method!r}"
@@ -134,3 +136,14 @@ class ClipSigma(Processor):
             f"{' ' * indent}{self.__class__.__name__}("
             f"threshold={self.threshold}{extra})"
         )
+
+
+def _hard_clip(x: Tensor, lower_bound: Tensor, upper_bound: Tensor) -> Tensor:
+    return x.clamp(lower_bound, upper_bound)
+
+
+def _log_clip(x: Tensor, lower_bound: Tensor, upper_bound: Tensor) -> Tensor:
+    dtype = torch.promote_types(x.dtype, lower_bound.dtype)
+    log_abs = x.abs().log1p_().to(dtype)
+    clipped = torch.maximum(lower_bound - log_abs, x)
+    return torch.minimum(log_abs.add_(upper_bound), clipped)

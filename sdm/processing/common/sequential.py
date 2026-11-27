@@ -11,6 +11,7 @@ from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
 )
+from sdm.processing.base import TensorStep
 
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -121,6 +122,13 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             out = child.transform_ensemble(out)
         return out
 
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]] | None:
+        return _chain_tensor_steps(self, member_id, columns)
+
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -154,3 +162,22 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n{reprs}{' ' * indent})"
         )
+
+
+def _chain_tensor_steps(
+    processors: Iterable[EnsembleProcessor],
+    member_id: int,
+    columns: tuple[str, ...],
+) -> tuple[tuple[TensorStep, ...], tuple[str, ...]] | None:
+    # The tensor steps of `processors` in turn. None for a member without
+    # columns, for which `transform_ensemble` may skip a processor unfitted
+    # or run it to transform other members.
+    steps: tuple[TensorStep, ...] = ()
+    for processor in processors:
+        if not columns:
+            return None
+        out = processor._member_tensor_steps(member_id, columns)
+        if out is None:
+            return None
+        steps, columns = steps + out[0], out[1]
+    return steps, columns

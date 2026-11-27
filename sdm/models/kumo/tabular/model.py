@@ -13,7 +13,6 @@ import torch
 from torch import Tensor
 from torch.nn import Identity, Linear, ModuleDict
 
-import sdm.processing as sp
 from sdm import (
     EnsembleTable,
     Recipe,
@@ -26,7 +25,12 @@ from sdm import (
 from sdm.cache import Cache, KVCacheEntry, QuantizedTensor
 from sdm.models import ECOC, ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.base.compile import compile_component, repeat_single_rows
+from sdm.models.base.compile import (
+    compile_component,
+    repeat_single_rows,
+    transform_features,
+    transform_members,
+)
 from sdm.models.base.icl import _transform_output
 from sdm.models.kumo.tabular.icl import ICLBlock
 from sdm.models.kumo.tabular.recipe import default_recipe
@@ -193,19 +197,22 @@ class KumoTabular(ICLModel):
 
         Three components are compiled, see :mod:`sdm.models.base.compile`:
 
-        * the feature processors before the column shuffle, with all sizes
-          dynamic. Their graph specializes on the columns of a fit, *e.g.*,
-          on their names, and serves later fits with the same columns.
+        * the feature processors after the stype routes, one call for all
+          estimators, as tensor steps on plain tensors with all sizes
+          dynamic, see :func:`~sdm.models.base.compile.transform_features`.
+          Their graphs serve later fits on tables of other columns.
         * the model of a task, one call per estimator batch, with the rows of
           the query and of the context dynamic from the first call. Other
           sizes, *e.g.*, the number of columns, are static until they change,
           which compiles a graph in which they are dynamic.
         * the output step of regression, with all sizes dynamic.
 
-        All other steps of :meth:`predict` run uncompiled, so that the names
-        and order of the shuffled columns and of the classes do not enter the
-        graphs. A query of one row is repeated, and one without rows runs
-        uncompiled.
+        All other steps of :meth:`predict` run uncompiled, *e.g.*, the lookup
+        of categories, so that the names and order of the columns and of the
+        classes do not enter the graphs. A query of one row is repeated, and
+        one without rows runs uncompiled. Another number of estimators
+        compiles other graphs of the feature processors and the output
+        step.
 
         Args:
             kwargs: Keyword arguments passed to :func:`torch.compile`, see
@@ -215,14 +222,8 @@ class KumoTabular(ICLModel):
             The compiled function, which is called like :meth:`predict`.
             :meth:`predict` itself is not compiled.
         """
-        # The fitted buffers of the preprocessing, such as the knots of
-        # `RankGaussian`, follow the context as well.
-        features = torch._dynamo.config.patch(
-            force_parameter_static_shapes=False
-        )(
-            compile_component(
-                _transform_ensemble, **(kwargs | {"recompile_limit": 32})
-            )
+        features = compile_component(
+            transform_members, **(kwargs | {"recompile_limit": 32})
         )
         models = {
             task: partial(
@@ -435,46 +436,11 @@ def _transform_query(
     x: Tensor | TableTensor,
     related_tables: RelatedTables | None,
 ) -> tuple[MemberQuery, ...]:
-    # A copy: a graph specializes on the layout of a view of strings, such as
-    # `table[40:]`.
     return recipe_execution.transform(
-        x.clone(memory_format=torch.contiguous_format),
+        x,
         related_tables,
-        features=partial(_transform_features, features),
+        features=partial(transform_features, features),
     )
-
-
-def _transform_features(
-    prefix: Callable[..., EnsembleTable],
-    processor: sp.EnsembleProcessor,
-    ensemble_table: EnsembleTable,
-) -> EnsembleTable:
-    # `prefix` runs the processors before the first `ShuffleColumns`, whose
-    # column names follow the shuffle of the fit, which a graph would bake in.
-    # The columns that the leading `DropStypes` remove, such as text, would
-    # enter the graph, which specializes on their sizes, *e.g.*, on texts
-    # that are all empty.
-    children = list(processor) if isinstance(processor, sp.Sequential) else []
-    start = 0
-    while (
-        start < len(children)
-        and isinstance(children[start], sp.EnsembleProcessorAdapter)
-        and isinstance(children[start].processor, sp.DropStypes)
-    ):
-        start += 1
-    cut = next(
-        (
-            i
-            for i, child in enumerate(children)
-            if isinstance(child, sp.ShuffleColumns)
-        ),
-        len(children),
-    )
-    if cut <= start:
-        return processor.transform_ensemble(ensemble_table)
-    out = _transform_ensemble(children[:start], ensemble_table)
-    out = prefix(children[start:cut], out)
-    return _transform_ensemble(children[cut:], out)
 
 
 def _transform_output_of_quantiles(
@@ -508,15 +474,6 @@ def _transform_quantile_output(
         for out in outs
     ]
     return _transform_output(recipe_execution, tables, invert=True)
-
-
-def _transform_ensemble(
-    processors: Sequence[sp.EnsembleProcessor],
-    ensemble_table: EnsembleTable,
-) -> EnsembleTable:
-    for processor in processors:
-        ensemble_table = processor.transform_ensemble(ensemble_table)
-    return ensemble_table
 
 
 def _call_with_dynamic_rows(

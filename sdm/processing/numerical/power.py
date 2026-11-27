@@ -8,6 +8,7 @@ from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import TensorStep
 from sdm.processing.numerical._stats import (
     _constant_feature_mask,
     _isfinite,
@@ -311,14 +312,15 @@ class PowerTransform(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        transformed = _yeojohnson_transform(table.numerical, self.lambdas)
-        numerical = transformed.sub_(self.mean).div_(self.scale)
-        # The fitted lambdas only keep the fitted range representable, so a
-        # query far outside it can overflow.
-        bound = torch.finfo(numerical.dtype).max
         return table.replace_blocks(
-            numerical=numerical.clamp_(min=-bound, max=bound)
+            numerical=_power_transform(
+                table.numerical, self.lambdas, self.mean, self.scale
+            )
         )
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        args = (self.lambdas, self.mean, self.scale)
+        return (TensorStep(_power_transform, args),)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         unscaled = table.numerical * self.scale + self.mean
@@ -342,3 +344,17 @@ class PowerTransform(Processor, InvertibleMixin):
             f"{' ' * indent}{self.__class__.__name__}("
             f"standardize={self.standardize!r})"
         )
+
+
+def _power_transform(
+    x: Tensor,
+    lambdas: Tensor,
+    mean: Tensor,
+    scale: Tensor,
+) -> Tensor:
+    transformed = _yeojohnson_transform(x, lambdas)
+    numerical = transformed.sub_(mean).div_(scale)
+    # The fitted lambdas only keep the fitted range representable, so a
+    # query far outside it can overflow.
+    bound = torch.finfo(numerical.dtype).max
+    return numerical.clamp_(min=-bound, max=bound)

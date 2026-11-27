@@ -17,13 +17,17 @@ components to reuse their graphs after fits on other data.
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, TableTensor
+import sdm.processing as sp
+from sdm import EnsembleTable, RelatedTables, Stype, TableTensor
+from sdm.processing.base import TensorStep
+from sdm.processing.common.sequential import _chain_tensor_steps
 
 if TYPE_CHECKING:
     from sdm.models.base import Callback
@@ -86,3 +90,216 @@ def repeat_single_rows(
         return cast(TableTensor, out[..., :1, :])
 
     return wrapper
+
+
+class _Route(NamedTuple):
+    # The columns of one stype, which `head` transforms as tables, *e.g.*,
+    # looking up categories, before tensor steps transform their blocks.
+    stype: Stype
+    head: tuple[sp.EnsembleProcessor, ...]
+    locations: tuple[tuple[int, int], ...]
+
+
+class _Member(NamedTuple):
+    # Per route, the group and position of the member's block and its tensor
+    # steps; then the tensor steps of the concatenated blocks.
+    routes: tuple[tuple[int, int, tuple[TensorStep, ...]], ...]
+    steps: tuple[TensorStep, ...]
+
+
+class _FeaturePlan(NamedTuple):
+    # The features of a fit as tensor steps: `eager` and the heads of the
+    # routes of `dispatch` run as tables, the tensor steps of all members in
+    # one call.
+    columns: tuple[tuple[Stype, tuple[str, ...]], ...]
+    eager: tuple[sp.EnsembleProcessor, ...]
+    routes: tuple[_Route, ...]
+    members: tuple[_Member, ...]
+    member_columns: tuple[tuple[str, ...], ...]
+
+
+_plans: weakref.WeakKeyDictionary[sp.EnsembleProcessor, _FeaturePlan | None]
+_plans = weakref.WeakKeyDictionary()
+
+
+def transform_features(
+    members: Callable[..., list[Tensor]],
+    processor: sp.EnsembleProcessor,
+    ensemble_table: EnsembleTable,
+) -> EnsembleTable:
+    r"""Transform features by a recipe, its tensor work in one call.
+
+    The processors of a fit become tensor steps, functions of the blocks of
+    each member and of fitted tensors, see
+    :meth:`~sdm.processing.EnsembleProcessor._member_tensor_steps`.
+    ``members``, *e.g.*, :func:`transform_members` compiled, runs the tensor
+    steps after the routes of all members, so that its graphs see only
+    tensors, whose sizes are dynamic, and the functions and settings of the
+    steps, and serve fits on tables of other columns. The tensor steps of
+    the routes run uncompiled. Processors without tensor steps, *e.g.*, the
+    lookup of categories, and the names of columns stay plain Python. A
+    recipe of other shape runs uncompiled.
+
+    Args:
+        members: Runs the tensor steps, called like
+            :func:`transform_members`.
+        processor: The fitted features of the recipe.
+        ensemble_table: The query.
+    """
+    plan = _plans.get(processor, False)
+    if plan is not None and (
+        plan is False or plan.columns != _columns(ensemble_table)
+    ):
+        plan = _plans[processor] = _feature_plan(processor, ensemble_table)
+    if plan is None:
+        return processor.transform_ensemble(ensemble_table)
+
+    for child in plan.eager:
+        ensemble_table = child.transform_ensemble(ensemble_table)
+    inputs = []
+    for route in plan.routes:
+        table = ensemble_table.select_stypes(route.stype)
+        for child in route.head:
+            table = child.transform_ensemble(table)
+        assert table._locations == route.locations
+        inputs.append([group.numerical for group in table._iter_groups()])
+    # The routes run uncompiled, as which routes run, and sizes of one, on
+    # which a graph specializes, differ between fits.
+    outs = members(
+        _route_blocks(inputs, plan.members),
+        [member.steps for member in plan.members],
+    )
+    return EnsembleTable.from_tables(
+        tables=[
+            TableTensor(columns={"numerical": columns}, numerical=out)
+            for columns, out in zip(plan.member_columns, outs, strict=True)
+        ],
+        member_table_ids=range(len(outs)),
+    )
+
+
+def transform_members(
+    blocks: Sequence[Tensor],  # per member [1, R, C]
+    steps: Sequence[Sequence[TensorStep]],  # per member
+) -> list[Tensor]:  # per member [R, C]
+    r"""Run the tensor steps of each member on its block."""
+    outs = []
+    for x, member_steps in zip(blocks, steps, strict=True):
+        for step in member_steps:
+            x = step.fn(x, *step.args)
+        outs.append(x[0])
+    return outs
+
+
+def _route_blocks(
+    inputs: Sequence[Sequence[Tensor]],  # per route, per group [B, R, C]
+    members: Sequence[_Member],
+) -> list[Tensor]:  # per member [1, R, C]
+    blocks = []
+    for member in members:
+        routes = []
+        for groups, (group_id, position, steps) in zip(
+            inputs, member.routes, strict=True
+        ):
+            x = groups[group_id][position : position + 1]
+            # TODO: Split the rows, as the transforms of `RankGaussian` and
+            # `ClipSigma` do, to bound the memory of large queries.
+            for step in steps:
+                x = step.fn(x, *step.args)
+            routes.append(x)
+        # A copy also of a single route, as a graph specializes on views.
+        blocks.append(torch.cat(routes, dim=-1))
+    return blocks
+
+
+def _columns(
+    ensemble_table: EnsembleTable,
+) -> tuple[tuple[Stype, tuple[str, ...]], ...]:
+    return tuple(
+        tuple(group.column_groups) for group in ensemble_table._iter_groups()
+    )
+
+
+def _feature_plan(
+    processor: sp.EnsembleProcessor,
+    ensemble_table: EnsembleTable,
+) -> _FeaturePlan | None:
+    # Supported: `Sequential(*eager, StypeDispatch, *tail)`, whose tail has
+    # tensor steps.
+    children = list(processor) if isinstance(processor, sp.Sequential) else []
+    cut = next(
+        (
+            i
+            for i, child in enumerate(children)
+            if isinstance(child, sp.StypeDispatch)
+        ),
+        None,
+    )
+    if cut is None:
+        return None
+    schema = _columns(ensemble_table)
+    dispatch = cast(sp.StypeDispatch, children[cut])
+    eager, tail = tuple(children[:cut]), children[cut + 1 :]
+    for child in eager:
+        ensemble_table = child.transform_ensemble(ensemble_table)
+    active = dispatch._active_routes
+    if active is None or any(
+        names and str(s) not in active
+        for group in ensemble_table._iter_groups()
+        for s, names in group.column_groups
+    ):
+        return None
+    num_members = len(ensemble_table)
+
+    routes = []
+    route_steps: list[list[tuple[int, int, tuple[TensorStep, ...]]]]
+    route_steps = [[] for _ in range(num_members)]
+    member_columns: list[tuple[str, ...]] = [() for _ in range(num_members)]
+    for stype in active:
+        route = dispatch.processors[stype]
+        processors = (
+            list(route) if isinstance(route, sp.Sequential) else [route]
+        )
+        table = ensemble_table.select_stypes(stype)
+        # The leading processors of a route without tensor steps run as
+        # tables.
+        head = []
+        while True:
+            found = None
+            if all(
+                not names or s == Stype.numerical
+                for group in table._iter_groups()
+                for s, names in group.column_groups
+            ):
+                found = [
+                    _chain_tensor_steps(
+                        processors, i, table[i].numerical_columns
+                    )
+                    for i in range(num_members)
+                ]
+            if found is not None and all(out is not None for out in found):
+                break
+            if not processors:
+                return None
+            head.append(processors.pop(0))
+            table = head[-1].transform_ensemble(table)
+        routes.append(_Route(Stype(stype), tuple(head), table._locations))
+        for i, (group_id, position) in enumerate(table._locations):
+            steps, columns = cast(tuple, found[i])
+            route_steps[i].append((group_id, position, steps))
+            member_columns[i] += columns
+
+    members = []
+    for i in range(num_members):
+        found_tail = _chain_tensor_steps(tail, i, member_columns[i])
+        if found_tail is None:
+            return None
+        members.append(_Member(tuple(route_steps[i]), found_tail[0]))
+        member_columns[i] = found_tail[1]
+    return _FeaturePlan(
+        columns=schema,
+        eager=eager,
+        routes=tuple(routes),
+        members=tuple(members),
+        member_columns=tuple(member_columns),
+    )

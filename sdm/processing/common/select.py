@@ -6,10 +6,12 @@ from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import torch
+from torch import Tensor
 
 from sdm import EnsembleTable, Stype, StypeLike, TableTensor
 from sdm._warnings import warn_once
 from sdm.processing import EnsembleProcessor
+from sdm.processing.base import TensorStep
 
 
 class SelectColumns(EnsembleProcessor):
@@ -124,6 +126,18 @@ class SelectColumns(EnsembleProcessor):
             member_table_ids=range(len(tables)),
         )
 
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]] | None:
+        if len(columns) <= self.max_columns:
+            return (), columns
+        if self.method != "first":
+            return None
+        step = TensorStep(_first_columns, (self.max_columns,))
+        return (step,), columns[: self.max_columns]
+
     def __repr__(self, *, indent: int = 0) -> str:
         arguments = [f"max_columns={self.max_columns!r}"]
         if self.method != "first":
@@ -131,3 +145,7 @@ class SelectColumns(EnsembleProcessor):
         return (
             f"{' ' * indent}{self.__class__.__name__}({', '.join(arguments)})"
         )
+
+
+def _first_columns(x: Tensor, num_columns: int) -> Tensor:
+    return x[..., :num_columns]

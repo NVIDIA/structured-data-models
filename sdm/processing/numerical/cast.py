@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+from torch import Tensor
 
 from sdm import Stype, TableTensor
 from sdm.processing import Processor
+from sdm.processing.base import TensorStep
 
 
 class Cast(Processor):
@@ -24,10 +26,18 @@ class Cast(Processor):
         self.dtype = dtype
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        dtype = self.dtype
-        if table.device.type == "mps" and dtype == torch.float64:
-            dtype = torch.float32  # MPS does not support float64.
-        return table.replace_blocks(numerical=table.numerical.to(dtype))
+        return table.replace_blocks(
+            numerical=_cast(table.numerical, self.dtype)
+        )
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        return (TensorStep(_cast, (self.dtype,)),)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}({self.dtype})"
+
+
+def _cast(x: Tensor, dtype: torch.dtype) -> Tensor:
+    if x.device.type == "mps" and dtype == torch.float64:
+        dtype = torch.float32  # MPS does not support float64.
+    return x.to(dtype)

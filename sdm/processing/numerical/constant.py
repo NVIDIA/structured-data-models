@@ -7,6 +7,7 @@ import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import EnsembleProcessor
+from sdm.processing.base import TensorStep, _select_columns
 
 
 class DropConstantColumns(EnsembleProcessor):
@@ -233,6 +234,18 @@ class DropConstantColumns(EnsembleProcessor):
             tables=tables,
             member_ids=member_ids,
         )
+
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]]:
+        kept_indices = self._kept_indices[member_id]
+        index = torch.tensor(
+            kept_indices, dtype=torch.long, device=self._fitted_state.device
+        )
+        step = TensorStep(_select_columns, (index,))
+        return (step,), tuple(columns[i] for i in kept_indices)
 
     def __repr__(self, *, indent: int = 0) -> str:
         if self.threshold == 1:

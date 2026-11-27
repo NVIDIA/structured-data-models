@@ -3,6 +3,7 @@
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import TensorStep
 
 
 class Identity(Processor, InvertibleMixin):
@@ -13,6 +14,9 @@ class Identity(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         return table
+
+    def _tensor_steps(self) -> tuple[TensorStep, ...]:
+        return ()
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return table

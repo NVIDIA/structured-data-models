@@ -7,6 +7,7 @@ from torch import Tensor
 from sdm import EnsembleTable, Stype
 from sdm.nn._buffer import BufferList
 from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.base import TensorStep
 
 
 class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -58,15 +59,21 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
         for group_id, member_ids in enumerate(member_ids_by_group):
             group = ensemble_table.expanded_group(group_id)
             sign = torch.stack([self._signs[i] for i in member_ids], dim=0)
-            # Predictions can hold multiple outputs per column (quantiles):
-            x = group.numerical.unflatten(-1, (sign.size(-1), -1))
-            x = (x * sign.unsqueeze(-1)).flatten(-2)
-            group = group.replace_blocks(numerical=x)
+            group = group.replace_blocks(
+                numerical=_flip_sign(group.numerical, sign)
+            )
             groups.append(group)
             for position, member_id in enumerate(member_ids):
                 locations[member_id] = (group_id, position)
 
         return EnsembleTable(groups, locations)
+
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]]:
+        return (TensorStep(_flip_sign, (self._signs[member_id],)),), columns
 
     def _inverse_transform_ensemble(
         self,
@@ -79,3 +86,9 @@ class FlipSign(EnsembleProcessor, EnsembleInvertibleMixin):
             f"{' ' * indent}{self.__class__.__name__}"
             f"(probability={self.probability})"
         )
+
+
+def _flip_sign(x: Tensor, sign: Tensor) -> Tensor:
+    # Predictions can hold multiple outputs per column (quantiles):
+    x = x.unflatten(-1, (sign.size(-1), -1))
+    return (x * sign.unsqueeze(-1)).flatten(-2)

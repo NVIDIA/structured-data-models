@@ -11,6 +11,7 @@ import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import TensorStep
 
 
 class EnsembleProcessor(Processor):
@@ -96,6 +97,20 @@ class EnsembleProcessor(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         raise NotImplementedError
+
+    def _member_tensor_steps(
+        self,
+        member_id: int,
+        columns: tuple[str, ...],
+    ) -> tuple[tuple[TensorStep, ...], tuple[str, ...]] | None:
+        r"""The transform of a member of numerical columns as tensor steps.
+
+        Returns the tensor steps that transform the numerical block of member
+        ``member_id``, whose columns are ``columns``, and the columns of
+        the output, or ``None`` if the transform is no such function. The
+        tensors of the steps belong to the member alone.
+        """
+        return None
 
     @abc.abstractmethod
     def _transform_ensemble(
