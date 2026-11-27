@@ -30,6 +30,10 @@ class ShapleyExplainer:
     The resulting attributions describe each feature's contribution to the
     difference between the row's prediction and the baseline prediction.
 
+    .. note::
+        :class:`ShapleyExplainer` requires ``shapiq>=1.8``.
+        See `here <https://shapiq.readthedocs.io>`_ on how to install.
+
     Args:
         kwargs: Additional keyword arguments passed to
             ``shapiq.TabularExplainer``, *e.g.*, ``imputer``, ``index``
@@ -65,7 +69,7 @@ class ShapleyExplainer:
         *,
         generator: torch.Generator | None = None,
     ) -> list[InteractionValues]:
-        r"""Explain the contributions of feature columns to predictions.
+        r"""Explain the contributions of preprocessed features.
 
         Args:
             model: The fitted model.

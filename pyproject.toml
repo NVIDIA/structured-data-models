@@ -67,9 +67,6 @@ Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 prior = [
     "scikit-learn",
 ]
-explain = [
-    "shapiq>=1.8; python_version >= '3.12'",
-]
 
 [dependency-groups]
 test-cpu = [

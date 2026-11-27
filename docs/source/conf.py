@@ -186,6 +186,7 @@ def _run_on_doctree_read(
 
 _reference_aliases = {
     "Tensor": "torch.Tensor",
+    "InteractionValues": "shapiq.interaction_values.InteractionValues",
     "pd.DataFrame": "pandas.DataFrame",
     "pa.Table": "pyarrow.Table",
     "StypeLike": "sdm.StypeLike",
