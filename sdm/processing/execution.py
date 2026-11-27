@@ -114,7 +114,10 @@ class RecipeExecution:
         # target transforms require distinct member assignment:
         series_processors: tuple[sp.SeriesEnsembleProcessor, ...] = ()
         if y is not None:
-            y: EnsembleTable = _to_ensemble_table(y, num_members, expand=True)
+            raw_target = _to_ensemble_table(y, num_members)
+            y: EnsembleTable = _to_ensemble_table(
+                raw_target, num_members, expand=True
+            )
 
             for processor in (
                 self.recipe.features,
@@ -122,7 +125,7 @@ class RecipeExecution:
             ):
                 for module in _iter_modules(processor):
                     if isinstance(module, sp.TargetAwareEnsembleProcessor):
-                        module._target = y
+                        module._target = raw_target
 
             series_processors = tuple(
                 module
