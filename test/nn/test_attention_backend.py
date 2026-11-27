@@ -4,7 +4,9 @@
 import pytest
 import torch
 import torch.nn.functional as F
+from torch import Tensor
 
+from sdm.nn import SDPA
 from sdm.nn.attention_backend import TorchAttentionBackend
 
 
@@ -43,3 +45,23 @@ def test_torch_attention_backend(num_key_value_heads: int, mask: str) -> None:
     assert backend.supports(query, key, value, **options)
     out = backend.forward(query, key, value, **options)
     torch.testing.assert_close(out, expected)
+
+
+class MyAttentionBackend(TorchAttentionBackend):
+    def forward(
+        self, query: Tensor, *args: object, **kwargs: object
+    ) -> Tensor:
+        return torch.zeros_like(query)
+
+
+def test_sdpa_backend() -> None:
+    query = torch.randn(2, 3, 5, 4, 8)  # [..., Q, Hq, C]
+    key = torch.randn(2, 3, 7, 4, 8)  # [..., KV, Hkv, C]
+    value = torch.randn_like(key)
+    sdpa = SDPA(num_query_heads=4, backend="torch")
+    sdpa.backend = MyAttentionBackend()
+    fa3 = SDPA(num_query_heads=4, backend="fa3")
+
+    assert sdpa(query, key, value).eq(0).all()
+    with pytest.raises(RuntimeError, match="FlashAttention3Backend does not"):
+        fa3(query, key, value, is_causal=True)

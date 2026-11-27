@@ -11,11 +11,14 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm._kernels.flash_attention import flash_attention
-from sdm._kernels.sdpa import sdpa
 from sdm._memory import chunk_memory_limit
 from sdm.cache import KVCacheDType, KVCacheEntry
 from sdm.nn import QueryScaling
+from sdm.nn.attention_backend import (
+    AttentionBackend,
+    FlashAttention3Backend,
+    TorchAttentionBackend,
+)
 
 
 class SDPA(torch.nn.Module):
@@ -38,9 +41,8 @@ class SDPA(torch.nn.Module):
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
         dropout: Attention dropout probability.
-        backend: ``"sdpa"`` (default) or ``"fa3"`` for FlashAttention-3 on
-            Hopper with FP16/BF16 inputs. General masks, causal attention,
-            and attention dropout use SDPA with either setting.
+        backend: ``"torch"`` (default) or ``"fa3"`` for FlashAttention-3 on
+            Hopper with FP16/BF16 inputs.
     """
 
     def __init__(
@@ -50,7 +52,7 @@ class SDPA(torch.nn.Module):
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
-        backend: Literal["sdpa", "fa3"] = "sdpa",
+        backend: Literal["torch", "fa3"] = "torch",
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -66,7 +68,14 @@ class SDPA(torch.nn.Module):
         self.query_scaling = query_scaling
         self.scale = scale
         self.dropout = dropout
-        self.backend = backend
+
+        self.backend: AttentionBackend
+        if backend == "torch":
+            self.backend = TorchAttentionBackend()
+        elif backend == "fa3":
+            self.backend = FlashAttention3Backend()
+        else:
+            raise AssertionError(f"Unknown attention backend {backend!r}.")
 
     def forward(
         self,
@@ -176,53 +185,28 @@ class SDPA(torch.nn.Module):
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
 
-        if (
-            self.backend == "fa3"
-            and attn_mask is None
-            and not is_causal
-            and (not self.training or self.dropout == 0.0)
-        ):
-            lengths = (
-                None
-                if seqused_key_value is None
-                else seqused_key_value.expand(batch_shape).reshape(-1)
-            )
-            out = flash_attention(
-                query, key, value, lengths=lengths, scale=self.scale
-            )
-            return out.view(batch_shape + out.size()[-3:])
-
         if attn_mask is not None:
             attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])
             attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-3:])
-
         if seqused_key_value is not None:
-            seqused_key_value = seqused_key_value.expand(batch_shape)
-            seqused_key_value = seqused_key_value.reshape(-1).unsqueeze(-1)
-            key_index = torch.arange(key.size(-3), device=key.device)
-            attn_mask = key_index.unsqueeze(0) < seqused_key_value
-            attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
-            attn_mask = attn_mask.unsqueeze(-3)
+            seqused_key_value = seqused_key_value.expand(batch_shape).reshape(
+                -1
+            )
 
-        enable_gqa = False
-        if query.size(-2) != key.size(-2):
-            enable_gqa = True
+        kwargs: dict[str, Any] = {
+            "attn_mask": attn_mask,  # [B, Hq, Q, KV]
+            "seqused_key_value": seqused_key_value,  # [B]
+            "is_causal": is_causal,
+            "dropout_p": self.dropout if self.training else 0.0,
+            "scale": self.scale,
+        }
+        backend = self.backend
+        if not backend.supports(query, key, value, **kwargs):
+            raise RuntimeError(
+                f"{type(backend).__name__} does not support this SDPA call."
+            )
 
-        query = query.transpose(-3, -2)  # [B, Hq, Q, C]
-        key = key.transpose(-3, -2)  # [B, Hkv, KV, C]
-        value = value.transpose(-3, -2)  # [B, Hkv, KV, C]
-
-        out = sdpa(
-            query,
-            key,
-            value,
-            attn_mask,  # [B, Hq, Q, KV]
-            self.dropout if self.training else 0.0,
-            enable_gqa,
-            is_causal,
-            self.scale,
-        )  # [B, Q, Hq, C]
-
+        out = backend.forward(query, key, value, **kwargs)
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
 
