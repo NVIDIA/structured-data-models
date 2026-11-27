@@ -12,7 +12,7 @@ from torch import Tensor
 from torch.nn import Linear
 
 from sdm._memory import chunk_memory_limit
-from sdm.cache import KVCacheDType, KVCacheEntry
+from sdm.cache import KVCacheDType, KVCacheEntry, QuantizedTensor
 from sdm.nn import QueryScaling
 from sdm.nn.attention_backend import (
     AttentionBackend,
@@ -80,8 +80,8 @@ class SDPA(torch.nn.Module):
     def forward(
         self,
         query: Tensor,  # [..., Q, Hq, C]
-        key: Tensor,  # [..., KV, Hkv, C]
-        value: Tensor,  # [..., KV, Hkv, C]
+        key: Tensor | QuantizedTensor,  # [..., KV, Hkv, C]
+        value: Tensor | QuantizedTensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Hq, Q, KV]
         *,
@@ -157,6 +157,8 @@ class SDPA(torch.nn.Module):
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
             if torch.is_grad_enabled():
+                assert isinstance(key, Tensor), "Quantization not supported"
+                assert isinstance(value, Tensor), "Quantization not supported"
                 # Summing an empty slice gives zero and keeps backward working.
                 for tensor in (query, key, value, attn_mask):
                     if tensor is not None and tensor.requires_grad:
@@ -165,6 +167,7 @@ class SDPA(torch.nn.Module):
 
         if (  # Softmax over a single key is one, so skip SDPA:
             key_size[0] == 1
+            and isinstance(value, Tensor)
             and (attn_mask is None or attn_mask.dtype == torch.bool)
             and seqused_key_value is None
             and not torch.is_grad_enabled()
@@ -181,10 +184,19 @@ class SDPA(torch.nn.Module):
                 out = out.masked_fill(~attn_mask.transpose(-3, -2), 0.0)
             return out
 
-        query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
-        key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
-        value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
+        def flatten(tensor: Tensor) -> Tensor:
+            size = tensor.size()[-3:]
+            return tensor.expand(batch_shape + size).reshape(-1, *size)
 
+        query = flatten(query)
+        if isinstance(key, QuantizedTensor):
+            key = key._apply_tensor(flatten)
+        else:
+            key = flatten(key)
+        if isinstance(value, QuantizedTensor):
+            value = value._apply_tensor(flatten)
+        else:
+            value = flatten(value)
         if attn_mask is not None:
             attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-3:])
             attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-3:])
@@ -202,9 +214,21 @@ class SDPA(torch.nn.Module):
         }
         backend = self.backend
         if not backend.supports(query, key, value, **kwargs):
-            raise RuntimeError(
-                f"{type(backend).__name__} does not support this SDPA call."
+            device = query.device.type
+            dtype = (
+                torch.get_autocast_dtype(device)
+                if torch.is_autocast_enabled(device)
+                else query.dtype
             )
+            if isinstance(key, QuantizedTensor):
+                key = key.dequantize(dtype)
+            if isinstance(value, QuantizedTensor):
+                value = value.dequantize(dtype)
+            if not backend.supports(query, key, value, **kwargs):
+                raise RuntimeError(
+                    f"{type(backend).__name__} does not support "
+                    "this SDPA call."
+                )
 
         out = backend.forward(query, key, value, **kwargs)
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
@@ -374,9 +398,11 @@ class Attention(torch.nn.Module):
             key_pos: Key positions with shape ``[..., KV]`` passed to
                 ``key_transform``.
             is_causal: Apply an upper-left causal attention mask.
-            return_key_value: Whether to return the computed key and value
-                projections alongside the attention output.
-            kv_cache_dtype: The storage dtype of the returned key and value
+            return_key_value: Whether to return the key and value projections
+                alongside the attention output. A
+                :class:`~sdm.cache.KVCacheEntry` ``key_value`` is returned as
+                is.
+            kv_cache_dtype: The storage dtype of the computed key and value
                 projections. Attention uses the stored values, as when
                 replaying them.
 
@@ -399,14 +425,13 @@ class Attention(torch.nn.Module):
                 if self.qkv_lin.bias is not None
                 else None,
             )
-            # TODO: Attention backend should decide whether to dequantize.
-            key, value = key_value.dequantize(query.dtype)
-            if key.dtype != query.dtype or value.dtype != query.dtype:
-                raise ValueError(
-                    f"Key/value projections were cached under dtypes "
-                    f"'{key.dtype}'/'{value.dtype}' but "
-                    f"the query has dtype '{query.dtype}'"
-                )
+            for tensor in (key_value.key, key_value.value):
+                if isinstance(tensor, Tensor) and tensor.dtype != query.dtype:
+                    raise ValueError(
+                        f"Key/value projections were cached under dtype "
+                        f"'{tensor.dtype}' but the query has dtype "
+                        f"'{query.dtype}'"
+                    )
         elif key_value is None:
             query, key, value = self.qkv_lin(query).split(
                 [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
@@ -443,8 +468,9 @@ class Attention(torch.nn.Module):
             else:
                 key = self.key_transform(key, pos=key_pos)
 
-        entry: KVCacheEntry | None = None
-        if return_key_value:
+        if isinstance(key_value, KVCacheEntry):
+            entry = key_value
+        elif return_key_value:
             # CUDA autocast runs RMSNorm in fp32, so cast explicitly before
             # caching: https://github.com/pytorch/pytorch/blob/v2.13.0/aten/src/ATen/autocast_mode.h#L875
             entry = KVCacheEntry(key=key.to(value.dtype), value=value)
@@ -454,8 +480,9 @@ class Attention(torch.nn.Module):
                     value=kv_cache_dtype.quantize(entry.value),
                 )
             entry = entry._apply_tensor(lambda tensor: tensor.contiguous())
-            # TODO: Attention backend should decide whether to dequantize.
-            key, value = entry.dequantize(value.dtype)
+        else:
+            entry = KVCacheEntry(key=key, value=value)
+        key, value = entry.key, entry.value
 
         out = self.sdpa(
             query=query,  # [..., Q, Hq, C // Hq]
@@ -470,7 +497,7 @@ class Attention(torch.nn.Module):
         if gate is not None:
             out = out * gate
         out = self.out_lin(out)  # [..., Q, C]
-        if entry is not None:
+        if return_key_value:
             return out, entry
         return out
 

@@ -413,6 +413,12 @@ def test_attention_kv_cache(qassmax: bool) -> None:
         key_value=kv,
         attn_mask=attn_mask,
     )
+    replay_out, replay_kv = module(
+        query=query,
+        key_value=kv,
+        attn_mask=attn_mask,
+        return_key_value=True,
+    )
 
     self_out, self_kv = module(query=query, return_key_value=True)
     self_cached_out = module(query=query, key_value=self_kv)
@@ -421,6 +427,8 @@ def test_attention_kv_cache(qassmax: bool) -> None:
     assert kv.value.size() == (2, 5, num_heads, channels // num_heads)
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+    torch.testing.assert_close(replay_out, direct_out)
+    assert replay_kv is kv
     torch.testing.assert_close(self_cached_out, self_out)
 
 
