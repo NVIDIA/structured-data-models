@@ -69,11 +69,11 @@ class SDPA(torch.nn.Module):
         self.scale = scale
         self.dropout = dropout
 
-        self._backend: AttentionBackend
+        self.backend: AttentionBackend
         if backend == "sdpa":
-            self._backend = TorchAttentionBackend()
+            self.backend = TorchAttentionBackend()
         elif backend == "fa3":
-            self._backend = FlashAttention3Backend()
+            self.backend = FlashAttention3Backend()
         else:
             raise AssertionError(f"Unknown attention backend {backend!r}.")
 
@@ -200,7 +200,7 @@ class SDPA(torch.nn.Module):
             "dropout_p": self.dropout if self.training else 0.0,
             "scale": self.scale,
         }
-        backend = self._backend
+        backend = self.backend
         if not backend.supports(query, key, value, **kwargs):
             raise RuntimeError(
                 f"{type(backend).__name__} does not support this SDPA call."

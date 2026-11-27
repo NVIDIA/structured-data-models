@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from sdm.nn import SDPA, attention
+from sdm.nn import SDPA
 from sdm.nn.attention_backend import TorchAttentionBackend
 
 
@@ -54,12 +54,12 @@ class MyAttentionBackend(TorchAttentionBackend):
         return torch.zeros_like(query)
 
 
-def test_sdpa_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(attention, "TorchAttentionBackend", MyAttentionBackend)
+def test_sdpa_backend() -> None:
     query = torch.randn(2, 3, 5, 4, 8)  # [..., Q, Hq, C]
     key = torch.randn(2, 3, 7, 4, 8)  # [..., KV, Hkv, C]
     value = torch.randn_like(key)
     sdpa = SDPA(num_query_heads=4, backend="sdpa")
+    sdpa.backend = MyAttentionBackend()
     fa3 = SDPA(num_query_heads=4, backend="fa3")
 
     assert sdpa(query, key, value).eq(0).all()
