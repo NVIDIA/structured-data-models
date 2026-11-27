@@ -157,12 +157,11 @@ class SDPA(torch.nn.Module):
                 batch_shape + query_size[:-1] + value_size[-1:]
             )
             if torch.is_grad_enabled():
+                assert isinstance(key, Tensor), "Quantization not supported"
+                assert isinstance(value, Tensor), "Quantization not supported"
                 # Summing an empty slice gives zero and keeps backward working.
                 for tensor in (query, key, value, attn_mask):
-                    if tensor is None:
-                        continue
-                    assert isinstance(tensor, Tensor)
-                    if tensor.requires_grad:
+                    if tensor is not None and tensor.requires_grad:
                         out = out + tensor[..., :0, :, :].sum()
             return out
 
