@@ -82,6 +82,7 @@ intersphinx_mapping = {
     "sentence_transformers": ("https://sbert.net", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
     "graphviz": ("https://graphviz.readthedocs.io/en/stable/", None),
+    "shapiq": ("https://shapiq.readthedocs.io/en/latest", None),
     "typing_extensions": (
         "https://typing-extensions.readthedocs.io/en/latest",
         None,
@@ -209,6 +210,7 @@ _reference_aliases = {
     ),
     "sentence_transformers.SentenceTransformer": "sentence_transformers.sentence_transformer.model.SentenceTransformer",  # noqa: E501
     "sentence_transformers.SentenceTransformer.encode": "sentence_transformers.sentence_transformer.model.SentenceTransformer.encode",  # noqa: E501
+    "InteractionValues": "shapiq.interaction_values.InteractionValues",
 }
 
 

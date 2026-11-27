@@ -75,6 +75,7 @@ test-cpu = [
     "pandas",
     "pyg-lib; sys_platform == 'linux'",
     "sentence-transformers>=5.4",
+    "shapiq>=1.8; python_version >= '3.12'",
 ]
 test = [
     { include-group = "test-cpu" },
@@ -224,6 +225,7 @@ banned-module-level-imports = [
     "sentence_transformers",
     "transformers",
     "tokenizers",
+    "shapiq",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -267,4 +269,5 @@ allowed-unresolved-imports = [
     "graphviz.**",
     "pylibcugraph.**",
     "sentence_transformers.**",
+    "shapiq.**",
 ]
