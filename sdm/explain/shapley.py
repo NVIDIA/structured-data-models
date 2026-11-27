@@ -133,4 +133,5 @@ class ShapleyExplainer:
             random_state=random_state,
             **self.kwargs,
         )
-        return list(explainer.explain_X(x.numerical.cpu().numpy(), budget))
+        values = x.numerical.cpu().numpy()
+        return list(explainer.explain_X(values, budget=budget))
