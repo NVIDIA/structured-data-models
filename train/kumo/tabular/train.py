@@ -149,8 +149,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--attention-backend",
-        choices=("sdpa", "fa3"),
-        default="sdpa",
+        choices=("torch", "fa3"),
+        default="torch",
         help="Use FlashAttention-3 with FP16/BF16",
     )
     parser.add_argument(

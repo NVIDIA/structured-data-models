@@ -58,7 +58,7 @@ def test_sdpa_backend() -> None:
     query = torch.randn(2, 3, 5, 4, 8)  # [..., Q, Hq, C]
     key = torch.randn(2, 3, 7, 4, 8)  # [..., KV, Hkv, C]
     value = torch.randn_like(key)
-    sdpa = SDPA(num_query_heads=4, backend="sdpa")
+    sdpa = SDPA(num_query_heads=4, backend="torch")
     sdpa.backend = MyAttentionBackend()
     fa3 = SDPA(num_query_heads=4, backend="fa3")
 

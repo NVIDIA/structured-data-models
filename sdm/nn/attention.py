@@ -41,7 +41,7 @@ class SDPA(torch.nn.Module):
             :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
         dropout: Attention dropout probability.
-        backend: ``"sdpa"`` (default) or ``"fa3"`` for FlashAttention-3 on
+        backend: ``"torch"`` (default) or ``"fa3"`` for FlashAttention-3 on
             Hopper with FP16/BF16 inputs.
     """
 
@@ -52,7 +52,7 @@ class SDPA(torch.nn.Module):
         query_scaling: QueryScaling | None = None,
         scale: float | None = None,
         dropout: float = 0.0,
-        backend: Literal["sdpa", "fa3"] = "sdpa",
+        backend: Literal["torch", "fa3"] = "torch",
     ) -> None:
         super().__init__()
         if num_key_value_heads is None:
@@ -70,7 +70,7 @@ class SDPA(torch.nn.Module):
         self.dropout = dropout
 
         self.backend: AttentionBackend
-        if backend == "sdpa":
+        if backend == "torch":
             self.backend = TorchAttentionBackend()
         elif backend == "fa3":
             self.backend = FlashAttention3Backend()
