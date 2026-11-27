@@ -285,6 +285,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.explain</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.explain.ICLExplainer.html">ICLExplainer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.explain.GradientExplainer.html">GradientExplainer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.explain.ShapleyExplainer.html">ShapleyExplainer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.explain.ICEExplainer.html">ICEExplainer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.explain.PartialDependenceExplainer.html">PartialDependenceExplainer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.explain.PermutationExplainer.html">PermutationExplainer</a></li>
@@ -347,16 +348,19 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.explain.GradientExplainer.html#sdm.explain.GradientExplainer" title="sdm.explain.GradientExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GradientExplainer</span></code></a></p></td>
 <td><p>Return gradients showing how small input changes affect predictions.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.explain.ICEExplainer.html#sdm.explain.ICEExplainer" title="sdm.explain.ICEExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ICEExplainer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.explain.ShapleyExplainer.html#sdm.explain.ShapleyExplainer" title="sdm.explain.ShapleyExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ShapleyExplainer</span></code></a></p></td>
+<td><p>Compute Shapley values of feature columns from the <a class="reference external" href="https://arxiv.org/abs/1705.07874">&quot;A Unified Approach to Interpreting Model Predictions&quot;</a> paper.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.explain.ICEExplainer.html#sdm.explain.ICEExplainer" title="sdm.explain.ICEExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ICEExplainer</span></code></a></p></td>
 <td><p>Compute individual conditional expectation (ICE) curves of feature columns from the <a class="reference external" href="https://arxiv.org/abs/1309.6392">&quot;Peeking Inside the Black Box: Visualizing Statistical Learning with Plots of Individual Conditional Expectation&quot;</a> paper.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.explain.PartialDependenceExplainer.html#sdm.explain.PartialDependenceExplainer" title="sdm.explain.PartialDependenceExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PartialDependenceExplainer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.explain.PartialDependenceExplainer.html#sdm.explain.PartialDependenceExplainer" title="sdm.explain.PartialDependenceExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PartialDependenceExplainer</span></code></a></p></td>
 <td><p>Compute the partial dependence of feature columns from the <a class="reference external" href="https://doi.org/10.1214/aos/1013203451">&quot;Greedy Function Approximation: A Gradient Boosting Machine&quot;</a> paper.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.explain.PermutationExplainer.html#sdm.explain.PermutationExplainer" title="sdm.explain.PermutationExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PermutationExplainer</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.explain.PermutationExplainer.html#sdm.explain.PermutationExplainer" title="sdm.explain.PermutationExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PermutationExplainer</span></code></a></p></td>
 <td><p>Compute the score decrease from shuffling feature columns from the <a class="reference external" href="https://doi.org/10.1023/A:1010933404324">&quot;Random Forests&quot;</a> paper.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.explain.LOCOExplainer.html#sdm.explain.LOCOExplainer" title="sdm.explain.LOCOExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOCOExplainer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.explain.LOCOExplainer.html#sdm.explain.LOCOExplainer" title="sdm.explain.LOCOExplainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOCOExplainer</span></code></a></p></td>
 <td><p>Compute the leave-one-covariate-out (LOCO) importance of feature columns, also known as leave-one-feature-out (LOFO) importance, from the <a class="reference external" href="https://arxiv.org/abs/1604.04173">&quot;Distribution-Free Predictive Inference For Regression&quot;</a> paper.</p></td>
 </tr>
 </tbody>
@@ -388,7 +392,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=039963d4"></script>
+      <script src="../_static/documentation_options.js?v=f06395f7"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

@@ -1,0 +1,8 @@
+﻿ShapleyExplainer
+================
+
+.. currentmodule:: sdm.explain
+
+.. autoclass:: ShapleyExplainer
+   :members:
+   :show-inheritance:
