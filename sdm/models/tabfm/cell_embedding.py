@@ -135,7 +135,7 @@ class CellEmbedding(torch.nn.Module):
 
         if batch_size_limit == "auto":
             batch_size_limit = None
-            if x.is_cuda and not torch.compiler.is_dynamo_compiling():
+            if not torch.compiler.is_dynamo_compiling():
                 if torch.is_autocast_enabled(x.device.type):
                     element_size = torch.empty(
                         size=(),
