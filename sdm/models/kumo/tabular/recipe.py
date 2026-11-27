@@ -30,6 +30,7 @@ def default_recipe() -> sp.Recipe:  # noqa: D103
 
     return sp.Recipe(
         features=[
+            sp.DropStypes("text", "id", "datetime"),
             sp.StypeDispatch(
                 numerical=[
                     numerical_processor(),

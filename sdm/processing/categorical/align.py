@@ -555,6 +555,63 @@ def _concatenate_strings(categories: tuple[StringTensor, ...]) -> StringTensor:
     return cast(StringTensor, _cat(contiguous))
 
 
+# TODO: A prototype cache of the results of the string category join, newest
+# last, so that queries with the categories of an earlier one skip the join.
+_LOOKUP_MEMO: list[tuple[object, list[Tensor | None], Tensor]] = []
+
+
+def _memo_key(
+    tensors: list[Tensor | None],
+    layout: list[int],
+    codes: Tensor,
+) -> object:
+    return (
+        tuple(layout),
+        codes.dtype,
+        codes.device,
+        tuple(
+            None if t is None else (tuple(t.shape), t.dtype) for t in tensors
+        ),
+    )
+
+
+def _memo_get(
+    tensors: list[Tensor | None],
+    layout: list[int],
+    codes: Tensor,
+) -> Tensor | None:
+    key = _memo_key(tensors, layout, codes)
+    for entry_key, snapshot, lookup in reversed(_LOOKUP_MEMO):
+        if entry_key != key:
+            continue
+        same = torch.stack(
+            [
+                (a == b).all()
+                for a, b in zip(snapshot, tensors, strict=True)
+                if b is not None
+            ]
+        )
+        if bool(same.all()):
+            return lookup.clone()
+    return None
+
+
+def _memo_put(
+    tensors: list[Tensor | None],
+    layout: list[int],
+    codes: Tensor,
+    lookup: Tensor,
+) -> None:
+    _LOOKUP_MEMO.append(
+        (
+            _memo_key(tensors, layout, codes),
+            [None if t is None else t.clone() for t in tensors],
+            lookup.clone(),
+        )
+    )
+    del _LOOKUP_MEMO[:-8]
+
+
 @torch.library.custom_op("sdm::string_category_lookup", mutates_args=())
 def _string_category_lookup(
     inputs: list[Tensor | None],
@@ -564,6 +621,11 @@ def _string_category_lookup(
     codes: Tensor,
 ) -> Tensor:
     """Keep the backend join's dynamic row pairs inside a fixed-size lookup."""
+    memo_tensors = [*inputs, *fitted]
+    memo_layout = [*input_layout, -1, *fitted_layout]
+    cached = _memo_get(memo_tensors, memo_layout, codes)
+    if cached is not None:
+        return cached
     input_categories = _unflatten_strings(inputs, input_layout)
     fitted_categories = _unflatten_strings(fitted, fitted_layout)
     # Pair IDs for each input category: (total_input_categories,).
@@ -613,6 +675,7 @@ def _string_category_lookup(
         -1,
     )
     lookup[left_index] = fitted_codes[right_index]
+    _memo_put(memo_tensors, memo_layout, codes, lookup)
     return lookup
 
 
