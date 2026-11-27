@@ -70,6 +70,8 @@ suppress_warnings = ["config.cache"]
 nitpick_ignore = [
     ("py:class", "QuantizedTensor"),
     ("py:class", "sdm.cache.QuantizedTensor"),
+    ("py:class", "sdm.nn.attention_backend.AttentionBackend"),
+    ("py:class", "sdm.nn.attention_backend.TorchAttentionBackend"),
 ]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
@@ -78,9 +80,9 @@ intersphinx_mapping = {
     "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
     "sentence_transformers": ("https://sbert.net", None),
-    "shapiq": ("https://shapiq.readthedocs.io/en/latest", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
     "graphviz": ("https://graphviz.readthedocs.io/en/stable/", None),
+    "shapiq": ("https://shapiq.readthedocs.io/en/latest", None),
     "typing_extensions": (
         "https://typing-extensions.readthedocs.io/en/latest",
         None,
@@ -186,7 +188,6 @@ def _run_on_doctree_read(
 
 _reference_aliases = {
     "Tensor": "torch.Tensor",
-    "InteractionValues": "shapiq.interaction_values.InteractionValues",
     "pd.DataFrame": "pandas.DataFrame",
     "pa.Table": "pyarrow.Table",
     "StypeLike": "sdm.StypeLike",
@@ -209,6 +210,7 @@ _reference_aliases = {
     ),
     "sentence_transformers.SentenceTransformer": "sentence_transformers.sentence_transformer.model.SentenceTransformer",  # noqa: E501
     "sentence_transformers.SentenceTransformer.encode": "sentence_transformers.sentence_transformer.model.SentenceTransformer.encode",  # noqa: E501
+    "InteractionValues": "shapiq.interaction_values.InteractionValues",
 }
 
 
