@@ -70,8 +70,6 @@ suppress_warnings = ["config.cache"]
 nitpick_ignore = [
     ("py:class", "QuantizedTensor"),
     ("py:class", "sdm.cache.QuantizedTensor"),
-    ("py:class", "sdm.nn.attention_backend.AttentionBackend"),
-    ("py:class", "sdm.nn.attention_backend.TorchAttentionBackend"),
 ]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
@@ -188,7 +186,6 @@ def _run_on_doctree_read(
 
 _reference_aliases = {
     "Tensor": "torch.Tensor",
-    "InteractionValues": "shapiq.InteractionValues",
     "pd.DataFrame": "pandas.DataFrame",
     "pa.Table": "pyarrow.Table",
     "StypeLike": "sdm.StypeLike",
