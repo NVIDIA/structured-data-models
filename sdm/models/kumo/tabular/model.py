@@ -197,10 +197,11 @@ class KumoTabular(ICLModel):
 
         Three components are compiled, see :mod:`sdm.models.base.compile`:
 
-        * the feature processors after the stype routes, one call for all
-          estimators, as tensor steps on plain tensors with all sizes
-          dynamic, see :func:`~sdm.models.base.compile.transform_features`.
-          Their graphs serve later fits on tables of other columns.
+        * the feature processors, one call per stype route and one after
+          the routes, each for all estimators, as tensor steps on plain
+          tensors with all sizes dynamic, see
+          :func:`~sdm.models.base.compile.transform_features`. Their graphs
+          serve later fits on tables of other columns.
         * the model of a task, one call per estimator batch, with the rows of
           the query and of the context dynamic from the first call. Other
           sizes, *e.g.*, the number of columns, are static until they change,

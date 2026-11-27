@@ -391,7 +391,6 @@ class AlignCategories(EnsembleProcessor):
         single_table = codes.dim() == 2
         if single_table:
             codes = codes.unsqueeze(0)
-        aligned_codes = torch.full_like(codes, -1)
         # Keyed by the fitted categories themselves, as `id()` would bind
         # compiled code to the tensors of a single fit.
         lookups_by_column: list[dict[Tensor, Tensor]] = [
@@ -457,25 +456,37 @@ class AlignCategories(EnsembleProcessor):
         ):
             lookups_by_column[column_index][column_categories] = lookup
 
-        for column_index, input_categories in enumerate(
-            _iter_categories(table.categorical)
-        ):
-            if input_categories.numel() == 0:
-                continue
-            lookup_by_categories = lookups_by_column[column_index]
-            lookups = [
-                lookup_by_categories[batch_categories[column_index]]
+        if not fitted_categories:
+            return ()
+        # One gather for all columns, from the lookups of a batch side by
+        # side and a last one for missing codes: [B, sum(sizes) + 1].
+        sizes = [c.numel() for c in _iter_categories(table.categorical)]
+        lookup = torch.stack(
+            [
+                torch.cat(
+                    [
+                        *(
+                            lookups[batch_categories[column_index]]
+                            for column_index, lookups in enumerate(
+                                lookups_by_column
+                            )
+                            if sizes[column_index]
+                        ),
+                        codes.new_full((1,), -1),
+                    ]
+                )
                 for batch_categories in fitted_categories
             ]
-            column_codes = codes[..., column_index]
-            mask = column_codes >= 0
-            lookup = torch.stack(lookups)
-            indices = column_codes.clamp_min(0).long()
-            aligned_codes[..., column_index] = torch.where(
-                mask,
-                lookup.gather(1, indices),
-                -1,
-            )
+        )
+        size = codes.new_tensor(sizes, dtype=torch.long)
+        # Codes beyond a vocabulary index past the end, as a gather of the
+        # lookup of their column alone would.
+        index = torch.where(
+            codes < size, codes + size.cumsum(0) - size, lookup.size(1)
+        )
+        index = torch.where((codes < 0) | (size == 0), sum(sizes), index)
+        aligned_codes = lookup.gather(1, index.flatten(1))
+        aligned_codes = aligned_codes.view_as(codes)
 
         return tuple(
             (table if single_table else table[batch_index]).replace_blocks(

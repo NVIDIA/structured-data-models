@@ -418,10 +418,12 @@ def test_compile_predict(
 
     counter = CompileCounter()
     predict = model._compile_predict(backend=counter, fullgraph=True)
-    # One graph of the feature processors, one of the model and, in
+    # One graph of the numerical route of the feature processors, one of the
+    # feature processors after the routes, one of the model and, in
     # regression, one of the output step serve fits on 40 and 30 context rows
     # with three and two categories and other orders of the columns, and
-    # queries of any number of rows.
+    # queries of any number of rows. The route of the single categorical
+    # column runs uncompiled.
     two_categories = cast(TableTensor, x).replace_blocks(
         categorical=CategoricalTensor(
             code=code.remainder(2),
@@ -441,7 +443,7 @@ def test_compile_predict(
                 atol=1e-4,
                 rtol=1e-4,
             )
-    assert counter.frame_count == (3 if task == "regression" else 2)
+    assert counter.frame_count == (4 if task == "regression" else 3)
 
 
 @pytest.mark.usefixtures("compilation")

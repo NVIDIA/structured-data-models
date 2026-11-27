@@ -23,17 +23,25 @@ def _check_categorical_codes(table: TableTensor) -> None:
         return
     columns = table.categorical_columns
     categorical = table.categorical
-    for index, category in enumerate(_iter_categories(categorical)):
-        codes = categorical.code[..., index]
-        message = (
+    sizes = [category.numel() for category in _iter_categories(categorical)]
+
+    def message(index: int) -> str:
+        return (
             f"Categorical column {columns[index]!r} contains a code "
             "outside its category vocabulary."
         )
-        if torch.compiler.is_compiling():
-            valid = (codes < category.numel()).all().to("cpu")
-            torch._assert_async(valid, message)
-        elif (codes >= category.numel()).any():
-            raise ValueError(message)
+
+    if torch.compiler.is_compiling():
+        for index, size in enumerate(sizes):
+            valid = (categorical.code[..., index] < size).all().to("cpu")
+            torch._assert_async(valid, message(index))
+        return
+    # One check of all columns, as each waits for the device.
+    code = categorical.code
+    size = code.new_tensor(sizes, dtype=torch.long)
+    outside = (code >= size).flatten(0, -2).any(0)
+    if outside.any():
+        raise ValueError(message(int(outside.nonzero()[0])))
 
 
 def _check_categories(
